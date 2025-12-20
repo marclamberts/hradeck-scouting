@@ -16,19 +16,19 @@ if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
 if st.session_state.theme == 'Dark':
-    B_COLOR = "#0E1117"  
-    T_COLOR = "#FFFFFF"  
+    B_COLOR = "#0E1117"  # Deep Dark
+    T_COLOR = "#FFFFFF"  # White Text
     PILL_TRACK = "#1E1E1E" 
     PILL_HANDLE = "#00FF00" 
     GRID = "#31333F"
 else:
-    B_COLOR = "#DDE1E6"  
-    T_COLOR = "#000000"  
+    B_COLOR = "#DDE1E6"  # FCHK Slate Grey
+    T_COLOR = "#000000"  # Black Text
     PILL_TRACK = "#BDC1C6" 
     PILL_HANDLE = "#000000" 
     GRID = "#BBBBBB"
 
-# --- 2. CSS: ISOLATED PILL & PAGE LAYOUT ---
+# --- 2. CSS: UNIFIED FILTERS & ISOLATED PILL ---
 st.markdown(f"""
     <style>
     /* Global Backgrounds */
@@ -38,7 +38,18 @@ st.markdown(f"""
         background-color: {B_COLOR} !important;
     }}
 
-    /* THE PILL TOGGLE (Strictly isolated to the theme switch) */
+    /* UNIFIED FILTERS: Background same as App, Text is Opposite */
+    div[data-baseweb="select"] > div, 
+    div[data-baseweb="input"] > div, 
+    .stTextInput input, 
+    div[role="combobox"],
+    div[data-baseweb="popover"] div {{
+        background-color: {B_COLOR} !important;
+        color: {T_COLOR} !important;
+        border: 1.5px solid {T_COLOR} !important;
+    }}
+
+    /* THE PILL TOGGLE (Isolated to Theme Switch) */
     div[data-testid="stCheckbox"] > label > div:first-child {{
         background-color: {PILL_TRACK} !important;
         border: 2px solid {T_COLOR} !important;
@@ -55,7 +66,7 @@ st.markdown(f"""
         border-radius: 50% !important;
     }}
 
-    /* Global Text & Label Colors */
+    /* Global Text Colors */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -65,22 +76,18 @@ st.markdown(f"""
         -webkit-text-fill-color: {T_COLOR} !important;
     }}
 
-    /* Page Navigation Buttons (Rectangular, No Pill) */
+    /* Navigation Buttons */
     .stButton>button {{ 
         width: 100%; border-radius: 4px; background-color: transparent !important; 
         color: {T_COLOR} !important; border: 1.5px solid {T_COLOR} !important;
-        font-weight: bold; margin-bottom: 5px;
+        font-weight: bold; margin-bottom: 8px;
     }}
 
-    /* Data Containers */
-    div[data-testid="metric-container"] {{
-        border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
-    }}
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. LOGIC & DATA UTILITIES ---
+# --- 3. MAPPING & DATA ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -128,26 +135,24 @@ def check_password():
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER SYSTEM"):
+            if st.form_submit_button("ENTER"):
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
-                else: st.error("ACCESS DENIED")
+                else: st.error("DENIED")
     return False
 
 # --- 5. MAIN APP ---
 if check_password():
-    # SIDEBAR: Theme Toggle + Navigation Pages
     with st.sidebar:
         st.write("### ⚙️ SYSTEM")
         theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
         st.session_state.theme = 'Dark' if theme_toggle else 'Light'
         st.write("---")
-        
-        st.write("### 🧭 NAVIGATION")
-        if st.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
+        st.write("### 🧭 PAGES")
+        if st.button("📊 DASHBOARD"): st.session_state.view = 'Dashboard'
         if st.button("🔍 SEARCH"): st.session_state.view = 'Search'
-        if st.button("📊 BAR RANKING"): st.session_state.view = 'Bar'
+        if st.button("🏆 RANKINGS"): st.session_state.view = 'Bar'
         if st.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
         st.write("---")
         if st.button("LOGOUT"):
@@ -160,7 +165,6 @@ if check_password():
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
-    # State Persistence for Filters
     for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_group','ALL GROUPS'), 
                      ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
@@ -174,7 +178,7 @@ if check_password():
             groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker"]
             st.session_state.f_group = st.selectbox("GROUP", groups, index=groups.index(st.session_state.f_group) if st.session_state.f_group in groups else 0, key=f"{key}_g")
         with c3:
-            st.session_state.f_search = st.text_input("PLAYER", value=st.session_state.f_search, key=f"{key}_s")
+            st.session_state.f_search = st.text_input("PLAYER NAME", value=st.session_state.f_search, key=f"{key}_s")
 
     def apply_filters(data):
         df_f = data.copy()
@@ -187,17 +191,17 @@ if check_password():
 
     df_f = apply_filters(df_raw)
 
-    # --- PAGES ---
+    # --- PAGE VIEWS ---
     if st.session_state.view == 'Search':
         st.title("🔍 Scout Search")
         filter_ui("search")
         s1, s2 = st.columns(2)
         with s1: st.session_state.f_age = st.slider("AGE", 15, 50, st.session_state.f_age, key="sl1")
-        with s2: st.session_state.f_mins = st.slider("MINS", 0, 10000, st.session_state.f_mins, key="sl2")
+        with s2: st.session_state.f_mins = st.slider("MINUTES", 0, 10000, st.session_state.f_mins, key="sl2")
         st.dataframe(df_f, width='stretch', height=600)
 
     elif st.session_state.view == 'Dashboard':
-        st.title("📊 Dashboard")
+        st.title("📊 Analytics Dashboard")
         filter_ui("dash")
         m1, m2 = st.columns(2)
         m1.metric("PLAYERS", len(df_f))
@@ -207,15 +211,15 @@ if check_password():
         with r: st.plotly_chart(style_fig(px.scatter(df_f, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
 
     elif st.session_state.view == 'Bar':
-        st.title("📊 Rankings")
+        st.title("🏆 Player Rankings")
         filter_ui("bar")
         num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
         if num_cols:
-            y_col = st.selectbox("METRIC", num_cols)
+            y_col = st.selectbox("RANK BY", num_cols)
             st.plotly_chart(style_fig(px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
 
     elif st.session_state.view == 'Dist':
-        st.title("📈 Distributions")
+        st.title("📈 Statistical Distributions")
         filter_ui("dist")
-        d_col = st.selectbox("METRIC", df_f.select_dtypes(include=['number']).columns.tolist())
+        d_col = st.selectbox("METRIC SPREAD", df_f.select_dtypes(include=['number']).columns.tolist())
         st.plotly_chart(style_fig(px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
