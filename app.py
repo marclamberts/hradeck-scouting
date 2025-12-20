@@ -11,34 +11,35 @@ LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5329/5329945.png"
 
 st.set_page_config(page_title="Hradeck Pro Scout", layout="wide", page_icon="⚽")
 
-# --- GLOBAL STYLING: ONE COLOR BACKGROUND + BLACK TEXT EVERYWHERE ---
+# --- GLOBAL STYLING: ONE COLOR BACKGROUND + ABSOLUTE BLACK TEXT ---
 st.markdown("""
     <style>
-    /* 1. Global Background (Grey) and Text (Black) */
-    .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, div[data-testid="stToolbar"], [data-testid="stSidebarNav"] {
+    /* 1. Force Background for everything */
+    .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
+    div[data-testid="stToolbar"], [data-testid="stSidebarNav"], 
+    .stAppHeader, [data-testid="stDecoration"] {
         background-color: #E0E2E6 !important;
     }
 
-    html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th {
+    /* 2. FORCE BLACK TEXT ON EVERY POSSIBLE ELEMENT */
+    /* This targets standard text, headers, sidebar, metrics, and labels */
+    html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
+    [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
+    div[role="listbox"] div, .stDataFrame div, .stTab {
         color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
     }
 
-    /* 2. Unified Inputs & Selectboxes */
-    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, .stTextInput input {
+    /* 3. Inputs & Selectboxes: Grey background with Black Text & Borders */
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, 
+    .stTextInput input, div[role="combobox"] {
         background-color: #E0E2E6 !important;
         color: #000000 !important;
         border: 1px solid #000000 !important;
     }
 
-    /* 3. Metric Cards (Transparent/Grey Background) */
-    div[data-testid="metric-container"] {
-        background-color: #E0E2E6 !important;
-        border: 1px solid #000000 !important;
-        border-radius: 10px;
-        padding: 10px;
-    }
-
-    /* 4. Professional Buttons (Bordered) */
+    /* 4. Navigation Buttons: Black Border, Black Text */
     .stButton>button { 
         width: 100%; 
         border-radius: 8px; 
@@ -46,15 +47,28 @@ st.markdown("""
         color: #000000 !important; 
         font-weight: bold;
         border: 2px solid #000000 !important;
-        margin-bottom: 5px;
     }
     .stButton>button:hover { 
         background-color: #000000 !important; 
         color: #FFFFFF !important; 
     }
-    
-    /* 5. Force Table Font Color */
-    .stDataFrame div { color: #000000 !important; }
+
+    /* 5. Metrics Cards: No white background, Black border */
+    div[data-testid="metric-container"] {
+        background-color: #E0E2E6 !important;
+        border: 1px solid #000000 !important;
+        border-radius: 10px;
+        padding: 10px;
+    }
+
+    /* 6. Tabs Styling */
+    button[data-baseweb="tab"] {
+        background-color: transparent !important;
+        border: none !important;
+    }
+    button[aria-selected="true"] {
+        border-bottom: 2px solid #000000 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -88,19 +102,15 @@ def get_all_tables():
 def load_clean_data(table_name):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table_name}"', conn)
-        # Handle mixed types by converting object columns to string or numeric
         for col in df.columns:
-            # Check if it's a numeric-heavy column
             if any(k in col.lower() for k in ['value', 'age', 'goal', 'xg', 'match', 'per_90']):
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
-                # Ensure text columns are actually strings (fixes sorting issues)
-                df[col] = df[col].astype(str).replace('nan', '').replace('None', '')
+                df[col] = df[col].astype(str).replace(['nan', 'None'], '')
         return df
 
 # --- 3. MAIN APP ---
 if check_password():
-    # Sidebar Setup
     st.sidebar.title("SCOUT MENU")
     tables = get_all_tables()
     selected_table = st.sidebar.selectbox("📂 DATASET", tables)
@@ -118,41 +128,31 @@ if check_password():
         st.session_state.authenticated = False
         st.rerun()
 
-    # Load Data
     df_raw = load_clean_data(selected_table)
 
-    # Top Filters
     st.title(f"EXPLORING: {selected_table}")
     c1, c2, c3 = st.columns(3)
     
     with c1:
-        # FIX: Ensure all items are strings before sorting to avoid TypeError
         team_options = sorted([str(x) for x in df_raw["team"].unique() if x]) if "team" in df_raw.columns else []
-        teams = ["All Teams"] + team_options
-        filt_team = st.selectbox("Team Filter", teams)
-        
+        filt_team = st.selectbox("Team Filter", ["All Teams"] + team_options)
     with c2:
-        # FIX: Ensure all items are strings before sorting
         pos_options = []
         if "position" in df_raw.columns:
             pos_set = set()
             for p in df_raw["position"].unique():
-                if p:
-                    for sub_p in str(p).split(','):
-                        pos_set.add(sub_p.strip())
+                if p: [pos_set.add(s.strip()) for s in str(p).split(',')]
             pos_options = sorted([str(x) for x in pos_set])
-        pos = ["All Positions"] + pos_options
-        filt_pos = st.selectbox("Position Filter", pos)
-        
+        filt_pos = st.selectbox("Position Filter", ["All Positions"] + pos_options)
     with c3:
         search = st.text_input("🔍 Player Search")
 
     # Filter Logic
     df = df_raw.copy()
-    if filt_team != "All Teams": df = df[df["team"].astype(str) == filt_team]
+    if filt_team != "All Teams": df = df[df["team"] == filt_team]
     if filt_pos != "All Positions" and "position" in df.columns:
-        df = df[df["position"].astype(str).str.contains(filt_pos, na=False)]
-    if search: df = df[df["player"].astype(str).str.contains(search, case=False, na=False)]
+        df = df[df["position"].str.contains(filt_pos, na=False)]
+    if search: df = df[df["player"].str.contains(search, case=False, na=False)]
 
     st.divider()
 
