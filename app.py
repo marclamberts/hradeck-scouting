@@ -12,15 +12,14 @@ LOGO_FILE = "FCHK.png"
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
 # --- 1. THEME STATE & iOS TOGGLE ---
-# Initialize theme in session state
 if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
-# Place the iPhone-style toggle at the top of the sidebar
+# The physical moving button (iOS Style)
 with st.sidebar:
-    st.write("### SYSTEM THEME")
-    # This widget specifically mimics the iOS on/off switch
-    theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'))
+    st.write("### ⚙️ SYSTEM")
+    # This is the physical slider button
+    theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
     st.session_state.theme = 'Dark' if theme_toggle else 'Light'
     st.write("---")
 
@@ -29,14 +28,14 @@ if st.session_state.theme == 'Dark':
     B_COLOR = "#0E1117"  # Deep Dark
     T_COLOR = "#FFFFFF"  # Pure White Text
     ACCENT  = "#1d2129"  # Darker Input boxes
-    GRID    = "#31333F"  # Subtle Dark Grid
+    GRID    = "#31333F"
 else:
     B_COLOR = "#DDE1E6"  # FCHK Slate Grey
     T_COLOR = "#000000"  # Pure Black Text
-    ACCENT  = "#DDE1E6"  # Match background
-    GRID    = "#BBBBBB"  # Visible Light Grid
+    ACCENT  = "#DDE1E6"
+    GRID    = "#BBBBBB"
 
-# --- 2. CSS: DYNAMIC THEME INJECTION ---
+# --- 2. CSS: DYNAMIC THEME & TOGGLE STYLING ---
 st.markdown(f"""
     <style>
     /* Global Background */
@@ -46,6 +45,11 @@ st.markdown(f"""
         background-color: {B_COLOR} !important;
     }}
 
+    /* The Switch / Toggle Styling (Ensuring it looks like a physical button) */
+    div[data-testid="stCheckbox"] {{
+        background-color: transparent !important;
+    }}
+    
     /* Text & Label Colors */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
@@ -54,7 +58,6 @@ st.markdown(f"""
     .stSlider label, [data-testid="stMetricDelta"] {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
-        font-family: 'Segoe UI', sans-serif;
     }}
 
     /* Inputs & Dropdowns */
@@ -65,9 +68,6 @@ st.markdown(f"""
         color: {T_COLOR} !important;
         border: 1.5px solid {T_COLOR} !important;
     }}
-
-    /* iOS-Style Toggle Color Fix (Makes the switch green when ON) */
-    div[data-testid="stWidgetLabel"] p {{ color: {T_COLOR} !important; }}
 
     /* Buttons */
     .stButton>button {{ 
@@ -84,7 +84,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. LOGIC & DATA HELPERS ---
+# --- 3. MAPPING & DATA ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -113,8 +113,7 @@ def load_data(table):
 
 def style_fig(fig):
     fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)', 
-        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=T_COLOR, size=12),
         xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
         yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
@@ -129,17 +128,16 @@ def check_password():
     if st.session_state.authenticated: return True
     _, col2, _ = st.columns([1, 1, 1])
     with col2:
-        st.write("#")
         try: st.image(LOGO_FILE, width=120)
         except: st.warning("Logo 'FCHK.png' not found.")
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER SYSTEM"):
+            if st.form_submit_button("ENTER"):
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
-                else: st.error("ACCESS DENIED")
+                else: st.error("DENIED")
     return False
 
 # --- 5. MAIN APP ---
@@ -171,7 +169,7 @@ if check_password():
             st.session_state.f_team = st.selectbox("TEAM", teams, index=teams.index(st.session_state.f_team) if st.session_state.f_team in teams else 0, key=f"{key}_t")
         with c2:
             groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker", "Other"]
-            st.session_state.f_group = st.selectbox("POSITION GROUP", groups, index=groups.index(st.session_state.f_group) if st.session_state.f_group in groups else 0, key=f"{key}_g")
+            st.session_state.f_group = st.selectbox("GROUP", groups, index=groups.index(st.session_state.f_group) if st.session_state.f_group in groups else 0, key=f"{key}_g")
         with c3:
             st.session_state.f_search = st.text_input("NAME", value=st.session_state.f_search, key=f"{key}_s")
 
@@ -198,7 +196,7 @@ if check_password():
     elif st.session_state.view == 'Dashboard':
         st.title("📊 Analytics Dashboard")
         filter_ui("dash")
-        m1, m2, m3 = st.columns(3)
+        m1, m2 = st.columns(2)
         m1.metric("PLAYERS", len(df_f))
         if 'market_value' in df_f.columns: m2.metric("AVG VALUE", f"€{int(df_f['market_value'].mean()):,}")
         
