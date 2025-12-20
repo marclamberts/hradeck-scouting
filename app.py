@@ -116,7 +116,7 @@ def apply_filters(data, f_team, f_pos_list, f_search, f_age, f_mins):
     
     # 1. Team Filter
     if f_team != "ALL TEAMS":
-        df_f = df_f[df_f["team"] == f_team]
+        df_f = df_f[df_f["team_within_selected_timeframe"] == f_team]
     
     # 2. THE POSITION FIX: Exact Tag Intersection
     if f_pos_list:
