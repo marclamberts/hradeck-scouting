@@ -12,16 +12,16 @@ LOGO_URL = "FCHK.png"
 
 st.set_page_config(page_title="Hradeck Pro Scout", layout="wide", page_icon="⚽")
 
-# --- GLOBAL STYLING: UNIFIED GREY & PURE BLACK ---
+# --- GLOBAL STYLING: ONE COLOR BACKGROUND + BLACK TEXT + NO HOVER ---
 st.markdown("""
     <style>
-    /* Global Background and Text */
+    /* 1. Global Background (Unified Grey) */
     .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"] {
         background-color: #DDE1E6 !important;
     }
 
-    /* Force Pure Black Text on everything */
+    /* 2. Global Black Text (Aggressive Overrides) */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -31,7 +31,7 @@ st.markdown("""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
-    /* Inputs with clean black borders */
+    /* 3. Inputs & Selectboxes */
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, 
     .stTextInput input, div[role="combobox"] {
         background-color: #DDE1E6 !important;
@@ -40,7 +40,7 @@ st.markdown("""
         border-radius: 4px !important;
     }
 
-    /* Navigation Buttons */
+    /* 4. BUTTONS: REMOVED HOVER COLOR CHANGE */
     .stButton>button { 
         width: 100%; 
         border-radius: 4px; 
@@ -49,14 +49,19 @@ st.markdown("""
         font-weight: bold;
         border: 1.5px solid #000000 !important;
         text-transform: uppercase;
-    }
-    .stButton>button:hover { 
-        background-color: #000000 !important; 
-        color: #FFFFFF !important; 
-        -webkit-text-fill-color: #FFFFFF !important;
+        transition: none !important; /* Disables the smooth fade effect */
     }
 
-    /* Flat Metric Boxes */
+    /* Force the hover state to look exactly like the idle state */
+    .stButton>button:hover, .stButton>button:active, .stButton>button:focus { 
+        background-color: transparent !important; 
+        color: #000000 !important; 
+        border-color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        box-shadow: none !important;
+    }
+
+    /* 5. Flat Metric Boxes */
     div[data-testid="metric-container"] {
         background-color: transparent !important;
         border: 1.5px solid #000000 !important;
@@ -133,15 +138,13 @@ if check_password():
     # --- FILTERS ---
     c1, c2, c3 = st.columns(3)
     with c1:
-        teams = ["ALL TEAMS"] + sorted([str(x) for x in df_raw["team"].unique() if x])
-        f_team = st.selectbox("TEAM", teams)
+        team_options = sorted([str(x) for x in df_raw["team"].unique() if x]) if "team" in df_raw.columns else []
+        f_team = st.selectbox("TEAM", ["ALL TEAMS"] + team_options)
     with c2:
         pos_options = set()
         if "position" in df_raw.columns:
             for p in df_raw["position"].unique():
-                if p:
-                    for s in str(p).split(','):
-                        pos_options.add(s.strip())
+                if p: [pos_options.add(s.strip()) for s in str(p).split(',')]
         pos = ["ALL POSITIONS"] + sorted(list(pos_options))
         f_pos = st.selectbox("POSITION", pos)
     with c3:
@@ -151,13 +154,9 @@ if check_password():
     df = df_raw.copy()
     if f_team != "ALL TEAMS":
         df = df[df["team"] == f_team]
-    
-    # EXACT POSITION MATCHING (Fixing the 'CB matches LCB' issue)
     if f_pos != "ALL POSITIONS" and "position" in df.columns:
-        # Use regex boundaries (\b) to ensure we match the exact word
         pattern = r'\b' + re.escape(f_pos) + r'\b'
         df = df[df["position"].str.contains(pattern, case=False, na=False, regex=True)]
-        
     if search:
         df = df[df["player"].str.contains(search, case=False, na=False)]
 
