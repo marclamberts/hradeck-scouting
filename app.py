@@ -11,55 +11,56 @@ LOGO_FILE = "FCHK.png"
 
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
-# --- 1. THEME STATE & iOS TOGGLE ---
+# --- 1. THEME STATE ---
 if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
+# --- 2. THE PHYSICAL TOGGLE (High Contrast) ---
 with st.sidebar:
-    st.write("### ⚙️ SYSTEM")
-    # THE PHYSICAL SLIDER
+    st.write("### ⚙️ SYSTEM SETTINGS")
+    # This is the sliding pill
     theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
     st.session_state.theme = 'Dark' if theme_toggle else 'Light'
     st.write("---")
 
 # Define Dynamic Colors
 if st.session_state.theme == 'Dark':
-    B_COLOR = "#0E1117"
-    T_COLOR = "#FFFFFF"
+    B_COLOR = "#0E1117"  # Deep Background
+    T_COLOR = "#FFFFFF"  # White Text
     ACCENT  = "#1d2129"
-    GRID    = "#31333F"
-    TOGGLE_TRACK = "#31333F" # Darker track
+    KNOB_COLOR = "#FFFFFF" # White sliding knob
+    TRACK_COLOR = "#28a745" # Green track when on
 else:
-    B_COLOR = "#DDE1E6"
-    T_COLOR = "#000000"
+    B_COLOR = "#DDE1E6"  # Slate Background
+    T_COLOR = "#000000"  # Black Text
     ACCENT  = "#DDE1E6"
-    GRID    = "#BBBBBB"
-    TOGGLE_TRACK = "#BDC1C6" # Grey track
+    KNOB_COLOR = "#000000" # Black sliding knob
+    TRACK_COLOR = "#BDC1C6" # Grey track when off
 
-# --- 2. CSS: FORCING THE PILL VISIBILITY ---
+# --- 3. CSS: CUSTOM TOGGLE STYLING ---
 st.markdown(f"""
     <style>
-    /* Global Backgrounds */
+    /* Global Background */
     .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"],
     div[data-testid="stToolbar"], [data-testid="stSidebar"] div, .stAppViewContainer {{
         background-color: {B_COLOR} !important;
     }}
 
-    /* THE PILL FIX: Force the sliding switch to be visible */
-    div[data-testid="stWidgetLabel"] {{
-        color: {T_COLOR} !important;
-    }}
-    
-    /* Targets the track of the toggle */
+    /* CUSTOM TOGGLE CONTRAST FIX */
+    /* This makes the 'track' of the toggle stand out */
     div[data-baseweb="checkbox"] > div:first-child {{
-        background-color: {TOGGLE_TRACK} !important;
-        border: 1px solid {T_COLOR} !important;
+        background-color: {TRACK_COLOR} !important;
+        border: 2px solid {T_COLOR} !important;
+        width: 48px !important;
+        height: 24px !important;
     }}
-    
-    /* Targets the sliding circle when ON */
-    input[checked] + div:first-child {{
-        background-color: #28a745 !important; /* Classic iOS Green when ON */
+
+    /* This targets the 'knob' (the sliding circle) */
+    div[data-baseweb="checkbox"] div div {{
+        background-color: {KNOB_COLOR} !important;
+        width: 18px !important;
+        height: 18px !important;
     }}
 
     /* Global Text Colors */
@@ -72,7 +73,7 @@ st.markdown(f"""
         -webkit-text-fill-color: {T_COLOR} !important;
     }}
 
-    /* Inputs, Buttons, and Metrics */
+    /* Inputs, Buttons, Metrics */
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, .stTextInput input {{
         background-color: {ACCENT} !important;
         color: {T_COLOR} !important;
@@ -89,7 +90,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. DATA & MAPPING ---
+# --- 4. DATA LOGIC ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -120,12 +121,12 @@ def style_fig(fig):
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=T_COLOR, size=12),
-        xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
-        yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR)
+        xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=TRACK_COLOR, linecolor=T_COLOR),
+        yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=TRACK_COLOR, linecolor=T_COLOR)
     )
     return fig
 
-# --- 4. AUTHENTICATION ---
+# --- 5. AUTHENTICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -133,18 +134,18 @@ def check_password():
     _, col2, _ = st.columns([1, 1, 1])
     with col2:
         try: st.image(LOGO_FILE, width=120)
-        except: st.warning("Logo 'FCHK.png' not found.")
+        except: pass
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER SYSTEM"):
+            if st.form_submit_button("ENTER"):
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
                 else: st.error("ACCESS DENIED")
     return False
 
-# --- 5. MAIN APP ---
+# --- 6. MAIN APP ---
 if check_password():
     with sqlite3.connect(DB_FILE) as conn:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -171,10 +172,10 @@ if check_password():
             teams = ["ALL TEAMS"] + sorted([x for x in df_raw["team"].unique() if x])
             st.session_state.f_team = st.selectbox("TEAM", teams, index=teams.index(st.session_state.f_team) if st.session_state.f_team in teams else 0, key=f"{key}_t")
         with c2:
-            groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker", "Other"]
+            groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker"]
             st.session_state.f_group = st.selectbox("GROUP", groups, index=groups.index(st.session_state.f_group) if st.session_state.f_group in groups else 0, key=f"{key}_g")
         with c3:
-            st.session_state.f_search = st.text_input("NAME", value=st.session_state.f_search, key=f"{key}_s")
+            st.session_state.f_search = st.text_input("PLAYER", value=st.session_state.f_search, key=f"{key}_s")
 
     def apply_filters(data):
         df_f = data.copy()
