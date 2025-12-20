@@ -34,24 +34,30 @@ st.markdown(f"""
         background-color: {B_COLOR} !important;
     }}
 
-    /* THE PILL TOGGLE (Isolated to Theme Switch) */
+    /* THE PILL TOGGLE (Strictly isolated to Theme Switch) */
     div[data-testid="stCheckbox"] > label > div:first-child {{
         background-color: {PILL_TRACK} !important;
         border: 2px solid {T_COLOR} !important;
-        width: 46px !important;
-        height: 24px !important;
-        border-radius: 12px !important;
-        display: flex !important;
-        align-items: center !important;
+        width: 46px !important; height: 24px !important; border-radius: 12px !important;
+        display: flex !important; align-items: center !important;
     }}
     div[data-testid="stCheckbox"] > label > div:first-child > div {{
         background-color: {PILL_HANDLE} !important;
-        width: 18px !important;
-        height: 18px !important;
-        border-radius: 50% !important;
+        width: 18px !important; height: 18px !important; border-radius: 50% !important;
     }}
 
-    /* Global Text Colors & Filters Background */
+    /* UNIFIED FILTERS: Background same as App, Text is Opposite */
+    div[data-baseweb="select"] > div, 
+    div[data-baseweb="input"] > div, 
+    .stTextInput input, 
+    div[role="combobox"],
+    div[data-baseweb="popover"] div {{
+        background-color: {B_COLOR} !important;
+        color: {T_COLOR} !important;
+        border: 1.5px solid {T_COLOR} !important;
+    }}
+
+    /* Global Text Colors */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -59,15 +65,6 @@ st.markdown(f"""
     .stSlider label {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
-    }}
-    
-    div[data-baseweb="select"] > div, 
-    div[data-baseweb="input"] > div, 
-    .stTextInput input, 
-    div[role="combobox"] {{
-        background-color: {B_COLOR} !important;
-        color: {T_COLOR} !important;
-        border: 1.5px solid {T_COLOR} !important;
     }}
 
     /* Navigation Buttons */
@@ -77,9 +74,6 @@ st.markdown(f"""
         font-weight: bold; margin-bottom: 8px;
     }}
 
-    div[data-testid="metric-container"] {{
-        border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
-    }}
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
@@ -112,7 +106,7 @@ def load_data(table):
             if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes', 'xa', 'assist']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         
-        # Performance Calculations
+        # Performance Calculations (Delta = Expected - Actual)
         if 'xg' in df.columns and 'goals' in df.columns:
             df['goals_diff'] = df['xg'] - df['goals']
         if 'xa' in df.columns and 'assists' in df.columns:
@@ -159,6 +153,7 @@ if check_password():
         if st.button("🔍 SEARCH"): st.session_state.view = 'Search'
         if st.button("🏆 PERFORMANCE"): st.session_state.view = 'Perf'
         if st.button("📊 RANKINGS"): st.session_state.view = 'Bar'
+        if st.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
         st.write("---")
         if st.button("LOGOUT"):
             st.session_state.authenticated = False
@@ -172,7 +167,7 @@ if check_password():
 
     if 'view' not in st.session_state: st.session_state.view = 'Dashboard'
 
-    # Filter UI Helper
+    # UI Helper for shared filters
     def filter_ui(key):
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -180,50 +175,56 @@ if check_password():
             st.session_state.f_team = st.selectbox("TEAM", teams, index=0, key=f"{key}_t")
         with c2:
             groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker"]
-            st.session_state.f_group = st.selectbox("GROUP", groups, index=0, key=f"{key}_g")
+            st.session_state.f_group = st.selectbox("POSITION GROUP", groups, index=0, key=f"{key}_g")
         with c3:
-            st.session_state.f_search = st.text_input("PLAYER", key=f"{key}_s")
+            st.session_state.f_search = st.text_input("PLAYER SEARCH", key=f"{key}_s")
 
-    # --- PAGE LOGIC ---
+    # --- PAGES ---
     if st.session_state.view == 'Perf':
-        st.title("🏆 Over/Under Performance")
-        tab1, tab2 = st.tabs(["Goal Finishing", "Playmaking"])
+        st.title("🏆 Over/Under Performance Leaderboards")
+        tab1, tab2 = st.tabs(["Goal Finishing (xG vs Goals)", "Playmaking (xA vs Assists)"])
         with tab1:
-            st.subheader("Clinical Finishers vs Underperformers")
             col_l, col_r = st.columns(2)
             with col_l:
-                st.write("🔥 **Top 10 Clinical** (scored > xG)")
+                st.write("🔥 **Top 10 Clinical Finishers**")
                 st.dataframe(df_raw.sort_values('goals_diff').head(10)[['player','team','goals','xg','goals_diff']], width='stretch')
             with col_r:
-                st.write("📉 **Top 10 Wasteful** (scored < xG)")
+                st.write("📉 **Top 10 Underperformers**")
                 st.dataframe(df_raw.sort_values('goals_diff', ascending=False).head(10)[['player','team','goals','xg','goals_diff']], width='stretch')
             st.plotly_chart(style_fig(px.scatter(df_raw, x="xg", y="goals", hover_name="player", trendline="ols", color_discrete_sequence=[T_COLOR])), width='stretch')
         
         with tab2:
-            st.subheader("Playmaking Efficiency")
             col_l, col_r = st.columns(2)
             with col_l:
-                st.write("🧙‍♂️ **Top 10 Creators** (Assists > xA)")
+                st.write("🧙‍♂️ **Top 10 Creative Overperformers**")
                 st.dataframe(df_raw.sort_values('assists_diff').head(10)[['player','team','assists','xa','assists_diff']], width='stretch')
             with col_r:
-                st.write("⚠️ **Top 10 Unlucky** (Assists < xA)")
+                st.write("⚠️ **Top 10 Creative Underperformers**")
                 st.dataframe(df_raw.sort_values('assists_diff', ascending=False).head(10)[['player','team','assists','xa','assists_diff']], width='stretch')
+
+    elif st.session_state.view == 'Dist':
+        st.title("📈 Statistical Distributions")
+        filter_ui("dist_view")
+        num_cols = df_raw.select_dtypes(include=['number']).columns.tolist()
+        d_col = st.selectbox("Select Metric", num_cols)
+        st.plotly_chart(style_fig(px.histogram(df_raw, x=d_col, nbins=30, color_discrete_sequence=[T_COLOR])), width='stretch')
 
     elif st.session_state.view == 'Dashboard':
         st.title("📊 Scout Dashboard")
-        filter_ui("dash")
+        filter_ui("dash_view")
         m1, m2 = st.columns(2)
         m1.metric("TOTAL PLAYERS", len(df_raw))
-        if 'market_value' in df_raw.columns: m2.metric("AVG VALUE", f"€{int(df_raw['market_value'].mean()):,}")
+        if 'market_value' in df_raw.columns:
+            m2.metric("AVG VALUE", f"€{int(df_raw['market_value'].mean()):,}")
         st.plotly_chart(style_fig(px.box(df_raw, x="position_group", y="market_value", color_discrete_sequence=[T_COLOR])), width='stretch')
 
     elif st.session_state.view == 'Search':
-        st.title("🔍 Advanced Search")
-        filter_ui("search")
+        st.title("🔍 Advanced Database Search")
+        filter_ui("search_view")
         st.dataframe(df_raw, width='stretch', height=600)
 
     elif st.session_state.view == 'Bar':
-        st.title("📊 Rankings")
+        st.title("📊 Player Rankings")
         num_cols = df_raw.select_dtypes(include=['number']).columns.tolist()
-        y_col = st.selectbox("Select Metric", num_cols)
+        y_col = st.selectbox("Rank By Metric", num_cols)
         st.plotly_chart(style_fig(px.bar(df_raw.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, color_discrete_sequence=[T_COLOR])), width='stretch')
