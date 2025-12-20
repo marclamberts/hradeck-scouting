@@ -47,7 +47,23 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. AUTHENTICATION ---
+# --- 1. MAPPING LOGIC ---
+POS_MAPPING = {
+    'Goalkeeper': ['GK'],
+    'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
+    'Midfielder': ['DMF', 'LDMF', 'RDMF', 'CMF', 'LCMF', 'RCMF', 'AMF', 'LAMF', 'RAMF', 'LM', 'RM', 'MF'],
+    'Attacker': ['CF', 'LW', 'RW', 'LWF', 'RWF', 'SS', 'ST', 'FW']
+}
+
+def get_group(pos_string):
+    if not pos_string or pos_string in ['nan', 'None', 'NULL', '']: return "Unknown"
+    tags = [t.strip().upper() for t in str(pos_string).split(',')]
+    for group, codes in POS_MAPPING.items():
+        if any(code in tags for code in codes):
+            return group
+    return "Other"
+
+# --- 2. AUTHENTICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -66,20 +82,15 @@ def check_password():
                 else: st.error("ACCESS DENIED")
     return False
 
-# --- 2. DATA UTILITIES (Aggressive Cleaning) ---
+# --- 3. DATA LOADER ---
 def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
-        # 1. Standardize column names
         df.columns = [str(c).strip().lower() for c in df.columns]
         
-        # 2. Hard-clean the position column immediately
         if 'position' in df.columns:
-            # Convert to string, strip spaces, replace variants of 'NULL' with empty string
-            df['position'] = df['position'].astype(str).str.strip()
-            df['position'] = df['position'].replace(['nan', 'None', 'NULL', 'null', '<NA>'], '')
+            df['position_group'] = df['position'].apply(get_group)
         
-        # 3. Handle numeric stats
         for c in df.columns:
             if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
@@ -94,26 +105,13 @@ def style_fig(fig):
     )
     return fig
 
-# --- 3. THE FIXED POSITION FILTER ENGINE ---
-def apply_filters(data, f_team, f_pos_list, f_search, f_age, f_mins):
+# --- 4. FILTER ENGINE ---
+def apply_filters(data, f_team, f_group, f_search, f_age, f_mins):
     df_f = data.copy()
-    
     if f_team != "ALL TEAMS":
         df_f = df_f[df_f["team"] == f_team]
-    
-    # THE CRITICAL FIX: Set Intersection
-    if f_pos_list:
-        def match_pos(cell):
-            if not cell or str(cell).strip() == '': return False
-            # Create a clean set of positions for this player: "CB, LCB" -> {"CB", "LCB"}
-            player_positions = {p.strip().upper() for p in str(cell).split(',')}
-            # Create a clean set of user-selected positions
-            selected_positions = {p.strip().upper() for p in f_pos_list}
-            # Return True if there is any overlap
-            return not selected_positions.isdisjoint(player_positions)
-            
-        df_f = df_f[df_f["position"].apply(match_pos)]
-        
+    if f_group != "ALL GROUPS":
+        df_f = df_f[df_f["position_group"] == f_group]
     if f_search:
         df_f = df_f[df_f["player"].str.contains(f_search, case=False, na=False)]
     if 'age' in df_f.columns:
@@ -122,7 +120,7 @@ def apply_filters(data, f_team, f_pos_list, f_search, f_age, f_mins):
         df_f = df_f[df_f['minutes_played'].between(f_mins[0], f_mins[1])]
     return df_f
 
-# --- 4. MAIN APP ---
+# --- 5. MAIN APP ---
 if check_password():
     with sqlite3.connect(DB_FILE) as conn:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -130,11 +128,11 @@ if check_password():
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
-    # Persistence of state
-    for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_pos',[]), ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
+    # Persistent State
+    for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_group','ALL GROUPS'), 
+                     ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
 
-    # Navigation
     st.sidebar.write("##")
     if st.sidebar.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
     if st.sidebar.button("🔍 SEARCH"): st.session_state.view = 'Search'
@@ -144,32 +142,28 @@ if check_password():
     def filter_ui(key):
         c1, c2, c3 = st.columns(3)
         with c1:
-            teams = ["ALL TEAMS"] + sorted([x for x in df_raw["team"].unique() if x and str(x).strip() != ''])
+            teams = ["ALL TEAMS"] + sorted([x for x in df_raw["team"].unique() if x])
             st.session_state.f_team = st.selectbox("TEAM", teams, index=teams.index(st.session_state.f_team) if st.session_state.f_team in teams else 0, key=f"{key}_t")
         with c2:
-            tags = set()
-            if 'position' in df_raw.columns:
-                for p in df_raw["position"].unique():
-                    if p and str(p).strip() != '': 
-                        [tags.add(s.strip()) for s in str(p).split(',')]
-            st.session_state.f_pos = st.multiselect("POSITIONS", sorted(list(tags)), default=st.session_state.f_pos, key=f"{key}_p")
+            groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker", "Other"]
+            st.session_state.f_group = st.selectbox("POSITION GROUP", groups, index=groups.index(st.session_state.f_group) if st.session_state.f_group in groups else 0, key=f"{key}_g")
         with c3:
             st.session_state.f_search = st.text_input("NAME", value=st.session_state.f_search, key=f"{key}_s")
 
     # --- VIEWS ---
     if st.session_state.view == 'Search':
         st.title("🔍 Scout Search")
-        filter_ui("search_view")
+        filter_ui("search")
         s1, s2 = st.columns(2)
-        with s1: st.session_state.f_age = st.slider("AGE", 15, 50, st.session_state.f_age, key="sl_age")
-        with s2: st.session_state.f_mins = st.slider("MINUTES", 0, 10000, st.session_state.f_mins, key="sl_mins")
-        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
+        with s1: st.session_state.f_age = st.slider("AGE", 15, 50, st.session_state.f_age, key="sl1")
+        with s2: st.session_state.f_mins = st.slider("MINS", 0, 10000, st.session_state.f_mins, key="sl2")
+        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_group, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
         st.dataframe(df_f, width='stretch', height=600)
 
     elif st.session_state.view == 'Dashboard':
         st.title("📊 Analytics Dashboard")
-        filter_ui("dash_view")
-        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
+        filter_ui("dash")
+        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_group, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("PLAYERS", len(df_f))
         if 'market_value' in df_f.columns: m2.metric("AVG VALUE", f"€{int(df_f['market_value'].mean()):,}")
@@ -179,19 +173,17 @@ if check_password():
         with r: st.plotly_chart(style_fig(px.scatter(df_f, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=['black'])), width='stretch')
 
     elif st.session_state.view == 'Bar':
-        st.title("📊 Ranking Metrics")
-        filter_ui("bar_view")
-        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
+        st.title("📊 Rankings")
+        filter_ui("bar")
+        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_group, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
         num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
         if num_cols:
             y_col = st.selectbox("METRIC", num_cols)
             st.plotly_chart(style_fig(px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=['black'])), width='stretch')
 
     elif st.session_state.view == 'Dist':
-        st.title("📈 Variable Spread")
-        filter_ui("dist_view")
-        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
-        num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
-        if num_cols:
-            d_col = st.selectbox("METRIC", num_cols)
-            st.plotly_chart(style_fig(px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=['black'])), width='stretch')
+        st.title("📈 Distributions")
+        filter_ui("dist")
+        df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_group, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
+        d_col = st.selectbox("METRIC", df_f.select_dtypes(include=['number']).columns.tolist())
+        st.plotly_chart(style_fig(px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=['black'])), width='stretch')
