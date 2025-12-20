@@ -8,12 +8,12 @@ import re
 DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
-LOGO_FILE = "FCHK.png"  # Local logo file
-THEME_COLOR = "#DDE1E6" # Unified background color
+LOGO_FILE = "FCHK.png"  
+THEME_COLOR = "#DDE1E6" # Unified Background (Slate Grey)
 
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
-# --- ULTIMATE CSS: TOTAL UNIFICATION & BLACK TEXT ---
+# --- CSS: TOTAL UNIFICATION, BLACK TEXT & NO HOVER ---
 st.markdown(f"""
     <style>
     /* 1. Global Background for every container */
@@ -23,7 +23,7 @@ st.markdown(f"""
         background-color: {THEME_COLOR} !important;
     }}
 
-    /* 2. Absolute Black Text for every element */
+    /* 2. Absolute Black Text for every element (Aggressive Override) */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -34,83 +34,63 @@ st.markdown(f"""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }}
 
-    /* 3. Inputs & DROPDOWN MENUS: Facecolor match */
-    div[data-baseweb="select"] > div, 
-    div[data-baseweb="popover"] div, 
-    ul[role="listbox"], 
-    li[role="option"],
-    div[data-baseweb="input"] > div, 
-    .stTextInput input, 
-    div[role="combobox"] {{
+    /* 3. Inputs & Dropdown Lists Facecolor match */
+    div[data-baseweb="select"] > div, div[data-baseweb="popover"] div, 
+    ul[role="listbox"], li[role="option"], div[data-baseweb="input"] > div, 
+    .stTextInput input, div[role="combobox"] {{
         background-color: {THEME_COLOR} !important;
         color: #000000 !important;
         border: 1.5px solid #000000 !important;
     }}
 
-    /* Dropdown hover state fix */
+    /* Dropdown hover selection color */
     li[role="option"]:hover {{
         background-color: #CCCCCC !important;
     }}
 
-    /* 4. Buttons: No Hover Color Change */
+    /* 4. Buttons: Minimalist Bordered Style (No Hover Change) */
     .stButton>button {{ 
-        width: 100%; 
-        border-radius: 4px; 
-        background-color: transparent !important; 
-        color: #000000 !important; 
-        font-weight: bold;
-        border: 1.5px solid #000000 !important;
-        transition: none !important;
-        text-transform: uppercase;
+        width: 100%; border-radius: 4px; background-color: transparent !important; 
+        color: #000000 !important; font-weight: bold; border: 1.5px solid #000000 !important;
+        transition: none !important; text-transform: uppercase;
     }}
     .stButton>button:hover, .stButton>button:active, .stButton>button:focus {{ 
-        background-color: transparent !important; 
-        color: #000000 !important; 
-        border-color: #000000 !important;
-        box-shadow: none !important;
+        background-color: transparent !important; color: #000000 !important; 
+        border-color: #000000 !important; box-shadow: none !important; 
     }}
 
-    /* 5. Metrics & Containers */
+    /* 5. Metric Cards & Clean Lines */
     div[data-testid="metric-container"] {{
-        background-color: transparent !important;
-        border: 1.5px solid #000000 !important;
-        border-radius: 8px;
-        padding: 15px;
+        background-color: transparent !important; border: 1.5px solid #000000 !important;
+        border-radius: 8px; padding: 15px;
     }}
     hr {{ border: 0.5px solid #000000 !important; }}
-
-    /* Hide the red line decoration at top */
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- AUTHENTICATION ---
+# --- 1. AUTHENTICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-    if st.session_state.authenticated:
-        return True
+    if st.session_state.authenticated: return True
 
     _, col2, _ = st.columns([1, 1, 1])
     with col2:
         st.write("#")
-        try:
-            st.image(LOGO_FILE, width=120)
-        except:
-            st.warning(f"Logo file '{LOGO_FILE}' not found.")
+        try: st.image(LOGO_FILE, width=120)
+        except: st.warning("Logo 'FCHK.png' not found.")
         st.title("FCHK LOGIN")
-        with st.form("login_form"):
-            user = st.text_input("USER")
-            pwd = st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER SYSTEM"):
-                if user == VALID_USERNAME and pwd == VALID_PASSWORD:
+        with st.form("login"):
+            u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
+            if st.form_submit_button("ENTER"):
+                if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
-                else:
-                    st.error("ACCESS DENIED")
+                else: st.error("ACCESS DENIED")
     return False
 
-# --- DATA HELPERS ---
+# --- 2. DATA UTILITIES ---
 @st.cache_data
 def get_tables():
     with sqlite3.connect(DB_FILE) as conn:
@@ -120,17 +100,16 @@ def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
         for c in df.columns:
-            # Handle numeric columns
-            if any(k in c.lower() for k in ['value', 'age', 'goal', 'xg', 'match', 'per_90', 'minutes', 'assist']):
+            if any(k in c.lower() for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes', 'assist']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
             else:
                 df[c] = df[c].astype(str).replace(['nan', 'None'], '')
         return df
 
+# Helper for Chart Consistency
 def style_fig(fig):
     fig.update_layout(
-        paper_bgcolor=THEME_COLOR,
-        plot_bgcolor=THEME_COLOR,
+        paper_bgcolor=THEME_COLOR, plot_bgcolor=THEME_COLOR,
         font=dict(color="black", size=12),
         xaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black"), gridcolor="#BBBBBB", linecolor="black"),
         yaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black"), gridcolor="#BBBBBB", linecolor="black"),
@@ -138,128 +117,124 @@ def style_fig(fig):
     )
     return fig
 
-# --- MAIN APP ---
+# --- 3. FILTER COMPONENT (Reusable for Search & Dashboard) ---
+def render_scout_filters(df_raw, key_prefix):
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        t_opts = ["ALL TEAMS"] + sorted([str(x) for x in df_raw["team"].unique() if x])
+        st.session_state.f_team = st.selectbox("TEAM", t_opts, 
+            index=t_opts.index(st.session_state.f_team) if st.session_state.f_team in t_opts else 0,
+            key=f"{key_prefix}_team_sel")
+    with c2:
+        p_set = set()
+        for p in df_raw["position"].unique():
+            if p: [p_set.add(s.strip()) for s in str(p).split(',')]
+        all_p = ["ALL POSITIONS"] + sorted(list(p_set))
+        st.session_state.f_pos = st.selectbox("POSITION", all_p, 
+            index=all_p.index(st.session_state.f_pos) if st.session_state.f_pos in all_p else 0,
+            key=f"{key_prefix}_pos_sel")
+    with c3:
+        st.session_state.f_search = st.text_input("NAME SEARCH", value=st.session_state.f_search, key=f"{key_prefix}_name_in")
+
+def apply_global_filters(data):
+    df_f = data.copy()
+    if st.session_state.f_team != "ALL TEAMS":
+        df_f = df_f[df_f["team"] == st.session_state.f_team]
+    
+    # EXACT POSITION LOGIC: CB matches "RCB, CB" but not "LCB"
+    if st.session_state.f_pos != "ALL POSITIONS" and "position" in df_f.columns:
+        df_f = df_f[df_f["position"].apply(lambda x: st.session_state.f_pos in [s.strip() for s in str(x).split(',')])]
+        
+    if st.session_state.f_search:
+        df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
+    
+    if 'age' in df_f.columns:
+        df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
+    
+    if 'minutes_played' in df_f.columns:
+        df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
+    return df_f
+
+# --- 4. MAIN APP ---
 if check_password():
-    # Sidebar Setup
-    try:
-        st.sidebar.image(LOGO_FILE, width=80)
-    except:
-        pass
-    st.sidebar.title("SCOUTING MENU")
+    st.sidebar.image(LOGO_FILE, width=80)
+    st.sidebar.title("FCHK SCOUT")
     
-    tables = get_tables()
-    selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
+    selected_table = st.sidebar.selectbox("DATASET", get_tables(), key="table_select")
     
-    if 'view' not in st.session_state:
-        st.session_state.view = 'Dashboard'
+    if 'view' not in st.session_state: st.session_state.view = 'Dashboard'
+    
+    # Initialize Persistent Filter States
+    for key, val in [('f_team', 'ALL TEAMS'), ('f_pos', 'ALL POSITIONS'), 
+                     ('f_search', ''), ('f_age', (15, 45)), ('f_mins', (0, 5000))]:
+        if key not in st.session_state: st.session_state[key] = val
 
     st.sidebar.write("##")
     if st.sidebar.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
     if st.sidebar.button("🔍 SEARCH"): st.session_state.view = 'Search'
-    if st.sidebar.button("📄 TABLE VIEW"): st.session_state.view = 'Table'
-    if st.sidebar.button("📊 BAR GRAPHS"): st.session_state.view = 'Bar'
+    if st.sidebar.button("📄 DATA TABLE"): st.session_state.view = 'Table'
+    if st.sidebar.button("📊 BAR RANKING"): st.session_state.view = 'Bar'
+    if st.sidebar.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
     
     st.sidebar.write("---")
     if st.sidebar.button("LOGOUT"):
         st.session_state.authenticated = False
         st.rerun()
 
-    # Load Full Data
     df_raw = load_data(selected_table)
-
-    # Initialize global filter state
-    if 'f_team' not in st.session_state: st.session_state.f_team = "ALL TEAMS"
-    if 'f_pos' not in st.session_state: st.session_state.f_pos = "ALL POSITIONS"
-    if 'f_search' not in st.session_state: st.session_state.f_search = ""
-    if 'f_age' not in st.session_state: st.session_state.f_age = (15, 45)
-    if 'f_mins' not in st.session_state: st.session_state.f_mins = (0, 5000)
-
-    # Global Filter Logic
-    def apply_current_filters(data):
-        df_f = data.copy()
-        if st.session_state.f_team != "ALL TEAMS":
-            df_f = df_f[df_f["team"] == st.session_state.f_team]
-        
-        # Exact Position Matching (Fixed logic)
-        if st.session_state.f_pos != "ALL POSITIONS" and "position" in df_f.columns:
-            df_f = df_f[df_f["position"].apply(lambda x: st.session_state.f_pos in [s.strip() for s in str(x).split(',')])]
-            
-        if st.session_state.f_search:
-            df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
-        
-        if 'age' in df_f.columns:
-            df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
-        
-        if 'minutes_played' in df_f.columns:
-            df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
-            
-        return df_f
-
-    df_filtered = apply_current_filters(df_raw)
+    df_filtered = apply_global_filters(df_raw)
 
     # --- VIEWS ---
 
     if st.session_state.view == 'Search':
         st.title("🔍 Advanced Player Search")
-        st.write("Filters applied here update the Dashboard and Bar Graphs.")
+        render_scout_filters(df_raw, "search_pg")
         
-        # Search Filters
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            team_opts = ["ALL TEAMS"] + sorted([str(x) for x in df_raw["team"].unique() if x])
-            st.session_state.f_team = st.selectbox("TEAM", team_opts, index=team_opts.index(st.session_state.f_team) if st.session_state.f_team in team_opts else 0)
-        with c2:
-            pos_set = set()
-            if "position" in df_raw.columns:
-                for p in df_raw["position"].unique():
-                    if p: [pos_set.add(s.strip()) for s in str(p).split(',')]
-            all_p = ["ALL POSITIONS"] + sorted(list(pos_set))
-            st.session_state.f_pos = st.selectbox("POSITION", all_p, index=all_p.index(st.session_state.f_pos) if st.session_state.f_pos in all_p else 0)
-        with c3:
-            st.session_state.f_search = st.text_input("NAME SEARCH", value=st.session_state.f_search)
-
         s1, s2 = st.columns(2)
         with s1:
-            if 'age' in df_raw.columns:
-                st.session_state.f_age = st.slider("AGE RANGE", 15, 50, st.session_state.f_age)
+            st.session_state.f_age = st.slider("AGE LIMITS", 15, 50, st.session_state.f_age, key="s_age")
         with s2:
-            if 'minutes_played' in df_raw.columns:
-                st.session_state.f_mins = st.slider("MINUTES PLAYED", 0, 10000, st.session_state.f_mins)
-
+            st.session_state.f_mins = st.slider("MINIMUM MINUTES", 0, 10000, st.session_state.f_mins, key="s_mins")
+        
         st.divider()
         st.subheader(f"Filtered Results ({len(df_filtered)} players)")
         st.dataframe(df_filtered, use_container_width=True, height=500)
 
     elif st.session_state.view == 'Dashboard':
-        st.title(f"📊 {selected_table} Intel")
-        st.caption(f"Filters Active: {st.session_state.f_team} | {st.session_state.f_pos} | Age: {st.session_state.f_age}")
+        st.title(f"📊 {selected_table} Executive Summary")
+        render_scout_filters(df_raw, "dash_pg")
         
+        st.divider()
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("PLAYERS", len(df_filtered))
-        if 'market_value' in df_filtered.columns: 
-            m2.metric("AVG VALUE", f"€{int(df_filtered['market_value'].mean()):,}")
-        if 'goals' in df_filtered.columns: 
-            m3.metric("TOTAL GOALS", int(df_filtered['goals'].sum()))
-        if 'age' in df_filtered.columns: 
-            m4.metric("AVG AGE", round(df_filtered['age'].mean(), 1))
+        if 'market_value' in df_filtered.columns: m2.metric("AVG VALUE", f"€{int(df_filtered['market_value'].mean()):,}")
+        if 'goals' in df_filtered.columns: m3.metric("TOTAL GOALS", int(df_filtered['goals'].sum()))
+        if 'age' in df_filtered.columns: m4.metric("AVG AGE", round(df_filtered['age'].mean(), 1))
 
         l, r = st.columns(2)
         with l:
-            st.subheader("Value Spread by Team")
-            fig = style_fig(px.box(df_filtered, x="team", y="market_value", template="simple_white", color_discrete_sequence=['black']))
-            st.plotly_chart(fig, use_container_width=True)
+            st.subheader("Team Value Distribution")
+            fig_box = style_fig(px.box(df_filtered, x="team", y="market_value", template="simple_white", color_discrete_sequence=['black']))
+            st.plotly_chart(fig_box, use_container_width=True)
         with r:
-            st.subheader("Goals vs xG Efficiency")
-            fig = style_fig(px.scatter(df_filtered, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=['black']))
-            st.plotly_chart(fig, use_container_width=True)
+            st.subheader("Goals Efficiency (xG vs Goals)")
+            fig_scat = style_fig(px.scatter(df_filtered, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=['black']))
+            st.plotly_chart(fig_scat, use_container_width=True)
 
     elif st.session_state.view == 'Table':
-        st.title(f"📄 Full Dataset: {selected_table}")
+        st.title(f"📄 Full League Table: {selected_table}")
         st.dataframe(df_raw, use_container_width=True, height=700)
 
     elif st.session_state.view == 'Bar':
-        st.title("📊 Performance Ranking")
+        st.title("📊 Player Rankings")
         num_cols = df_filtered.select_dtypes(include=['number']).columns.tolist()
         y_col = st.selectbox("SELECT METRIC", num_cols, index=num_cols.index('market_value') if 'market_value' in num_cols else 0)
-        fig = style_fig(px.bar(df_filtered.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=['black']))
-        st.plotly_chart(fig, use_container_width=True)
+        fig_bar = style_fig(px.bar(df_filtered.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=['black']))
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    elif st.session_state.view == 'Dist':
+        st.title("📈 Variable Spread")
+        num_cols = df_filtered.select_dtypes(include=['number']).columns.tolist()
+        d_col = st.selectbox("SELECT METRIC", num_cols)
+        fig_dist = style_fig(px.histogram(df_filtered, x=d_col, template="simple_white", color_discrete_sequence=['black']))
+        st.plotly_chart(fig_dist, use_container_width=True)
