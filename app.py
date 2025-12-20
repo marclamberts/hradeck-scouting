@@ -12,40 +12,33 @@ LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5329/5329945.png"
 st.set_page_config(page_title="Hradeck Pro Scout", layout="wide", page_icon="⚽")
 
 # --- GLOBAL STYLING: ONE COLOR BACKGROUND + BLACK TEXT EVERYWHERE ---
-# Background Color: #E0E2E6 (Consistent Grey)
-# Font Color: #000000 (Pure Black)
 st.markdown("""
     <style>
-    /* 1. FORCE GLOBAL BACKGROUND AND FONT */
-    .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, div[data-testid="stToolbar"] {
+    /* 1. Global Background (Grey) and Text (Black) */
+    .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, div[data-testid="stToolbar"], [data-testid="stSidebarNav"] {
         background-color: #E0E2E6 !important;
     }
 
-    /* 2. FORCE BLACK TEXT ON EVERYTHING */
     html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th {
         color: #000000 !important;
-        font-family: 'Inter', sans-serif;
     }
 
-    /* 3. UNIFY INPUT BOXES AND DROPDOWNS */
+    /* 2. Unified Inputs & Selectboxes */
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, .stTextInput input {
         background-color: #E0E2E6 !important;
         color: #000000 !important;
         border: 1px solid #000000 !important;
     }
 
-    /* 4. UNIFY METRIC CARDS (No white background) */
+    /* 3. Metric Cards (Transparent/Grey Background) */
     div[data-testid="metric-container"] {
         background-color: #E0E2E6 !important;
         border: 1px solid #000000 !important;
         border-radius: 10px;
         padding: 10px;
     }
-    [data-testid="stMetricValue"] {
-        color: #000000 !important;
-    }
 
-    /* 5. UNIFY BUTTONS */
+    /* 4. Professional Buttons (Bordered) */
     .stButton>button { 
         width: 100%; 
         border-radius: 8px; 
@@ -53,21 +46,15 @@ st.markdown("""
         color: #000000 !important; 
         font-weight: bold;
         border: 2px solid #000000 !important;
+        margin-bottom: 5px;
     }
     .stButton>button:hover { 
         background-color: #000000 !important; 
         color: #FFFFFF !important; 
     }
-
-    /* 6. UNIFY SIDEBAR ITEMS */
-    [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stMarkdown p {
-        color: #000000 !important;
-    }
     
-    /* 7. TABLE STYLING */
-    .stDataFrame {
-        border: 1px solid #000000 !important;
-    }
+    /* 5. Force Table Font Color */
+    .stDataFrame div { color: #000000 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -101,10 +88,14 @@ def get_all_tables():
 def load_clean_data(table_name):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table_name}"', conn)
-        df = df.fillna(0)
+        # Handle mixed types by converting object columns to string or numeric
         for col in df.columns:
+            # Check if it's a numeric-heavy column
             if any(k in col.lower() for k in ['value', 'age', 'goal', 'xg', 'match', 'per_90']):
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                # Ensure text columns are actually strings (fixes sorting issues)
+                df[col] = df[col].astype(str).replace('nan', '').replace('None', '')
         return df
 
 # --- 3. MAIN APP ---
@@ -133,20 +124,32 @@ if check_password():
     # Top Filters
     st.title(f"EXPLORING: {selected_table}")
     c1, c2, c3 = st.columns(3)
+    
     with c1:
-        teams = ["All Teams"] + sorted(df_raw["team"].unique().tolist()) if "team" in df_raw.columns else ["N/A"]
+        # FIX: Ensure all items are strings before sorting to avoid TypeError
+        team_options = sorted([str(x) for x in df_raw["team"].unique() if x]) if "team" in df_raw.columns else []
+        teams = ["All Teams"] + team_options
         filt_team = st.selectbox("Team Filter", teams)
+        
     with c2:
-        pos = ["All Positions"]
+        # FIX: Ensure all items are strings before sorting
+        pos_options = []
         if "position" in df_raw.columns:
-            pos += sorted(list(set([x.strip() for p in df_raw["position"].unique() for x in str(p).split(',')])))
+            pos_set = set()
+            for p in df_raw["position"].unique():
+                if p:
+                    for sub_p in str(p).split(','):
+                        pos_set.add(sub_p.strip())
+            pos_options = sorted([str(x) for x in pos_set])
+        pos = ["All Positions"] + pos_options
         filt_pos = st.selectbox("Position Filter", pos)
+        
     with c3:
         search = st.text_input("🔍 Player Search")
 
     # Filter Logic
     df = df_raw.copy()
-    if filt_team != "All Teams": df = df[df["team"] == filt_team]
+    if filt_team != "All Teams": df = df[df["team"].astype(str) == filt_team]
     if filt_pos != "All Positions" and "position" in df.columns:
         df = df[df["position"].astype(str).str.contains(filt_pos, na=False)]
     if search: df = df[df["player"].astype(str).str.contains(search, case=False, na=False)]
@@ -161,17 +164,16 @@ if check_password():
         if 'goals' in df.columns: m3.metric("Goals", int(df['goals'].sum()))
         if 'age' in df.columns: m4.metric("Avg Age", round(df['age'].mean(), 1))
 
-        # Visuals
         l, r = st.columns(2)
         with l:
             st.subheader("Team Values")
             fig = px.box(df, x="team", y="market_value", template="simple_white")
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="black"))
             st.plotly_chart(fig, use_container_width=True)
         with r:
             st.subheader("xG vs Goals")
             fig = px.scatter(df, x="xg", y="goals", hover_name="player", template="simple_white")
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="black"))
             st.plotly_chart(fig, use_container_width=True)
 
     elif st.session_state.view == 'Table':
@@ -181,12 +183,12 @@ if check_password():
         num_cols = df.select_dtypes(include=['number']).columns.tolist()
         y_col = st.selectbox("Metric", num_cols, index=num_cols.index('market_value') if 'market_value' in num_cols else 0)
         fig = px.bar(df.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white")
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="black"))
         st.plotly_chart(fig, use_container_width=True)
 
     elif st.session_state.view == 'Dist':
         num_cols = df.select_dtypes(include=['number']).columns.tolist()
         d_col = st.selectbox("Metric", num_cols)
         fig = px.histogram(df, x=d_col, template="simple_white", color_discrete_sequence=['black'])
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="black"))
         st.plotly_chart(fig, use_container_width=True)
