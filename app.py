@@ -41,7 +41,9 @@ def get_table_names():
 
 def load_data(table_name):
     with sqlite3.connect(DB_FILE) as conn:
-        return pd.read_sql(f"SELECT * FROM {table_name}", conn)
+        # Wrap the table name in double quotes to handle spaces and dots
+        query = f'SELECT * FROM "{table_name}"'
+        return pd.read_sql(query, conn)
 
 # --- MAIN APP ---
 if check_password():
