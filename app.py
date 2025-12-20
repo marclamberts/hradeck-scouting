@@ -15,82 +15,80 @@ st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
-# --- 2. THE PHYSICAL TOGGLE (High Contrast) ---
+# --- 2. THE PHYSICAL PILL TOGGLE ---
 with st.sidebar:
     st.write("### ⚙️ SYSTEM SETTINGS")
-    # This is the sliding pill
+    # Custom labeled toggle
     theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
     st.session_state.theme = 'Dark' if theme_toggle else 'Light'
     st.write("---")
 
-# Define Dynamic Colors
+# Dynamic Color Variables
 if st.session_state.theme == 'Dark':
-    B_COLOR = "#0E1117"  # Deep Background
+    B_COLOR = "#0E1117"  # Deep Dark
     T_COLOR = "#FFFFFF"  # White Text
-    ACCENT  = "#1d2129"
-    KNOB_COLOR = "#FFFFFF" # White sliding knob
-    TRACK_COLOR = "#28a745" # Green track when on
+    PILL_TRACK = "#1E1E1E" # Dark Track
+    PILL_HANDLE = "#00FF00" # Bright Green Handle
+    GRID = "#31333F"
 else:
-    B_COLOR = "#DDE1E6"  # Slate Background
+    B_COLOR = "#DDE1E6"  # Slate Grey
     T_COLOR = "#000000"  # Black Text
-    ACCENT  = "#DDE1E6"
-    KNOB_COLOR = "#000000" # Black sliding knob
-    TRACK_COLOR = "#BDC1C6" # Grey track when off
+    PILL_TRACK = "#BDC1C6" # Light Track
+    PILL_HANDLE = "#000000" # Black Handle
+    GRID = "#BBBBBB"
 
-# --- 3. CSS: CUSTOM TOGGLE STYLING ---
+# --- 3. CSS: FORCING THE VISUAL PILL ---
 st.markdown(f"""
     <style>
-    /* Global Background */
+    /* Global Backgrounds */
     .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"],
     div[data-testid="stToolbar"], [data-testid="stSidebar"] div, .stAppViewContainer {{
         background-color: {B_COLOR} !important;
     }}
 
-    /* CUSTOM TOGGLE CONTRAST FIX */
-    /* This makes the 'track' of the toggle stand out */
+    /* THE PILL VISUALS: Forcing High Contrast */
+    /* The Track (The Pill Body) */
     div[data-baseweb="checkbox"] > div:first-child {{
-        background-color: {TRACK_COLOR} !important;
+        background-color: {PILL_TRACK} !important;
         border: 2px solid {T_COLOR} !important;
-        width: 48px !important;
-        height: 24px !important;
+        width: 50px !important;
+        height: 26px !important;
+        border-radius: 13px !important;
     }}
 
-    /* This targets the 'knob' (the sliding circle) */
+    /* The Handle (The Sliding Part) */
     div[data-baseweb="checkbox"] div div {{
-        background-color: {KNOB_COLOR} !important;
-        width: 18px !important;
-        height: 18px !important;
+        background-color: {PILL_HANDLE} !important;
+        width: 20px !important;
+        height: 20px !important;
+        border-radius: 50% !important;
+        box-shadow: 0px 2px 4px rgba(0,0,0,0.5) !important;
     }}
 
-    /* Global Text Colors */
+    /* Global Text & Labels */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
     div[role="listbox"] div, .stDataFrame div, button, .stTab, .stCaption, 
-    .stSlider label {{
+    .stSlider label, [data-testid="stMetricDelta"] {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
     }}
 
-    /* Inputs, Buttons, Metrics */
-    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, .stTextInput input {{
-        background-color: {ACCENT} !important;
-        color: {T_COLOR} !important;
-        border: 1.5px solid {T_COLOR} !important;
-    }}
-    .stButton>button {{ 
-        width: 100%; border-radius: 4px; background-color: transparent !important; 
-        color: {T_COLOR} !important; border: 1.5px solid {T_COLOR} !important;
-    }}
+    /* Metric Cards */
     div[data-testid="metric-container"] {{
-        border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
+        background-color: transparent !important;
+        border: 1.5px solid {T_COLOR} !important;
+        border-radius: 8px;
+        padding: 15px;
     }}
+    
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. DATA LOGIC ---
+# --- 4. POSITION GROUP MAPPING ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -105,6 +103,7 @@ def get_group(pos_string):
         if any(code in tags for code in codes): return group
     return "Other"
 
+# --- 5. CORE LOGIC ---
 @st.cache_data
 def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
@@ -117,16 +116,25 @@ def load_data(table):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         return df
 
+def apply_filters(data):
+    df_f = data.copy()
+    if st.session_state.f_team != "ALL TEAMS": df_f = df_f[df_f["team"] == st.session_state.f_team]
+    if st.session_state.f_group != "ALL GROUPS": df_f = df_f[df_f["position_group"] == st.session_state.f_group]
+    if st.session_state.f_search: df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
+    if 'age' in df_f.columns: df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
+    if 'minutes_played' in df_f.columns: df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
+    return df_f
+
 def style_fig(fig):
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=T_COLOR, size=12),
-        xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=TRACK_COLOR, linecolor=T_COLOR),
-        yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=TRACK_COLOR, linecolor=T_COLOR)
+        xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
+        yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR)
     )
     return fig
 
-# --- 5. AUTHENTICATION ---
+# --- 6. AUTHENTICATION & UI ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -138,14 +146,13 @@ def check_password():
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER"):
+            if st.form_submit_button("ENTER SYSTEM"):
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
                 else: st.error("ACCESS DENIED")
     return False
 
-# --- 6. MAIN APP ---
 if check_password():
     with sqlite3.connect(DB_FILE) as conn:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -177,15 +184,6 @@ if check_password():
         with c3:
             st.session_state.f_search = st.text_input("PLAYER", value=st.session_state.f_search, key=f"{key}_s")
 
-    def apply_filters(data):
-        df_f = data.copy()
-        if st.session_state.f_team != "ALL TEAMS": df_f = df_f[df_f["team"] == st.session_state.f_team]
-        if st.session_state.f_group != "ALL GROUPS": df_f = df_f[df_f["position_group"] == st.session_state.f_group]
-        if st.session_state.f_search: df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
-        if 'age' in df_f.columns: df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
-        if 'minutes_played' in df_f.columns: df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
-        return df_f
-
     df_f = apply_filters(df_raw)
 
     # --- VIEWS ---
@@ -198,7 +196,7 @@ if check_password():
         st.dataframe(df_f, width='stretch', height=600)
 
     elif st.session_state.view == 'Dashboard':
-        st.title("📊 Analytics Dashboard")
+        st.title("📊 Dashboard")
         filter_ui("dash")
         m1, m2 = st.columns(2)
         m1.metric("PLAYERS", len(df_f))
@@ -212,8 +210,9 @@ if check_password():
         st.title("📊 Rankings")
         filter_ui("bar")
         num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
-        y_col = st.selectbox("METRIC", num_cols)
-        st.plotly_chart(style_fig(px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
+        if num_cols:
+            y_col = st.selectbox("METRIC", num_cols)
+            st.plotly_chart(style_fig(px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
 
     elif st.session_state.view == 'Dist':
         st.title("📈 Distributions")
