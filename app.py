@@ -11,16 +11,15 @@ LOGO_FILE = "FCHK.png"
 
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
-# --- 1. THEME STATE ---
+# --- 1. THEME STATE & DYNAMIC COLORS ---
 if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
-# Dynamic Color Variables
 if st.session_state.theme == 'Dark':
     B_COLOR = "#0E1117"  
     T_COLOR = "#FFFFFF"  
     PILL_TRACK = "#1E1E1E" 
-    PILL_HANDLE = "#00FF00" # High contrast handle for Dark Mode
+    PILL_HANDLE = "#00FF00" 
     GRID = "#31333F"
 else:
     B_COLOR = "#DDE1E6"  
@@ -29,7 +28,7 @@ else:
     PILL_HANDLE = "#000000" 
     GRID = "#BBBBBB"
 
-# --- 2. CSS: ISOLATED PILL TOGGLE ---
+# --- 2. CSS: ISOLATED PILL & PAGE LAYOUT ---
 st.markdown(f"""
     <style>
     /* Global Backgrounds */
@@ -39,8 +38,7 @@ st.markdown(f"""
         background-color: {B_COLOR} !important;
     }}
 
-    /* ISOLATED PILL TOGGLE CSS (ONLY targets the theme switch) */
-    /* We target the container of the toggle specifically */
+    /* THE PILL TOGGLE (Strictly isolated to the theme switch) */
     div[data-testid="stCheckbox"] > label > div:first-child {{
         background-color: {PILL_TRACK} !important;
         border: 2px solid {T_COLOR} !important;
@@ -50,17 +48,14 @@ st.markdown(f"""
         display: flex !important;
         align-items: center !important;
     }}
-
-    /* The sliding knob inside the pill */
     div[data-testid="stCheckbox"] > label > div:first-child > div {{
         background-color: {PILL_HANDLE} !important;
         width: 18px !important;
         height: 18px !important;
         border-radius: 50% !important;
-        transition: transform 0.2s ease-in-out !important;
     }}
 
-    /* Global Text & Labels */
+    /* Global Text & Label Colors */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -70,22 +65,22 @@ st.markdown(f"""
         -webkit-text-fill-color: {T_COLOR} !important;
     }}
 
-    /* Standard Button Styling (Does not use the pill look) */
+    /* Page Navigation Buttons (Rectangular, No Pill) */
     .stButton>button {{ 
         width: 100%; border-radius: 4px; background-color: transparent !important; 
         color: {T_COLOR} !important; border: 1.5px solid {T_COLOR} !important;
-        font-weight: bold;
+        font-weight: bold; margin-bottom: 5px;
     }}
 
+    /* Data Containers */
     div[data-testid="metric-container"] {{
         border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
     }}
-    
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. LOGIC & DATA ---
+# --- 3. LOGIC & DATA UTILITIES ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -111,15 +106,6 @@ def load_data(table):
             if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         return df
-
-def apply_filters(data):
-    df_f = data.copy()
-    if st.session_state.f_team != "ALL TEAMS": df_f = df_f[df_f["team"] == st.session_state.f_team]
-    if st.session_state.f_group != "ALL GROUPS": df_f = df_f[df_f["position_group"] == st.session_state.f_group]
-    if st.session_state.f_search: df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
-    if 'age' in df_f.columns: df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
-    if 'minutes_played' in df_f.columns: df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
-    return df_f
 
 def style_fig(fig):
     fig.update_layout(
@@ -151,12 +137,22 @@ def check_password():
 
 # --- 5. MAIN APP ---
 if check_password():
-    # SIDEBAR THEME TOGGLE
+    # SIDEBAR: Theme Toggle + Navigation Pages
     with st.sidebar:
         st.write("### ⚙️ SYSTEM")
         theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
         st.session_state.theme = 'Dark' if theme_toggle else 'Light'
         st.write("---")
+        
+        st.write("### 🧭 NAVIGATION")
+        if st.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
+        if st.button("🔍 SEARCH"): st.session_state.view = 'Search'
+        if st.button("📊 BAR RANKING"): st.session_state.view = 'Bar'
+        if st.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
+        st.write("---")
+        if st.button("LOGOUT"):
+            st.session_state.authenticated = False
+            st.rerun()
 
     with sqlite3.connect(DB_FILE) as conn:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -164,18 +160,10 @@ if check_password():
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
+    # State Persistence for Filters
     for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_group','ALL GROUPS'), 
                      ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
-
-    st.sidebar.write("##")
-    if st.sidebar.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
-    if st.sidebar.button("🔍 SEARCH"): st.session_state.view = 'Search'
-    if st.sidebar.button("📊 BAR RANKING"): st.session_state.view = 'Bar'
-    if st.sidebar.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
-    if st.sidebar.button("LOGOUT"):
-        st.session_state.authenticated = False
-        st.rerun()
 
     def filter_ui(key):
         c1, c2, c3 = st.columns(3)
@@ -188,9 +176,18 @@ if check_password():
         with c3:
             st.session_state.f_search = st.text_input("PLAYER", value=st.session_state.f_search, key=f"{key}_s")
 
+    def apply_filters(data):
+        df_f = data.copy()
+        if st.session_state.f_team != "ALL TEAMS": df_f = df_f[df_f["team"] == st.session_state.f_team]
+        if st.session_state.f_group != "ALL GROUPS": df_f = df_f[df_f["position_group"] == st.session_state.f_group]
+        if st.session_state.f_search: df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
+        if 'age' in df_f.columns: df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
+        if 'minutes_played' in df_f.columns: df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
+        return df_f
+
     df_f = apply_filters(df_raw)
 
-    # --- VIEWS ---
+    # --- PAGES ---
     if st.session_state.view == 'Search':
         st.title("🔍 Scout Search")
         filter_ui("search")
@@ -205,7 +202,6 @@ if check_password():
         m1, m2 = st.columns(2)
         m1.metric("PLAYERS", len(df_f))
         if 'market_value' in df_f.columns: m2.metric("AVG VALUE", f"€{int(df_f['market_value'].mean()):,}")
-        
         l, r = st.columns(2)
         with l: st.plotly_chart(style_fig(px.box(df_f, x="team", y="market_value", template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
         with r: st.plotly_chart(style_fig(px.scatter(df_f, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
