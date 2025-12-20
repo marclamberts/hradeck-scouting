@@ -7,7 +7,7 @@ import plotly.express as px
 DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
-LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5329/5329945.png" 
+LOGO_URL = "FCHK.png" 
 
 st.set_page_config(page_title="Hradeck Pro Scout", layout="wide", page_icon="⚽")
 
