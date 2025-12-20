@@ -8,7 +8,7 @@ DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
 LOGO_FILE = "FCHK.png"  
-THEME_COLOR = "#DDE1E6" # Unified background
+THEME_COLOR = "#DDE1E6" 
 
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
@@ -59,25 +59,27 @@ def check_password():
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER"):
+            if st.form_submit_button("ENTER SYSTEM"):
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
                 else: st.error("ACCESS DENIED")
     return False
 
-# --- 2. DATA UTILITIES (The Data Guard) ---
+# --- 2. DATA UTILITIES (Aggressive Cleaning) ---
 def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
-        # Normalize every column name: strip spaces and lowercase
+        # 1. Standardize column names
         df.columns = [str(c).strip().lower() for c in df.columns]
         
-        # Aggressive cleaning for the position column
+        # 2. Hard-clean the position column immediately
         if 'position' in df.columns:
-            df['position'] = df['position'].fillna('').astype(str).str.strip()
-            df['position'] = df['position'].replace(['nan', 'None', 'NULL', 'null', '<NA>', 'nan'], '')
+            # Convert to string, strip spaces, replace variants of 'NULL' with empty string
+            df['position'] = df['position'].astype(str).str.strip()
+            df['position'] = df['position'].replace(['nan', 'None', 'NULL', 'null', '<NA>'], '')
         
+        # 3. Handle numeric stats
         for c in df.columns:
             if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
@@ -85,26 +87,31 @@ def load_data(table):
 
 def style_fig(fig):
     fig.update_layout(
-        paper_bgcolor=THEME_COLOR, plot_bgcolor=THEME_COLOR, # Matches facecolor
+        paper_bgcolor=THEME_COLOR, plot_bgcolor=THEME_COLOR,
         font=dict(color="black", size=12),
         xaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black"), gridcolor="#BBBBBB", linecolor="black"),
         yaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black"), gridcolor="#BBBBBB", linecolor="black")
     )
     return fig
 
-# --- 3. THE REFINED FILTER ENGINE ---
+# --- 3. THE FIXED POSITION FILTER ENGINE ---
 def apply_filters(data, f_team, f_pos_list, f_search, f_age, f_mins):
     df_f = data.copy()
+    
     if f_team != "ALL TEAMS":
         df_f = df_f[df_f["team"] == f_team]
     
-    # EXACT POSITION MATCHING: Splits the cell and checks if selection exists
+    # THE CRITICAL FIX: Set Intersection
     if f_pos_list:
         def match_pos(cell):
             if not cell or str(cell).strip() == '': return False
-            # Normalize the database string: "CB, LCB" -> ["CB", "LCB"]
-            player_positions = [p.strip().upper() for p in str(cell).split(',')]
-            return any(pos.upper() in player_positions for pos in f_pos_list)
+            # Create a clean set of positions for this player: "CB, LCB" -> {"CB", "LCB"}
+            player_positions = {p.strip().upper() for p in str(cell).split(',')}
+            # Create a clean set of user-selected positions
+            selected_positions = {p.strip().upper() for p in f_pos_list}
+            # Return True if there is any overlap
+            return not selected_positions.isdisjoint(player_positions)
+            
         df_f = df_f[df_f["position"].apply(match_pos)]
         
     if f_search:
@@ -123,10 +130,11 @@ if check_password():
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
-    # Initialize persistence
+    # Persistence of state
     for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_pos',[]), ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
 
+    # Navigation
     st.sidebar.write("##")
     if st.sidebar.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
     if st.sidebar.button("🔍 SEARCH"): st.session_state.view = 'Search'
@@ -142,7 +150,8 @@ if check_password():
             tags = set()
             if 'position' in df_raw.columns:
                 for p in df_raw["position"].unique():
-                    if p and str(p).strip() != '': [tags.add(s.strip()) for s in str(p).split(',')]
+                    if p and str(p).strip() != '': 
+                        [tags.add(s.strip()) for s in str(p).split(',')]
             st.session_state.f_pos = st.multiselect("POSITIONS", sorted(list(tags)), default=st.session_state.f_pos, key=f"{key}_p")
         with c3:
             st.session_state.f_search = st.text_input("NAME", value=st.session_state.f_search, key=f"{key}_s")
@@ -170,7 +179,7 @@ if check_password():
         with r: st.plotly_chart(style_fig(px.scatter(df_f, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=['black'])), width='stretch')
 
     elif st.session_state.view == 'Bar':
-        st.title("📊 Rankings")
+        st.title("📊 Ranking Metrics")
         filter_ui("bar_view")
         df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
         num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
@@ -179,8 +188,10 @@ if check_password():
             st.plotly_chart(style_fig(px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=['black'])), width='stretch')
 
     elif st.session_state.view == 'Dist':
-        st.title("📈 Distributions")
+        st.title("📈 Variable Spread")
         filter_ui("dist_view")
         df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
-        d_col = st.selectbox("METRIC", df_f.select_dtypes(include=['number']).columns.tolist())
-        st.plotly_chart(style_fig(px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=['black'])), width='stretch')
+        num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
+        if num_cols:
+            d_col = st.selectbox("METRIC", num_cols)
+            st.plotly_chart(style_fig(px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=['black'])), width='stretch')
