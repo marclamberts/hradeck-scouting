@@ -9,21 +9,21 @@ DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
 LOGO_URL = "FCHK.png" 
-THEME_COLOR = "#DDE1E6"  # The unified background color
+THEME_COLOR = "#DDE1E6" 
 
 st.set_page_config(page_title="Hradeck Pro Scout", layout="wide", page_icon="⚽")
 
-# --- ULTIMATE CSS: TOTAL BACKGROUND & BLACK TEXT UNIFICATION ---
+# --- CSS: TOTAL UNIFICATION ---
 st.markdown(f"""
     <style>
-    /* 1. Global Background for every container */
+    /* Global Background */
     .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"],
     div[data-testid="stToolbar"], [data-testid="stSidebar"] div, .stAppViewContainer {{
         background-color: {THEME_COLOR} !important;
     }}
 
-    /* 2. Absolute Black Text for every element */
+    /* Absolute Black Text on everything */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -33,7 +33,7 @@ st.markdown(f"""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }}
 
-    /* 3. Inputs: Match background and force black borders */
+    /* Inputs & Selectboxes */
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, 
     .stTextInput input, div[role="combobox"], div[data-baseweb="base-input"] {{
         background-color: {THEME_COLOR} !important;
@@ -41,7 +41,7 @@ st.markdown(f"""
         border: 1.5px solid #000000 !important;
     }}
 
-    /* 4. Buttons: No Hover Color Change, Strict Black/Grey */
+    /* Buttons: No Hover Change */
     .stButton>button {{ 
         width: 100%; 
         border-radius: 4px; 
@@ -58,7 +58,7 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
 
-    /* 5. Metrics & Containers */
+    /* Metrics & Containers */
     div[data-testid="metric-container"] {{
         background-color: transparent !important;
         border: 1.5px solid #000000 !important;
@@ -92,7 +92,7 @@ def check_password():
                     st.error("ACCESS DENIED")
     return False
 
-# --- DATA UTILITIES ---
+# --- DATA HELPERS ---
 @st.cache_data
 def get_tables():
     with sqlite3.connect(DB_FILE) as conn:
@@ -130,15 +130,13 @@ if check_password():
 
     df_raw = load_data(selected_table)
 
+    # --- TOP FILTERS ---
     st.title(f"LEAGUE: {selected_table}")
-    
-    # --- FILTERS (With unique keys for table persistence) ---
     c1, c2, c3 = st.columns(3)
     with c1:
         teams = ["ALL TEAMS"] + sorted([str(x) for x in df_raw["team"].unique() if x])
         f_team = st.selectbox("TEAM", teams, key=f"team_{selected_table}")
     with c2:
-        # Extract unique position tags
         pos_options = set()
         if "position" in df_raw.columns:
             for p in df_raw["position"].unique():
@@ -150,28 +148,37 @@ if check_password():
     with c3:
         search = st.text_input("SEARCH PLAYER", key=f"search_{selected_table}")
 
-    # --- UPDATED FILTERING LOGIC ---
+    # Filtering
     df = df_raw.copy()
     if f_team != "ALL TEAMS":
         df = df[df["team"] == f_team]
-    
-    # FIXED POSITION FILTER: Checks if selected tag is in the comma-separated list
     if f_pos != "ALL POSITIONS" and "position" in df.columns:
         df = df[df["position"].apply(lambda x: f_pos in [s.strip() for s in str(x).split(',')])]
-        
     if search:
         df = df[df["player"].str.contains(search, case=False, na=False)]
 
-    st.write("---")
-
-    # Helper for Chart Styling
+    # --- CHART STYLING HELPER (FORCE BLACK TICKS/LABELS) ---
     def style_fig(fig):
         fig.update_layout(
             paper_bgcolor=THEME_COLOR,
             plot_bgcolor=THEME_COLOR,
-            font=dict(color="black"),
-            xaxis=dict(gridcolor="#CCCCCC", zerolinecolor="black"),
-            yaxis=dict(gridcolor="#CCCCCC", zerolinecolor="black")
+            font=dict(color="black", size=12),
+            xaxis=dict(
+                title_font=dict(color="black"),
+                tickfont=dict(color="black"),
+                gridcolor="#CCCCCC",
+                linecolor="black"
+            ),
+            yaxis=dict(
+                title_font=dict(color="black"),
+                tickfont=dict(color="black"),
+                gridcolor="#CCCCCC",
+                linecolor="black"
+            ),
+            legend=dict(
+                font=dict(color="black"),
+                bgcolor="rgba(0,0,0,0)"
+            )
         )
         return fig
 
