@@ -8,3 +8,4 @@ mplsoccer
 Joblib
 scikit-learn
 plotly
+Statsmodels
