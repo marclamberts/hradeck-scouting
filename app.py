@@ -15,29 +15,21 @@ st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
-# --- 2. THE PHYSICAL PILL TOGGLE ---
-with st.sidebar:
-    st.write("### ⚙️ SYSTEM SETTINGS")
-    # Custom labeled toggle
-    theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
-    st.session_state.theme = 'Dark' if theme_toggle else 'Light'
-    st.write("---")
-
 # Dynamic Color Variables
 if st.session_state.theme == 'Dark':
-    B_COLOR = "#0E1117"  # Deep Dark
-    T_COLOR = "#FFFFFF"  # White Text
-    PILL_TRACK = "#1E1E1E" # Dark Track
-    PILL_HANDLE = "#00FF00" # Bright Green Handle
+    B_COLOR = "#0E1117"  
+    T_COLOR = "#FFFFFF"  
+    PILL_TRACK = "#1E1E1E" 
+    PILL_HANDLE = "#00FF00" # High contrast handle for Dark Mode
     GRID = "#31333F"
 else:
-    B_COLOR = "#DDE1E6"  # Slate Grey
-    T_COLOR = "#000000"  # Black Text
-    PILL_TRACK = "#BDC1C6" # Light Track
-    PILL_HANDLE = "#000000" # Black Handle
+    B_COLOR = "#DDE1E6"  
+    T_COLOR = "#000000"  
+    PILL_TRACK = "#BDC1C6" 
+    PILL_HANDLE = "#000000" 
     GRID = "#BBBBBB"
 
-# --- 3. CSS: FORCING THE VISUAL PILL ---
+# --- 2. CSS: ISOLATED PILL TOGGLE ---
 st.markdown(f"""
     <style>
     /* Global Backgrounds */
@@ -47,23 +39,25 @@ st.markdown(f"""
         background-color: {B_COLOR} !important;
     }}
 
-    /* THE PILL VISUALS: Forcing High Contrast */
-    /* The Track (The Pill Body) */
-    div[data-baseweb="checkbox"] > div:first-child {{
+    /* ISOLATED PILL TOGGLE CSS (ONLY targets the theme switch) */
+    /* We target the container of the toggle specifically */
+    div[data-testid="stCheckbox"] > label > div:first-child {{
         background-color: {PILL_TRACK} !important;
         border: 2px solid {T_COLOR} !important;
-        width: 50px !important;
-        height: 26px !important;
-        border-radius: 13px !important;
+        width: 46px !important;
+        height: 24px !important;
+        border-radius: 12px !important;
+        display: flex !important;
+        align-items: center !important;
     }}
 
-    /* The Handle (The Sliding Part) */
-    div[data-baseweb="checkbox"] div div {{
+    /* The sliding knob inside the pill */
+    div[data-testid="stCheckbox"] > label > div:first-child > div {{
         background-color: {PILL_HANDLE} !important;
-        width: 20px !important;
-        height: 20px !important;
+        width: 18px !important;
+        height: 18px !important;
         border-radius: 50% !important;
-        box-shadow: 0px 2px 4px rgba(0,0,0,0.5) !important;
+        transition: transform 0.2s ease-in-out !important;
     }}
 
     /* Global Text & Labels */
@@ -71,24 +65,27 @@ st.markdown(f"""
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
     div[role="listbox"] div, .stDataFrame div, button, .stTab, .stCaption, 
-    .stSlider label, [data-testid="stMetricDelta"] {{
+    .stSlider label {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
     }}
 
-    /* Metric Cards */
+    /* Standard Button Styling (Does not use the pill look) */
+    .stButton>button {{ 
+        width: 100%; border-radius: 4px; background-color: transparent !important; 
+        color: {T_COLOR} !important; border: 1.5px solid {T_COLOR} !important;
+        font-weight: bold;
+    }}
+
     div[data-testid="metric-container"] {{
-        background-color: transparent !important;
-        border: 1.5px solid {T_COLOR} !important;
-        border-radius: 8px;
-        padding: 15px;
+        border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
     }}
     
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. POSITION GROUP MAPPING ---
+# --- 3. LOGIC & DATA ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -103,7 +100,6 @@ def get_group(pos_string):
         if any(code in tags for code in codes): return group
     return "Other"
 
-# --- 5. CORE LOGIC ---
 @st.cache_data
 def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
@@ -134,7 +130,7 @@ def style_fig(fig):
     )
     return fig
 
-# --- 6. AUTHENTICATION & UI ---
+# --- 4. AUTHENTICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -153,7 +149,15 @@ def check_password():
                 else: st.error("ACCESS DENIED")
     return False
 
+# --- 5. MAIN APP ---
 if check_password():
+    # SIDEBAR THEME TOGGLE
+    with st.sidebar:
+        st.write("### ⚙️ SYSTEM")
+        theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
+        st.session_state.theme = 'Dark' if theme_toggle else 'Light'
+        st.write("---")
+
     with sqlite3.connect(DB_FILE) as conn:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     
@@ -164,7 +168,7 @@ if check_password():
                      ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
 
-    st.sidebar.write("---")
+    st.sidebar.write("##")
     if st.sidebar.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
     if st.sidebar.button("🔍 SEARCH"): st.session_state.view = 'Search'
     if st.sidebar.button("📊 BAR RANKING"): st.session_state.view = 'Bar'
