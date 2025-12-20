@@ -11,23 +11,32 @@ LOGO_FILE = "FCHK.png"
 
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
-# --- 1. THEME STATE & TOGGLE ---
+# --- 1. THEME STATE & iOS TOGGLE ---
+# Initialize theme in session state
 if 'theme' not in st.session_state:
-    st.session_state.theme = 'Dark' # Default
+    st.session_state.theme = 'Light'
 
-# Define Colors based on state
+# Place the iPhone-style toggle at the top of the sidebar
+with st.sidebar:
+    st.write("### SYSTEM THEME")
+    # This widget specifically mimics the iOS on/off switch
+    theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'))
+    st.session_state.theme = 'Dark' if theme_toggle else 'Light'
+    st.write("---")
+
+# Define Dynamic Colors
 if st.session_state.theme == 'Dark':
     B_COLOR = "#0E1117"  # Deep Dark
-    T_COLOR = "#FFFFFF"  # White Text
-    ACCENT = "#31333F"   # Input background
-    GRID = "#31333F"
+    T_COLOR = "#FFFFFF"  # Pure White Text
+    ACCENT  = "#1d2129"  # Darker Input boxes
+    GRID    = "#31333F"  # Subtle Dark Grid
 else:
-    B_COLOR = "#DDE1E6"  # Your original Slate Grey
-    T_COLOR = "#000000"  # Black Text
-    ACCENT = "#DDE1E6"
-    GRID = "#BBBBBB"
+    B_COLOR = "#DDE1E6"  # FCHK Slate Grey
+    T_COLOR = "#000000"  # Pure Black Text
+    ACCENT  = "#DDE1E6"  # Match background
+    GRID    = "#BBBBBB"  # Visible Light Grid
 
-# --- 2. CSS: DYNAMIC INJECTION ---
+# --- 2. CSS: DYNAMIC THEME INJECTION ---
 st.markdown(f"""
     <style>
     /* Global Background */
@@ -37,7 +46,7 @@ st.markdown(f"""
         background-color: {B_COLOR} !important;
     }}
 
-    /* Text Colors */
+    /* Text & Label Colors */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -45,6 +54,7 @@ st.markdown(f"""
     .stSlider label, [data-testid="stMetricDelta"] {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
+        font-family: 'Segoe UI', sans-serif;
     }}
 
     /* Inputs & Dropdowns */
@@ -55,6 +65,9 @@ st.markdown(f"""
         color: {T_COLOR} !important;
         border: 1.5px solid {T_COLOR} !important;
     }}
+
+    /* iOS-Style Toggle Color Fix (Makes the switch green when ON) */
+    div[data-testid="stWidgetLabel"] p {{ color: {T_COLOR} !important; }}
 
     /* Buttons */
     .stButton>button {{ 
@@ -71,7 +84,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. MAPPING LOGIC (Position Groups) ---
+# --- 3. LOGIC & DATA HELPERS ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -86,26 +99,7 @@ def get_group(pos_string):
         if any(code in tags for code in codes): return group
     return "Other"
 
-# --- 4. AUTHENTICATION ---
-def check_password():
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-    if st.session_state.authenticated: return True
-    _, col2, _ = st.columns([1, 1, 1])
-    with col2:
-        try: st.image(LOGO_FILE, width=120)
-        except: st.warning("Logo 'FCHK.png' not found.")
-        st.title("FCHK LOGIN")
-        with st.form("login"):
-            u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER SYSTEM"):
-                if u == VALID_USERNAME and p == VALID_PASSWORD:
-                    st.session_state.authenticated = True
-                    st.rerun()
-                else: st.error("ACCESS DENIED")
-    return False
-
-# --- 5. DATA LOADER ---
+@st.cache_data
 def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
@@ -119,7 +113,8 @@ def load_data(table):
 
 def style_fig(fig):
     fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)', 
+        plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=T_COLOR, size=12),
         xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
         yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
@@ -127,19 +122,35 @@ def style_fig(fig):
     )
     return fig
 
-# --- 6. MAIN APP ---
-if check_password():
-    # THEME TOGGLE (Top of Sidebar)
-    theme_choice = st.sidebar.toggle("🌙 Dark Mode", value=(st.session_state.theme == 'Dark'))
-    st.session_state.theme = 'Dark' if theme_choice else 'Light'
+# --- 4. AUTHENTICATION ---
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if st.session_state.authenticated: return True
+    _, col2, _ = st.columns([1, 1, 1])
+    with col2:
+        st.write("#")
+        try: st.image(LOGO_FILE, width=120)
+        except: st.warning("Logo 'FCHK.png' not found.")
+        st.title("FCHK LOGIN")
+        with st.form("login"):
+            u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
+            if st.form_submit_button("ENTER SYSTEM"):
+                if u == VALID_USERNAME and p == VALID_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else: st.error("ACCESS DENIED")
+    return False
 
+# --- 5. MAIN APP ---
+if check_password():
     with sqlite3.connect(DB_FILE) as conn:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
-    # Persistence
+    # State Persistence
     for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_group','ALL GROUPS'), 
                      ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
