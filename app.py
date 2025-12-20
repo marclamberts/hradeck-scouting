@@ -15,76 +15,81 @@ st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
-# The physical moving button (iOS Style)
 with st.sidebar:
     st.write("### ⚙️ SYSTEM")
-    # This is the physical slider button
+    # THE PHYSICAL SLIDER
     theme_toggle = st.toggle("DARK MODE", value=(st.session_state.theme == 'Dark'), key="theme_switch")
     st.session_state.theme = 'Dark' if theme_toggle else 'Light'
     st.write("---")
 
 # Define Dynamic Colors
 if st.session_state.theme == 'Dark':
-    B_COLOR = "#0E1117"  # Deep Dark
-    T_COLOR = "#FFFFFF"  # Pure White Text
-    ACCENT  = "#1d2129"  # Darker Input boxes
+    B_COLOR = "#0E1117"
+    T_COLOR = "#FFFFFF"
+    ACCENT  = "#1d2129"
     GRID    = "#31333F"
+    TOGGLE_TRACK = "#31333F" # Darker track
 else:
-    B_COLOR = "#DDE1E6"  # FCHK Slate Grey
-    T_COLOR = "#000000"  # Pure Black Text
+    B_COLOR = "#DDE1E6"
+    T_COLOR = "#000000"
     ACCENT  = "#DDE1E6"
     GRID    = "#BBBBBB"
+    TOGGLE_TRACK = "#BDC1C6" # Grey track
 
-# --- 2. CSS: DYNAMIC THEME & TOGGLE STYLING ---
+# --- 2. CSS: FORCING THE PILL VISIBILITY ---
 st.markdown(f"""
     <style>
-    /* Global Background */
+    /* Global Backgrounds */
     .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"],
     div[data-testid="stToolbar"], [data-testid="stSidebar"] div, .stAppViewContainer {{
         background-color: {B_COLOR} !important;
     }}
 
-    /* The Switch / Toggle Styling (Ensuring it looks like a physical button) */
-    div[data-testid="stCheckbox"] {{
-        background-color: transparent !important;
+    /* THE PILL FIX: Force the sliding switch to be visible */
+    div[data-testid="stWidgetLabel"] {{
+        color: {T_COLOR} !important;
     }}
     
-    /* Text & Label Colors */
+    /* Targets the track of the toggle */
+    div[data-baseweb="checkbox"] > div:first-child {{
+        background-color: {TOGGLE_TRACK} !important;
+        border: 1px solid {T_COLOR} !important;
+    }}
+    
+    /* Targets the sliding circle when ON */
+    input[checked] + div:first-child {{
+        background-color: #28a745 !important; /* Classic iOS Green when ON */
+    }}
+
+    /* Global Text Colors */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
     div[role="listbox"] div, .stDataFrame div, button, .stTab, .stCaption, 
-    .stSlider label, [data-testid="stMetricDelta"] {{
+    .stSlider label {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
     }}
 
-    /* Inputs & Dropdowns */
-    div[data-baseweb="select"] > div, div[data-baseweb="popover"] div, 
-    ul[role="listbox"], li[role="option"], div[data-baseweb="input"] > div, 
-    .stTextInput input, div[role="combobox"] {{
+    /* Inputs, Buttons, and Metrics */
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, .stTextInput input {{
         background-color: {ACCENT} !important;
         color: {T_COLOR} !important;
         border: 1.5px solid {T_COLOR} !important;
     }}
-
-    /* Buttons */
     .stButton>button {{ 
         width: 100%; border-radius: 4px; background-color: transparent !important; 
-        color: {T_COLOR} !important; font-weight: bold; border: 1.5px solid {T_COLOR} !important;
+        color: {T_COLOR} !important; border: 1.5px solid {T_COLOR} !important;
     }}
-
-    /* Metrics */
     div[data-testid="metric-container"] {{
-        background-color: transparent !important; border: 1.5px solid {T_COLOR} !important;
-        border-radius: 8px; padding: 15px;
+        border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
     }}
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. MAPPING & DATA ---
+# --- 3. DATA & MAPPING ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -116,8 +121,7 @@ def style_fig(fig):
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=T_COLOR, size=12),
         xaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
-        yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR),
-        legend=dict(font=dict(color=T_COLOR))
+        yaxis=dict(title_font=dict(color=T_COLOR), tickfont=dict(color=T_COLOR), gridcolor=GRID, linecolor=T_COLOR)
     )
     return fig
 
@@ -133,11 +137,11 @@ def check_password():
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
-            if st.form_submit_button("ENTER"):
+            if st.form_submit_button("ENTER SYSTEM"):
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
-                else: st.error("DENIED")
+                else: st.error("ACCESS DENIED")
     return False
 
 # --- 5. MAIN APP ---
@@ -148,7 +152,6 @@ if check_password():
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
-    # State Persistence
     for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_group','ALL GROUPS'), 
                      ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
         if key not in st.session_state: st.session_state[key] = val
