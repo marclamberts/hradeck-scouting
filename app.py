@@ -7,19 +7,20 @@ import plotly.express as px
 DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
-LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5329/5329945.png" # Professional soccer/data icon
+# Professional scouting/analytics icon
+LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5329/5329945.png" 
 
 st.set_page_config(page_title="Hradeck Pro Scout", layout="wide", page_icon="📈")
 
-# --- CUSTOM CSS FOR PROFESSIONAL LOOK ---
+# --- CUSTOM CSS (Fixed parameter here) ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #004b91; color: white; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    [data-testid="stSidebar"] { background-color: #0e1117; color: white; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #eee; }
+    [data-testid="stSidebar"] { background-color: #0e1117; }
+    .main { background-color: #f8f9fa; }
     </style>
-    """, unsafe_allow_value=True)
+    """, unsafe_allow_html=True)
 
 # --- 1. AUTHENTICATION SYSTEM ---
 def check_password():
@@ -30,12 +31,12 @@ def check_password():
         return True
 
     # Professional Login Page with Logo
-    col1, col2, col3 = st.columns([1, 1.5, 1])
+    _, col2, _ = st.columns([1, 1.2, 1])
     with col2:
-        st.write("##")
-        st.image(LOGO_URL, width=100)
+        st.write("#")
+        st.image(LOGO_URL, width=80)
         st.title("Hradeck Scouting")
-        st.subheader("Professional Data Access Portal")
+        st.subheader("Professional Data Portal")
         
         with st.form("login_form"):
             user = st.text_input("Username")
@@ -47,11 +48,10 @@ def check_password():
                     st.session_state.authenticated = True
                     st.rerun()
                 else:
-                    st.error("Invalid credentials. Please try again.")
+                    st.error("Invalid credentials.")
     return False
 
 # --- 2. DATA UTILITIES ---
-@st.cache_data
 def get_all_tables():
     with sqlite3.connect(DB_FILE) as conn:
         return [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
@@ -60,16 +60,16 @@ def load_clean_data(table_name):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table_name}"', conn)
         df = df.fillna('')
+        # Clean numeric columns to prevent plotting errors
         for col in df.columns:
-            converted = pd.to_numeric(df[col], errors='coerce')
-            if not converted.isna().all():
-                df[col] = converted.fillna(0)
+            if col in ['market_value', 'age', 'goals', 'xg', 'matches_played', 'assists']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
 
 # --- 3. MAIN APPLICATION ---
 if check_password():
-    # Sidebar Navigation
-    st.sidebar.image(LOGO_URL, width=60)
+    # Sidebar
+    st.sidebar.image(LOGO_URL, width=50)
     st.sidebar.title("Hradeck Scout")
     
     tables = get_all_tables()
@@ -79,87 +79,89 @@ if check_password():
     
     # Navigation Buttons
     if 'view' not in st.session_state:
-        st.session_state.view = 'Dashboard' # Default to Dashboard
-
-    if st.sidebar.button("🏠 Executive Dashboard"):
         st.session_state.view = 'Dashboard'
-    if st.sidebar.button("📄 Raw Data Table"):
+
+    if st.sidebar.button("🏠 Executive Dashboard", use_container_width=True):
+        st.session_state.view = 'Dashboard'
+    if st.sidebar.button("📄 Raw Data Table", use_container_width=True):
         st.session_state.view = 'Table'
-    if st.sidebar.button("📊 Performance Charts"):
+    if st.sidebar.button("📊 Performance Charts", use_container_width=True):
         st.session_state.view = 'Charts'
     
     st.sidebar.markdown("---")
-    if st.sidebar.button("Logout"):
+    if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.authenticated = False
         st.rerun()
 
     # Load Data
     df_raw = load_clean_data(selected_table)
 
-    # Top Filter Row (Always visible for context)
-    f1, f2 = st.columns([2, 1])
-    with f1:
-        st.title(f"⚽ {selected_table} Intel")
-    with f2:
-        # Search functionality
-        search = st.text_input("🔍 Quick Player Search", placeholder="Name...")
-
-    # Shared Filtering Logic
+    # Top Filter Area
+    st.title(f"⚽ {selected_table} Intel")
+    
+    # Shared Search Bar for all views
+    search = st.text_input("🔍 Quick Player Search", placeholder="Type player name...", key="main_search")
+    
     df = df_raw.copy()
     if search:
         df = df[df["player"].astype(str).str.contains(search, case=False, na=False)]
 
+    st.divider()
+
     # --- VIEW: DASHBOARD ---
     if st.session_state.view == 'Dashboard':
-        # Top Row Metrics
+        # Summary Metrics
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Players", len(df))
-        m2.metric("Avg Market Value", f"€{int(df['market_value'].mean()):,}" if 'market_value' in df.columns else "N/A")
-        m3.metric("Avg Age", round(df['age'].mean(), 1) if 'age' in df.columns else "N/A")
-        m4.metric("Total Goals", int(df['goals'].sum()) if 'goals' in df.columns else "N/A")
-
-        st.markdown("### 🏆 Top Prospects by Market Value")
+        
         if 'market_value' in df.columns:
-            top_players = df.sort_values("market_value", ascending=False).head(5)
+            m2.metric("Avg Market Value", f"€{int(df['market_value'].mean()):,}")
+        
+        if 'goals' in df.columns:
+            m3.metric("League Goals", int(df['goals'].sum()))
+            
+        if 'age' in df.columns:
+            m4.metric("Average Age", round(df['age'].mean(), 1))
+
+        st.markdown("### 🏆 Market Leaders")
+        if 'market_value' in df.columns:
+            top_5 = df.sort_values("market_value", ascending=False).head(5)
             cols = st.columns(5)
-            for i, (index, player) in enumerate(top_players.iterrows()):
+            for i, (_, player) in enumerate(top_5.iterrows()):
                 with cols[i]:
                     st.markdown(f"**{player['player']}**")
-                    st.caption(f"{player['team']}")
+                    st.caption(player['team'])
                     st.markdown(f"**€{player['market_value']:,}**")
-                    st.progress(0.8) # Design flourish
         
-        st.divider()
-        
+        st.write("##")
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown("#### Market Value Distribution")
-            fig = px.box(df, y="market_value", x="team", color="team", points="all")
-            st.plotly_chart(fig, use_container_width=True)
+            st.subheader("Team Value Distribution")
+            fig_box = px.box(df, x="team", y="market_value", color="team")
+            st.plotly_chart(fig_box, use_container_width=True)
         with c2:
-            st.markdown("#### Efficiency: xG vs Goals")
-            fig = px.scatter(df, x="xg", y="goals", hover_name="player", size="market_value", color="team")
-            st.plotly_chart(fig, use_container_width=True)
+            st.subheader("Goal Efficiency (xG vs Goals)")
+            fig_scat = px.scatter(df, x="xg", y="goals", hover_name="player", color="team", size="market_value" if 'market_value' in df.columns else None)
+            st.plotly_chart(fig_scat, use_container_width=True)
 
     # --- VIEW: TABLE ---
     elif st.session_state.view == 'Table':
-        st.subheader("Data Explorer")
+        st.subheader("Spreadsheet View")
         st.dataframe(df, use_container_width=True, height=600)
 
     # --- VIEW: CHARTS ---
     elif st.session_state.view == 'Charts':
-        st.subheader("Advanced Analytics")
-        num_cols = df.select_dtypes(include=['number']).columns.tolist()
+        st.subheader("Comparison Analytics")
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
         
-        c1, c2 = st.columns(2)
-        with c1:
-            y_axis = st.selectbox("Select Metric", num_cols, index=num_cols.index('market_value') if 'market_value' in num_cols else 0)
-        with c2:
-            chart_type = st.radio("Chart Type", ["Bar", "Distribution"], horizontal=True)
+        ch1, ch2 = st.columns(2)
+        with ch1:
+            y_axis = st.selectbox("Metric to Compare", numeric_cols, index=numeric_cols.index('market_value') if 'market_value' in numeric_cols else 0)
+        with ch2:
+            sort_by = st.radio("Show:", ["Top 15", "Bottom 15"], horizontal=True)
 
-        if chart_type == "Bar":
-            fig = px.bar(df.sort_values(y_axis, ascending=False).head(20), x="player", y=y_axis, color=y_axis)
-        else:
-            fig = px.histogram(df, x=y_axis, nbins=30, marginal="box")
-        
-        st.plotly_chart(fig, use_container_width=True)
+        is_asc = True if sort_by == "Bottom 15" else False
+        fig_bar = px.bar(df.sort_values(y_axis, ascending=is_asc).head(15), 
+                         x="player", y=y_axis, color=y_axis, 
+                         color_continuous_scale="Blues")
+        st.plotly_chart(fig_bar, use_container_width=True)
