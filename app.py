@@ -8,21 +8,18 @@ DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
 LOGO_FILE = "FCHK.png"  
-THEME_COLOR = "#DDE1E6" # Unified Slate Grey
+THEME_COLOR = "#DDE1E6" 
 
 st.set_page_config(page_title="FCHK Pro Scout", layout="wide", page_icon="⚽")
 
-# --- ULTIMATE CSS: TOTAL UNIFICATION & BLACK TEXT ---
+# --- CSS: TOTAL UNIFICATION ---
 st.markdown(f"""
     <style>
-    /* Global Background */
     .stApp, [data-testid="stSidebar"], [data-testid="stHeader"], .main, 
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"],
     div[data-testid="stToolbar"], [data-testid="stSidebar"] div, .stAppViewContainer {{
         background-color: {THEME_COLOR} !important;
     }}
-
-    /* Force Pure Black Text & Labels */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -32,8 +29,6 @@ st.markdown(f"""
         -webkit-text-fill-color: #000000 !important;
         font-family: 'Segoe UI', sans-serif;
     }}
-
-    /* Inputs & Dropdowns */
     div[data-baseweb="select"] > div, div[data-baseweb="popover"] div, 
     ul[role="listbox"], li[role="option"], div[data-baseweb="input"] > div, 
     .stTextInput input, div[role="combobox"] {{
@@ -41,15 +36,11 @@ st.markdown(f"""
         color: #000000 !important;
         border: 1.5px solid #000000 !important;
     }}
-
-    /* Buttons: No Hover Change */
     .stButton>button {{ 
         width: 100%; border-radius: 4px; background-color: transparent !important; 
         color: #000000 !important; font-weight: bold; border: 1.5px solid #000000 !important;
         transition: none !important; text-transform: uppercase;
     }}
-
-    /* Metric Cards */
     div[data-testid="metric-container"] {{
         background-color: transparent !important; border: 1.5px solid #000000 !important;
         border-radius: 8px; padding: 15px;
@@ -66,7 +57,7 @@ def check_password():
     _, col2, _ = st.columns([1, 1, 1])
     with col2:
         try: st.image(LOGO_FILE, width=120)
-        except: st.warning("Logo file 'FCHK.png' not found.")
+        except: st.warning("Logo 'FCHK.png' not found.")
         st.title("FCHK LOGIN")
         with st.form("login"):
             u, p = st.text_input("USER"), st.text_input("PASSWORD", type="password")
@@ -77,18 +68,26 @@ def check_password():
                 else: st.error("ACCESS DENIED")
     return False
 
-# --- 2. DATA UTILITIES ---
+# --- 2. THE BULLETPROOF DATA LOADER ---
 def load_data(table):
     with sqlite3.connect(DB_FILE) as conn:
         df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
-        # Normalize column names
-        df.columns = [c.lower().strip() for c in df.columns]
+        
+        # FIX 1: Clean column names (removes spaces and forces lowercase)
+        df.columns = [str(c).strip().lower() for c in df.columns]
+        
+        # FIX 2: Handle the 'position' column specifically
+        if 'position' in df.columns:
+            # Convert anything (even numeric/None) to string and purge 'NULL' strings
+            df['position'] = df['position'].astype(str).replace(['nan', 'None', 'NULL', 'null', 'None', '<NA>'], '')
+        
+        # FIX 3: Numeric Conversion for stats
         for c in df.columns:
             if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-            else:
-                # String cleaning to prevent 'NULL' strings showing in UI
+            elif c != 'position':
                 df[c] = df[c].astype(str).replace(['nan', 'None', 'NULL', 'null'], '')
+                
         return df
 
 def style_fig(fig):
@@ -100,19 +99,21 @@ def style_fig(fig):
     )
     return fig
 
-# --- 3. THE FIXED POSITION FILTER ENGINE ---
+# --- 3. THE REFINED FILTER ENGINE ---
 def apply_filters(data, f_team, f_pos_list, f_search, f_age, f_mins):
     df_f = data.copy()
+    
     if f_team != "ALL TEAMS":
         df_f = df_f[df_f["team"] == f_team]
     
     # EXACT POSITION MATCHING
     if f_pos_list:
         def match_pos(cell_val):
-            if not cell_val or cell_val == '': return False
-            # Normalize and split database string: "CB, LCB" -> ["CB", "LCB"]
+            # Check for actual data presence
+            if not cell_val or str(cell_val).strip() == '': return False
+            # Normalize and split: "CB, LCB" -> ["CB", "LCB"]
             player_positions = [p.strip().upper() for p in str(cell_val).split(',')]
-            # Check for overlap with user selection
+            # Match against user's multiselect
             return any(pos.upper() in player_positions for pos in f_pos_list)
         df_f = df_f[df_f["position"].apply(match_pos)]
         
@@ -144,15 +145,18 @@ if check_password():
     if st.sidebar.button("📊 BAR RANKING"): st.session_state.view = 'Bar'
     if st.sidebar.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
 
+    # Filter UI Helper
     def filter_ui(key):
         c1, c2, c3 = st.columns(3)
         with c1:
-            teams = ["ALL TEAMS"] + sorted([x for x in df_raw["team"].unique() if x])
+            teams = ["ALL TEAMS"] + sorted([x for x in df_raw["team"].unique() if x and str(x) != ''])
             st.session_state.f_team = st.selectbox("TEAM", teams, index=teams.index(st.session_state.f_team) if st.session_state.f_team in teams else 0, key=f"{key}_t")
         with c2:
             tags = set()
-            for p in df_raw["position"].unique():
-                if p and p != '': [tags.add(s.strip()) for s in str(p).split(',')]
+            if 'position' in df_raw.columns:
+                for p in df_raw["position"].unique():
+                    if p and str(p).strip() != '': 
+                        [tags.add(s.strip()) for s in str(p).split(',')]
             st.session_state.f_pos = st.multiselect("POSITIONS", sorted(list(tags)), default=st.session_state.f_pos, key=f"{key}_p")
         with c3:
             st.session_state.f_search = st.text_input("NAME", value=st.session_state.f_search, key=f"{key}_s")
@@ -191,14 +195,17 @@ if check_password():
         filter_ui("bar_view")
         df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
         num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
-        y_col = st.selectbox("METRIC", num_cols)
-        fig_bar = px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=['black'])
-        st.plotly_chart(style_fig(fig_bar), width='stretch')
+        if num_cols:
+            y_col = st.selectbox("METRIC", num_cols)
+            fig_bar = px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=['black'])
+            st.plotly_chart(style_fig(fig_bar), width='stretch')
 
     elif st.session_state.view == 'Dist':
         st.title("📈 Variable Distributions")
         filter_ui("dist_view")
         df_f = apply_filters(df_raw, st.session_state.f_team, st.session_state.f_pos, st.session_state.f_search, st.session_state.f_age, st.session_state.f_mins)
-        d_col = st.selectbox("METRIC", df_f.select_dtypes(include=['number']).columns.tolist())
-        fig_hist = px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=['black'])
-        st.plotly_chart(style_fig(fig_hist), width='stretch')
+        num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
+        if num_cols:
+            d_col = st.selectbox("METRIC", num_cols)
+            fig_hist = px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=['black'])
+            st.plotly_chart(style_fig(fig_hist), width='stretch')
