@@ -113,24 +113,31 @@ def style_fig(fig):
 # --- 3. FILTER ENGINE (THE FIX) ---
 def apply_filters(data, f_team, f_pos_list, f_search, f_age, f_mins):
     df_f = data.copy()
+    
+    # 1. Team Filter
     if f_team != "ALL TEAMS":
         df_f = df_f[df_f["team"] == f_team]
     
-    # EXACT POSITION MATCHING LOGIC
+    # 2. THE POSITION FIX: Exact Tag Intersection
     if f_pos_list:
         def match_pos(cell_val):
-            # Convert "LCB, RCB" into ['LCB', 'RCB']
-            player_positions = [p.strip() for p in str(cell_val).split(',')]
-            # Check if selected tag is in that list
-            return any(pos in player_positions for pos in f_pos_list)
+            if not cell_val: return False
+            # Normalize: "CB, LCB" -> {'CB', 'LCB'}
+            player_positions = {p.strip().upper() for p in str(cell_val).split(',')}
+            # Check if any user-selected position exists in the player's set
+            selected_positions = {p.upper() for p in f_pos_list}
+            return not selected_positions.isdisjoint(player_positions)
+            
         df_f = df_f[df_f["position"].apply(match_pos)]
         
+    # 3. Search, Age, and Minutes
     if f_search:
         df_f = df_f[df_f["player"].str.contains(f_search, case=False, na=False)]
     if 'age' in df_f.columns:
         df_f = df_f[df_f['age'].between(f_age[0], f_age[1])]
     if 'minutes_played' in df_f.columns:
         df_f = df_f[df_f['minutes_played'].between(f_mins[0], f_mins[1])]
+        
     return df_f
 
 # --- 4. MAIN APP ---
