@@ -16,19 +16,15 @@ if 'theme' not in st.session_state:
     st.session_state.theme = 'Light'
 
 if st.session_state.theme == 'Dark':
-    B_COLOR = "#0E1117"  # Deep Dark
-    T_COLOR = "#FFFFFF"  # White Text
-    PILL_TRACK = "#1E1E1E" 
-    PILL_HANDLE = "#00FF00" 
+    B_COLOR, T_COLOR = "#0E1117", "#FFFFFF"
+    PILL_TRACK, PILL_HANDLE = "#1E1E1E", "#00FF00"
     GRID = "#31333F"
 else:
-    B_COLOR = "#DDE1E6"  # FCHK Slate Grey
-    T_COLOR = "#000000"  # Black Text
-    PILL_TRACK = "#BDC1C6" 
-    PILL_HANDLE = "#000000" 
+    B_COLOR, T_COLOR = "#DDE1E6", "#000000"
+    PILL_TRACK, PILL_HANDLE = "#BDC1C6", "#000000"
     GRID = "#BBBBBB"
 
-# --- 2. CSS: UNIFIED FILTERS & ISOLATED PILL ---
+# --- 2. CSS: UI UNIFICATION & ISOLATED PILL ---
 st.markdown(f"""
     <style>
     /* Global Backgrounds */
@@ -36,17 +32,6 @@ st.markdown(f"""
     [data-testid="stSidebarNav"], .stAppHeader, [data-testid="stDecoration"],
     div[data-testid="stToolbar"], [data-testid="stSidebar"] div, .stAppViewContainer {{
         background-color: {B_COLOR} !important;
-    }}
-
-    /* UNIFIED FILTERS: Background same as App, Text is Opposite */
-    div[data-baseweb="select"] > div, 
-    div[data-baseweb="input"] > div, 
-    .stTextInput input, 
-    div[role="combobox"],
-    div[data-baseweb="popover"] div {{
-        background-color: {B_COLOR} !important;
-        color: {T_COLOR} !important;
-        border: 1.5px solid {T_COLOR} !important;
     }}
 
     /* THE PILL TOGGLE (Isolated to Theme Switch) */
@@ -66,7 +51,7 @@ st.markdown(f"""
         border-radius: 50% !important;
     }}
 
-    /* Global Text Colors */
+    /* Global Text Colors & Filters Background */
     html, body, .stMarkdown, p, h1, h2, h3, h4, span, label, li, td, th, 
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"],
     [data-testid="stSidebar"] *, .stSelectbox label, .stTextInput label,
@@ -74,6 +59,15 @@ st.markdown(f"""
     .stSlider label {{
         color: {T_COLOR} !important;
         -webkit-text-fill-color: {T_COLOR} !important;
+    }}
+    
+    div[data-baseweb="select"] > div, 
+    div[data-baseweb="input"] > div, 
+    .stTextInput input, 
+    div[role="combobox"] {{
+        background-color: {B_COLOR} !important;
+        color: {T_COLOR} !important;
+        border: 1.5px solid {T_COLOR} !important;
     }}
 
     /* Navigation Buttons */
@@ -83,11 +77,14 @@ st.markdown(f"""
         font-weight: bold; margin-bottom: 8px;
     }}
 
+    div[data-testid="metric-container"] {{
+        border: 1.5px solid {T_COLOR} !important; border-radius: 8px; padding: 15px;
+    }}
     header {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. MAPPING & DATA ---
+# --- 3. POSITION MAPPING & DATA ---
 POS_MAPPING = {
     'Goalkeeper': ['GK'],
     'Defender': ['CB', 'LCB', 'RCB', 'LB', 'RB', 'LWB', 'RWB', 'DF'],
@@ -109,9 +106,17 @@ def load_data(table):
         df.columns = [str(c).strip().lower() for c in df.columns]
         if 'position' in df.columns:
             df['position_group'] = df['position'].apply(get_group)
+        
+        # Convert numeric stats
         for c in df.columns:
-            if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes']):
+            if any(k in c for k in ['value', 'age', 'goal', 'xg', 'match', 'minutes', 'xa', 'assist']):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        
+        # Performance Calculations
+        if 'xg' in df.columns and 'goals' in df.columns:
+            df['goals_diff'] = df['xg'] - df['goals']
+        if 'xa' in df.columns and 'assists' in df.columns:
+            df['assists_diff'] = df['xa'] - df['assists']
         return df
 
 def style_fig(fig):
@@ -139,7 +144,7 @@ def check_password():
                 if u == VALID_USERNAME and p == VALID_PASSWORD:
                     st.session_state.authenticated = True
                     st.rerun()
-                else: st.error("DENIED")
+                else: st.error("ACCESS DENIED")
     return False
 
 # --- 5. MAIN APP ---
@@ -150,10 +155,10 @@ if check_password():
         st.session_state.theme = 'Dark' if theme_toggle else 'Light'
         st.write("---")
         st.write("### 🧭 PAGES")
-        if st.button("📊 DASHBOARD"): st.session_state.view = 'Dashboard'
+        if st.button("🏠 DASHBOARD"): st.session_state.view = 'Dashboard'
         if st.button("🔍 SEARCH"): st.session_state.view = 'Search'
-        if st.button("🏆 RANKINGS"): st.session_state.view = 'Bar'
-        if st.button("📈 DISTRIBUTIONS"): st.session_state.view = 'Dist'
+        if st.button("🏆 PERFORMANCE"): st.session_state.view = 'Perf'
+        if st.button("📊 RANKINGS"): st.session_state.view = 'Bar'
         st.write("---")
         if st.button("LOGOUT"):
             st.session_state.authenticated = False
@@ -165,61 +170,60 @@ if check_password():
     selected_table = st.sidebar.selectbox("DATASET", tables, key="table_select")
     df_raw = load_data(selected_table)
 
-    for key, val in [('view','Dashboard'), ('f_team','ALL TEAMS'), ('f_group','ALL GROUPS'), 
-                     ('f_search',''), ('f_age',(15,45)), ('f_mins',(0,5000))]:
-        if key not in st.session_state: st.session_state[key] = val
+    if 'view' not in st.session_state: st.session_state.view = 'Dashboard'
 
+    # Filter UI Helper
     def filter_ui(key):
         c1, c2, c3 = st.columns(3)
         with c1:
             teams = ["ALL TEAMS"] + sorted([x for x in df_raw["team"].unique() if x])
-            st.session_state.f_team = st.selectbox("TEAM", teams, index=teams.index(st.session_state.f_team) if st.session_state.f_team in teams else 0, key=f"{key}_t")
+            st.session_state.f_team = st.selectbox("TEAM", teams, index=0, key=f"{key}_t")
         with c2:
             groups = ["ALL GROUPS", "Goalkeeper", "Defender", "Midfielder", "Attacker"]
-            st.session_state.f_group = st.selectbox("GROUP", groups, index=groups.index(st.session_state.f_group) if st.session_state.f_group in groups else 0, key=f"{key}_g")
+            st.session_state.f_group = st.selectbox("GROUP", groups, index=0, key=f"{key}_g")
         with c3:
-            st.session_state.f_search = st.text_input("PLAYER NAME", value=st.session_state.f_search, key=f"{key}_s")
+            st.session_state.f_search = st.text_input("PLAYER", key=f"{key}_s")
 
-    def apply_filters(data):
-        df_f = data.copy()
-        if st.session_state.f_team != "ALL TEAMS": df_f = df_f[df_f["team"] == st.session_state.f_team]
-        if st.session_state.f_group != "ALL GROUPS": df_f = df_f[df_f["position_group"] == st.session_state.f_group]
-        if st.session_state.f_search: df_f = df_f[df_f["player"].str.contains(st.session_state.f_search, case=False, na=False)]
-        if 'age' in df_f.columns: df_f = df_f[df_f['age'].between(st.session_state.f_age[0], st.session_state.f_age[1])]
-        if 'minutes_played' in df_f.columns: df_f = df_f[df_f['minutes_played'].between(st.session_state.f_mins[0], st.session_state.f_mins[1])]
-        return df_f
-
-    df_f = apply_filters(df_raw)
-
-    # --- PAGE VIEWS ---
-    if st.session_state.view == 'Search':
-        st.title("🔍 Scout Search")
-        filter_ui("search")
-        s1, s2 = st.columns(2)
-        with s1: st.session_state.f_age = st.slider("AGE", 15, 50, st.session_state.f_age, key="sl1")
-        with s2: st.session_state.f_mins = st.slider("MINUTES", 0, 10000, st.session_state.f_mins, key="sl2")
-        st.dataframe(df_f, width='stretch', height=600)
+    # --- PAGE LOGIC ---
+    if st.session_state.view == 'Perf':
+        st.title("🏆 Over/Under Performance")
+        tab1, tab2 = st.tabs(["Goal Finishing", "Playmaking"])
+        with tab1:
+            st.subheader("Clinical Finishers vs Underperformers")
+            col_l, col_r = st.columns(2)
+            with col_l:
+                st.write("🔥 **Top 10 Clinical** (scored > xG)")
+                st.dataframe(df_raw.sort_values('goals_diff').head(10)[['player','team','goals','xg','goals_diff']], width='stretch')
+            with col_r:
+                st.write("📉 **Top 10 Wasteful** (scored < xG)")
+                st.dataframe(df_raw.sort_values('goals_diff', ascending=False).head(10)[['player','team','goals','xg','goals_diff']], width='stretch')
+            st.plotly_chart(style_fig(px.scatter(df_raw, x="xg", y="goals", hover_name="player", trendline="ols", color_discrete_sequence=[T_COLOR])), width='stretch')
+        
+        with tab2:
+            st.subheader("Playmaking Efficiency")
+            col_l, col_r = st.columns(2)
+            with col_l:
+                st.write("🧙‍♂️ **Top 10 Creators** (Assists > xA)")
+                st.dataframe(df_raw.sort_values('assists_diff').head(10)[['player','team','assists','xa','assists_diff']], width='stretch')
+            with col_r:
+                st.write("⚠️ **Top 10 Unlucky** (Assists < xA)")
+                st.dataframe(df_raw.sort_values('assists_diff', ascending=False).head(10)[['player','team','assists','xa','assists_diff']], width='stretch')
 
     elif st.session_state.view == 'Dashboard':
-        st.title("📊 Analytics Dashboard")
+        st.title("📊 Scout Dashboard")
         filter_ui("dash")
         m1, m2 = st.columns(2)
-        m1.metric("PLAYERS", len(df_f))
-        if 'market_value' in df_f.columns: m2.metric("AVG VALUE", f"€{int(df_f['market_value'].mean()):,}")
-        l, r = st.columns(2)
-        with l: st.plotly_chart(style_fig(px.box(df_f, x="team", y="market_value", template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
-        with r: st.plotly_chart(style_fig(px.scatter(df_f, x="xg", y="goals", hover_name="player", template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
+        m1.metric("TOTAL PLAYERS", len(df_raw))
+        if 'market_value' in df_raw.columns: m2.metric("AVG VALUE", f"€{int(df_raw['market_value'].mean()):,}")
+        st.plotly_chart(style_fig(px.box(df_raw, x="position_group", y="market_value", color_discrete_sequence=[T_COLOR])), width='stretch')
+
+    elif st.session_state.view == 'Search':
+        st.title("🔍 Advanced Search")
+        filter_ui("search")
+        st.dataframe(df_raw, width='stretch', height=600)
 
     elif st.session_state.view == 'Bar':
-        st.title("🏆 Player Rankings")
-        filter_ui("bar")
-        num_cols = df_f.select_dtypes(include=['number']).columns.tolist()
-        if num_cols:
-            y_col = st.selectbox("RANK BY", num_cols)
-            st.plotly_chart(style_fig(px.bar(df_f.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
-
-    elif st.session_state.view == 'Dist':
-        st.title("📈 Statistical Distributions")
-        filter_ui("dist")
-        d_col = st.selectbox("METRIC SPREAD", df_f.select_dtypes(include=['number']).columns.tolist())
-        st.plotly_chart(style_fig(px.histogram(df_f, x=d_col, template="simple_white", color_discrete_sequence=[T_COLOR])), width='stretch')
+        st.title("📊 Rankings")
+        num_cols = df_raw.select_dtypes(include=['number']).columns.tolist()
+        y_col = st.selectbox("Select Metric", num_cols)
+        st.plotly_chart(style_fig(px.bar(df_raw.sort_values(y_col, ascending=False).head(20), x="player", y=y_col, color_discrete_sequence=[T_COLOR])), width='stretch')
