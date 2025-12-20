@@ -1,0 +1,10 @@
+streamlit
+pandas
+altair
+openpyxl
+scipy
+matplotlib
+mplsoccer 
+Joblib
+scikit-learn
+plotly
