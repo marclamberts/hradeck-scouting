@@ -8,7 +8,7 @@ DB_FILE = "webapp_database.db"
 VALID_USERNAME = "kralove"
 VALID_PASSWORD = "CZ2526"
 
-st.set_page_config(page_title="Pro Scout Dashboard", layout="wide")
+st.set_page_config(page_title="Football Scout Pro", layout="wide")
 
 # --- AUTH ---
 def check_password():
@@ -29,87 +29,104 @@ def check_password():
     return False
 
 # --- DATA HELPERS ---
-def run_query(q):
+def get_tables():
     with sqlite3.connect(DB_FILE) as conn:
-        return pd.read_sql(q, conn)
+        return [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+
+def load_data(table_name):
+    with sqlite3.connect(DB_FILE) as conn:
+        return pd.read_sql(f'SELECT * FROM "{table_name}"', conn)
 
 # --- MAIN APP ---
 if check_password():
-    # Load Main Data
-    df = run_query('SELECT * FROM "Champ"')
+    # 1. SIDEBAR SETUP
+    st.sidebar.title("📁 Navigation")
     
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to", ["Dashboard Overview", "Advanced Scout Search", "Player Profiles"])
+    # Table Selector
+    all_tables = get_tables()
+    selected_table = st.sidebar.selectbox("Select Database Table", all_tables)
     
-    if page == "Dashboard Overview":
-        st.title("📊 League Insights")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("Market Value by Team")
-            # Aggregating market value from the 'market_value' column 
-            team_val = df.groupby("team")["market_value"].sum().reset_index()
-            fig1 = px.bar(team_val, x="team", y="market_value", color="market_value")
-            st.plotly_chart(fig1, use_container_width=True)
-            
-        with col2:
-            st.subheader("Goals vs Expected Goals (xG)")
-            # Using 'goals' and 'xg' columns found in your DB 
-            fig2 = px.scatter(df, x="xg", y="goals", hover_name="player", color="team", 
-                              size="market_value", title="Performance Efficiency")
-            st.plotly_chart(fig2, use_container_width=True)
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("View Mode")
+    
+    # Navigation Buttons (using session state)
+    if 'view' not in st.session_state:
+        st.session_state.view = 'Table'
 
-    elif page == "Advanced Scout Search":
-        st.title("🔍 Advanced Scout Search")
-        
-        # Sidebar Filters
-        st.sidebar.subheader("Filters")
-        positions = df["position"].unique().tolist()
-        selected_pos = st.sidebar.multiselect("Positions", positions, default=positions[:3])
-        
-        min_val, max_val = int(df["market_value"].min()), int(df["market_value"].max())
-        val_range = st.sidebar.slider("Market Value Range", min_val, max_val, (min_val, max_val))
-        
-        # Filtering the dataframe
-        filtered_df = df[
-            (df["position"].isin(selected_pos)) & 
-            (df["market_value"].between(val_range[0], val_range[1]))
-        ]
-        
-        st.write(f"Showing {len(filtered_df)} players matching criteria")
-        st.dataframe(filtered_df, use_container_width=True)
+    if st.sidebar.button("📄 Table View", use_container_width=True):
+        st.session_state.view = 'Table'
+    if st.sidebar.button("📊 Bar Graphs", use_container_width=True):
+        st.session_state.view = 'Bar'
+    if st.sidebar.button("📈 Distributions", use_container_width=True):
+        st.session_state.view = 'Dist'
 
-    elif page == "Player Profiles":
-        st.title("👤 Player Detailed Profile")
-        
-        player_list = df["player"].unique()
-        selected_player = st.selectbox("Select a player to analyze", player_list)
-        
-        p_data = df[df["player"] == selected_player].iloc[0]
-        
-        # Layout for Profile
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Market Value", f"€{p_data['market_value']:,}")
-        c2.metric("Matches Played", p_data["matches_played"])
-        c3.metric("Goal Conversion %", f"{p_data['goal_conversion,_%']}%")
-        
-        st.divider()
-        
-        # Technical Stats
-        st.subheader("Technical Performance")
-        cols = st.columns(4)
-        cols[0].write(f"**Foot:** {p_data['foot']}")
-        cols[1].write(f"**Height:** {p_data['height']}cm")
-        cols[2].write(f"**Age:** {p_data['age']}")
-        cols[3].write(f"**Contract Ends:** {p_data['contract_expires']}")
-        
-        # Radar Chart for stats
-        stats_cols = ["duels_won,_%", "successful_dribbles,_%", "accurate_crosses,_%"]
-        radar_df = pd.DataFrame(dict(r=p_data[stats_cols].values, theta=stats_cols))
-        fig_radar = px.line_polar(radar_df, r='r', theta='theta', line_close=True)
-        st.plotly_chart(fig_radar)
-
-    if st.sidebar.button("Logout"):
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Logout"):
         st.session_state.authenticated = False
         st.rerun()
+
+    # 2. LOAD DATA
+    df = load_data(selected_table)
+
+    # 3. TOP FILTERS (Above main page, next to each other)
+    st.title(f"Viewing: {selected_table}")
+    
+    f1, f2, f3 = st.columns(3)
+    
+    with f1:
+        teams = ["All"] + sorted(df["team"].unique().tolist())
+        selected_team = st.selectbox("Filter by Team", teams)
+    
+    with f2:
+        # Handling positions which might be comma-separated like "LCB, RCB"
+        unique_pos = set()
+        for p in df["position"].dropna().unique():
+            for sub_p in p.split(','):
+                unique_pos.add(sub_p.strip())
+        positions = ["All"] + sorted(list(unique_pos))
+        selected_pos = st.selectbox("Filter by Position", positions)
+        
+    with f3:
+        search_query = st.text_input("🔍 Search Player Name", "")
+
+    # Apply Filters to Dataframe
+    filtered_df = df.copy()
+    if selected_team != "All":
+        filtered_df = filtered_df[filtered_df["team"] == selected_team]
+    if selected_pos != "All":
+        filtered_df = filtered_df[filtered_df["position"].str.contains(selected_pos, na=False)]
+    if search_query:
+        filtered_df = filtered_df[filtered_df["player"].str.contains(search_query, case=False, na=False)]
+
+    st.markdown("---")
+
+    # 4. MAIN CONTENT AREA (Based on Sidebar Buttons)
+    if st.session_state.view == 'Table':
+        st.subheader("Data Table")
+        st.dataframe(filtered_df, use_container_width=True, height=600)
+
+    elif st.session_state.view == 'Bar':
+        st.subheader("Bar Graph Analysis")
+        col_x, col_y = st.columns(2)
+        
+        numeric_cols = filtered_df.select_dtypes(include=['number']).columns.tolist()
+        
+        with col_x:
+            x_axis = st.selectbox("X Axis (Category)", ["player", "team", "position"])
+        with col_y:
+            y_axis = st.selectbox("Y Axis (Metric)", numeric_cols, index=numeric_cols.index('market_value') if 'market_value' in numeric_cols else 0)
+            
+        fig = px.bar(filtered_df.sort_values(y_axis, ascending=False).head(20), 
+                     x=x_axis, y=y_axis, color=y_axis, 
+                     title=f"Top 20 Players by {y_axis}")
+        st.plotly_chart(fig, use_container_width=True)
+
+    elif st.session_state.view == 'Dist':
+        st.subheader("Value Distributions")
+        numeric_cols = filtered_df.select_dtypes(include=['number']).columns.tolist()
+        dist_col = st.selectbox("Select Metric to view Distribution", numeric_cols, index=numeric_cols.index('age') if 'age' in numeric_cols else 0)
+        
+        fig = px.histogram(filtered_df, x=dist_col, nbins=30, marginal="box", 
+                           title=f"Distribution of {dist_col}",
+                           color_discrete_sequence=['indianred'])
+        st.plotly_chart(fig, use_container_width=True)
