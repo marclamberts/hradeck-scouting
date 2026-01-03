@@ -1,4 +1,4 @@
- import streamlit as st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -62,28 +62,51 @@ ROLE_DEFS = {
 }
 
 # =====================================================
-# SAFE PARSING (Excel numbers as text)
+# SAFE PARSING + SAFE DISPLAY
 # =====================================================
 def safe_float(x):
+    """Best-effort conversion of Excel numbers-as-text to float."""
     if x is None:
         return np.nan
     if isinstance(x, (int, float, np.number)):
         return float(x)
+
     s = str(x).strip()
     if s == "" or s.lower() in {"nan", "none", "null", "na", "n/a", "-", "—"}:
         return np.nan
+
     s = s.replace("%", "")
-    # decimal comma
+
+    # decimal comma: "0,45" -> "0.45"
     if s.count(",") == 1 and s.count(".") == 0:
         s = s.replace(",", ".")
-    # thousands separators (best-effort)
-    if s.count(",") > 1 and s.count(".") == 1:
+
+    # if looks like "1,234.56" -> remove commas
+    if s.count(",") >= 1 and s.count(".") == 1:
+        # safest approach: remove commas
         s = s.replace(",", "")
+
     try:
         return float(s)
     except Exception:
         return np.nan
 
+def safe_fmt(x, decimals=2):
+    """Safe formatting: NEVER throws. Returns '—' if not numeric."""
+    v = safe_float(x)
+    if np.isnan(v):
+        return "—"
+    return f"{v:.{decimals}f}"
+
+def safe_int_fmt(x):
+    v = safe_float(x)
+    if np.isnan(v):
+        return "—"
+    return f"{int(round(v))}"
+
+# =====================================================
+# HELPERS
+# =====================================================
 def coerce_numeric(df: pd.DataFrame, cols: list[str]) -> None:
     for c in cols:
         if c in df.columns:
@@ -113,42 +136,32 @@ def score_from_z(z: pd.Series) -> pd.Series:
 # STREAMLIT "PRO TABLE" (NO PANDAS STYLER)
 # =====================================================
 def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int = 600):
-    """
-    ASA-style table without pandas Styler:
-    - Percentile cols -> Progress bars (0..100)
-    - Numeric cols -> Number formatting
-    """
     pct_cols = pct_cols or []
     pct_cols = [c for c in pct_cols if c in df.columns]
 
     col_config = {}
 
-    # Percentiles as bar columns
     for c in pct_cols:
         col_config[c] = st.column_config.ProgressColumn(
             label=c,
             min_value=0,
             max_value=100,
             format="%.0f",
-            help="Percentile (0–100)"
+            help="Percentile (0–100)",
         )
 
-    # Numeric formatting for other numeric columns
     for c in df.columns:
         if c in pct_cols:
             continue
         if pd.api.types.is_numeric_dtype(df[c]):
-            col_config[c] = st.column_config.NumberColumn(
-                label=c,
-                format="%.2f"
-            )
+            col_config[c] = st.column_config.NumberColumn(label=c, format="%.2f")
 
     st.dataframe(
         df,
         width="stretch",
         height=height,
         column_config=col_config,
-        hide_index=True
+        hide_index=True,
     )
 
 # =====================================================
@@ -159,13 +172,12 @@ def load_data(file_path: str) -> pd.DataFrame:
     fp = Path(file_path)
     if not fp.exists():
         raise FileNotFoundError(f"Missing {file_path}. Put it next to app.py.")
+
     df = pd.read_excel(fp)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # force numerics
     coerce_numeric(df, METRICS + [AGE_COL, SHARE_COL])
 
-    # safe text columns
     for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
         if c in df.columns:
             df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
@@ -195,7 +207,7 @@ coerce_numeric(df, list(ROLE_DEFS.keys()))
 st.sidebar.title("⚙️ RWB Scout")
 page = st.sidebar.radio(
     "Navigate",
-    ["Dashboard", "Big Search", "Player Profile", "Role Leaderboards", "Distributions", "Compare Players"]
+    ["Dashboard", "Big Search", "Player Profile", "Role Leaderboards", "Distributions", "Compare Players"],
 )
 
 min_share = st.sidebar.slider("Min Match Share", 0.0, 1.0, 0.20, 0.05)
@@ -204,7 +216,6 @@ df_f = df.copy()
 if SHARE_COL in df_f.columns:
     df_f = df_f[df_f[SHARE_COL].fillna(0) >= min_share]
 
-# optional filters
 if COMP_COL in df_f.columns:
     comps = ["All"] + sorted([c for c in df_f[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
     comp_pick = st.sidebar.selectbox("Competition", comps)
@@ -232,7 +243,7 @@ if page == "Dashboard":
     c2.metric("Teams", df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0)
     c3.metric("Competitions", df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0)
     avg_share = df_f[SHARE_COL].mean() if SHARE_COL in df_f.columns and len(df_f) else np.nan
-    c4.metric("Avg Match Share", "—" if pd.isna(avg_share) else f"{avg_share:.2f}")
+    c4.metric("Avg Match Share", safe_fmt(avg_share, 2))
 
     st.markdown("---")
     left, right = st.columns([1.35, 1])
@@ -246,7 +257,6 @@ if page == "Dashboard":
 
         top = df_f.sort_values("Balanced Score", ascending=False).head(30)[show_cols].copy()
 
-        # add percentile columns for role scores
         score_cols = [c for c in ["Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score"] if c in df_f.columns]
         for c in score_cols:
             top[c + " (pct)"] = percentile_rank(df_f[c]).reindex(top.index)
@@ -328,17 +338,15 @@ elif page == "Player Profile":
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Team", str(row.get(TEAM_COL, "—")))
     c2.metric("Competition", str(row.get(COMP_COL, "—")))
-    age = row.get(AGE_COL, np.nan)
-    share = row.get(SHARE_COL, np.nan)
-    c3.metric("Age", "—" if pd.isna(age) else f"{int(age)}")
-    c4.metric("Match Share", "—" if pd.isna(share) else f"{float(share):.2f}")
+    c3.metric("Age", safe_int_fmt(row.get(AGE_COL, np.nan)))
+    c4.metric("Match Share", safe_fmt(row.get(SHARE_COL, np.nan), 2))
 
     st.markdown("---")
     radar_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
     if radar_cols:
         fig = go.Figure()
         fig.add_trace(go.Scatterpolar(
-            r=[float(row.get(c, np.nan)) if not pd.isna(row.get(c, np.nan)) else 0 for c in radar_cols],
+            r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
             theta=[c.replace(" Score", "") for c in radar_cols],
             fill="toself",
             name=player
@@ -452,7 +460,7 @@ elif page == "Compare Players":
             sub = comp_df[comp_df[NAME_COL] == name].head(1)
             if sub.empty:
                 continue
-            r = [float(sub.iloc[0].get(m, np.nan)) if not pd.isna(sub.iloc[0].get(m, np.nan)) else 0 for m in radar_metrics]
+            r = [safe_float(sub.iloc[0].get(m, np.nan)) if not np.isnan(safe_float(sub.iloc[0].get(m, np.nan))) else 0 for m in radar_metrics]
             theta = [m.replace(" (pct)", "") for m in radar_metrics]
             fig2.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=name))
         fig2.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=620)
