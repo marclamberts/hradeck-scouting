@@ -9,7 +9,6 @@ from pathlib import Path
 # CONFIG
 # =====================================================
 st.set_page_config(page_title="RWB Scout – ASA Style", layout="wide", page_icon="⚽")
-
 DATA_FILE = "RWB.xlsx"
 
 # Expected columns (match your sheet)
@@ -64,22 +63,64 @@ ROLE_DEFS = {
 }
 
 # =====================================================
-# HELPERS (NO FORMAT STRINGS THAT CAN CRASH)
+# SAFE FORMATTERS (FIXES "Unknown format code 'f' for str")
+# =====================================================
+def safe_float(x):
+    """Convert typical Excel 'number as text' to float; otherwise NaN."""
+    if x is None:
+        return np.nan
+    if isinstance(x, (int, float, np.number)):
+        return float(x)
+    s = str(x).strip()
+    if s == "" or s.lower() in {"nan", "none", "null", "na", "n/a", "-","—"}:
+        return np.nan
+    s = s.replace("%", "")
+    # Handle decimal comma
+    if s.count(",") == 1 and s.count(".") == 0:
+        s = s.replace(",", ".")
+    # Remove thousands separators like "1,234.5"
+    if s.count(",") > 1 and s.count(".") == 1:
+        s = s.replace(",", "")
+    try:
+        return float(s)
+    except Exception:
+        return np.nan
+
+def safe_f(x, decimals=2):
+    """Safe numeric display; never throws even if x is a string."""
+    try:
+        if pd.isna(x):
+            return "—"
+    except Exception:
+        pass
+    v = safe_float(x)
+    if np.isnan(v):
+        return str(x) if str(x).strip() else "—"
+    return f"{v:.{decimals}f}"
+
+def safe_int(x):
+    v = safe_float(x)
+    if np.isnan(v):
+        return "—"
+    return f"{v:,.0f}"
+
+# =====================================================
+# HELPERS
 # =====================================================
 def coerce_numeric(df: pd.DataFrame, cols: list[str]) -> None:
     for c in cols:
         if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+            df[c] = df[c].apply(safe_float)
 
 def percentile_rank(s: pd.Series) -> pd.Series:
-    s = pd.to_numeric(s, errors="coerce")
+    s = s.apply(safe_float)
     out = pd.Series(np.nan, index=s.index, dtype=float)
     mask = s.notna()
     out.loc[mask] = s.loc[mask].rank(pct=True, method="average") * 100
     return out
 
 def zscore(s: pd.Series) -> pd.Series:
-    s = pd.to_numeric(s, errors="coerce")
+    s = s.apply(safe_float)
     if s.isna().all():
         return pd.Series(0.0, index=s.index)
     sd = s.std(skipna=True)
@@ -88,72 +129,31 @@ def zscore(s: pd.Series) -> pd.Series:
     return (s - s.mean(skipna=True)) / sd
 
 def score_from_z(z: pd.Series) -> pd.Series:
-    z = pd.to_numeric(z, errors="coerce").fillna(0.0)
+    z = z.apply(safe_float).fillna(0.0)
     return (50 + 15 * z).clip(0, 100)
 
 def style_table(df: pd.DataFrame, pct_cols: list[str] | None = None):
-    """
-    Crash-proof styler:
-    - NEVER uses string format codes like "{:,.2f}" that can fail on strings.
-    - Uses callable formatters that attempt float conversion, else fall back to str.
-    """
+    """Crash-proof Styler (ONLY callable formatters)."""
     pct_cols = pct_cols or []
     pct_cols = [c for c in pct_cols if c in df.columns]
 
-    def fmt_num(x, decimals=2):
-        try:
-            if pd.isna(x):
-                return "—"
-        except Exception:
-            pass
-        try:
-            v = float(x)
-            return f"{v:,.{decimals}f}"
-        except Exception:
-            return str(x)
-
-    def fmt_intlike(x):
-        try:
-            if pd.isna(x):
-                return "—"
-        except Exception:
-            pass
-        try:
-            v = float(x)
-            return f"{v:,.0f}"
-        except Exception:
-            return str(x)
-
-    def fmt_pct(x):
-        try:
-            if pd.isna(x):
-                return "—"
-        except Exception:
-            pass
-        try:
-            v = float(x)
-            return f"{v:.0f}"
-        except Exception:
-            return str(x)
-
-    # Per-column callable formatters
-    formatters: dict[str, callable] = {}
+    formatters = {}
     for c in df.columns:
         if c in pct_cols:
-            formatters[c] = fmt_pct
+            formatters[c] = lambda x: safe_f(x, 0)
         else:
-            # If numeric dtype: choose int-ish vs float-ish
+            # numeric dtype OR numeric-looking objects
             if pd.api.types.is_numeric_dtype(df[c]):
-                # if values are mostly whole numbers, format 0 decimals
+                # choose int-ish vs float-ish
                 s = df[c].dropna()
-                if len(s) > 0 and (np.abs(s - np.round(s)) < 1e-9).mean() > 0.9:
-                    formatters[c] = fmt_intlike
+                if len(s) and (np.abs(s - np.round(s)) < 1e-9).mean() > 0.9:
+                    formatters[c] = safe_int
                 else:
-                    formatters[c] = fmt_num
+                    formatters[c] = lambda x: safe_f(x, 2)
 
     styler = (
         df.style
-        .format(formatters)  # callables only
+        .format(formatters)
         .set_properties(**{"font-size": "12px"})
         .set_table_styles([
             {"selector": "th", "props": [("font-weight", "700"), ("text-align", "left")]},
@@ -161,9 +161,7 @@ def style_table(df: pd.DataFrame, pct_cols: list[str] | None = None):
         ])
     )
 
-    # Heatmap on percentiles (safe even if some entries are non-numeric)
     if pct_cols:
-        _ = df[pct_cols].apply(pd.to_numeric, errors="coerce")
         styler = styler.background_gradient(subset=pct_cols, cmap="Greys")
 
     return styler
@@ -180,10 +178,10 @@ def load_data(file_path: str) -> pd.DataFrame:
     df = pd.read_excel(fp)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Hard-coerce numeric columns (Excel often imports numbers as strings)
+    # Coerce numeric columns hard
     coerce_numeric(df, METRICS + [AGE_COL, SHARE_COL])
 
-    # Make text columns safe
+    # Ensure text columns safe
     for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
         if c in df.columns:
             df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
@@ -206,7 +204,6 @@ for role, weights in ROLE_DEFS.items():
             z = z + zscore(df[col]) * float(w)
     df[role] = score_from_z(z)
 
-# Ensure role scores are numeric
 coerce_numeric(df, list(ROLE_DEFS.keys()))
 
 # =====================================================
@@ -224,7 +221,6 @@ df_f = df.copy()
 if SHARE_COL in df_f.columns:
     df_f = df_f[df_f[SHARE_COL].fillna(0) >= min_share]
 
-# Optional filters if columns exist
 if COMP_COL in df_f.columns:
     comps = ["All"] + sorted([c for c in df_f[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
     comp_pick = st.sidebar.selectbox("Competition", comps)
@@ -251,7 +247,7 @@ if page == "Dashboard":
     c1.metric("Players", len(df_f))
     c2.metric("Teams", df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0)
     c3.metric("Competitions", df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0)
-    c4.metric("Avg Match Share", f"{df_f[SHARE_COL].mean():.2f}" if SHARE_COL in df_f.columns and len(df_f) else "—")
+    c4.metric("Avg Match Share", safe_f(df_f[SHARE_COL].mean(), 2) if SHARE_COL in df_f.columns and len(df_f) else "—")
 
     st.markdown("---")
 
@@ -266,7 +262,6 @@ if page == "Dashboard":
 
         top = df_f.sort_values("Balanced Score", ascending=False).head(30)[show_cols].copy()
 
-        # Add percentiles for role scores
         score_cols = [c for c in ["Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score"] if c in df_f.columns]
         for c in score_cols:
             top[c + " (pct)"] = percentile_rank(df_f[c]).reindex(top.index)
@@ -349,8 +344,8 @@ elif page == "Player Profile":
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Team", str(row.get(TEAM_COL, "—")))
     c2.metric("Competition", str(row.get(COMP_COL, "—")))
-    c3.metric("Age", "—" if pd.isna(row.get(AGE_COL, np.nan)) else int(row.get(AGE_COL)))
-    c4.metric("Match Share", "—" if pd.isna(row.get(SHARE_COL, np.nan)) else f"{row.get(SHARE_COL):.2f}")
+    c3.metric("Age", safe_int(row.get(AGE_COL, np.nan)))
+    c4.metric("Match Share", safe_f(row.get(SHARE_COL, np.nan), 2))
 
     st.markdown("---")
     left, right = st.columns([1, 1])
@@ -360,16 +355,13 @@ elif page == "Player Profile":
         for sc in [c for c in ROLE_DEFS.keys() if c in df_f.columns]:
             pct = percentile_rank(df_f[sc]).loc[p.index[0]]
             val = row.get(sc, np.nan)
-            st.write(f"**{sc.replace(' Score','')}** — {val:.1f} | {pct:.0f}p" if pd.notna(val) else f"**{sc.replace(' Score','')}** — —")
+            st.write(f"**{sc.replace(' Score','')}** — {safe_f(val,1)} | {safe_f(pct,0)}p")
 
         st.markdown("### Key Metrics (percentiles)")
         for m in [c for c in METRICS if c in df_f.columns]:
             val = row.get(m, np.nan)
             pct = row.get(m + " (pct)", np.nan)
-            if pd.notna(val) and pd.notna(pct):
-                st.write(f"- {m}: **{val:.2f}** | **{pct:.0f}p**")
-            else:
-                st.write(f"- {m}: —")
+            st.write(f"- {m}: **{safe_f(val,2)}** | **{safe_f(pct,0)}p**")
 
     with right:
         st.markdown("### Radar (Role Scores)")
@@ -377,7 +369,7 @@ elif page == "Player Profile":
         if radar_cols:
             fig = go.Figure()
             fig.add_trace(go.Scatterpolar(
-                r=[float(row.get(c, np.nan)) for c in radar_cols],
+                r=[safe_float(row.get(c, np.nan)) for c in radar_cols],
                 theta=[c.replace(" Score", "") for c in radar_cols],
                 fill="toself",
                 name=player
@@ -495,7 +487,7 @@ elif page == "Compare Players":
             sub = comp_df[comp_df[NAME_COL] == name].head(1)
             if sub.empty:
                 continue
-            r = [float(sub.iloc[0].get(m, np.nan)) for m in radar_metrics]
+            r = [safe_float(sub.iloc[0].get(m, np.nan)) for m in radar_metrics]
             theta = [m.replace(" (pct)", "") for m in radar_metrics]
             fig2.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=name))
         fig2.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=620)
