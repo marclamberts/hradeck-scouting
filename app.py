@@ -8,15 +8,11 @@ from pathlib import Path
 # =====================================================
 # CONFIG
 # =====================================================
-st.set_page_config(
-    page_title="RWB Scout – ASA Style",
-    layout="wide",
-    page_icon="⚽",
-)
+st.set_page_config(page_title="RWB Scout – ASA Style", layout="wide", page_icon="⚽")
 
 DATA_FILE = "RWB.xlsx"
 
-# Column names from your file
+# Expected columns (match your sheet)
 NAME_COL = "Name"
 TEAM_COL = "Team"
 COMP_COL = "Competition"
@@ -68,10 +64,9 @@ ROLE_DEFS = {
 }
 
 # =====================================================
-# HELPERS
+# HELPERS (NO FORMAT STRINGS THAT CAN CRASH)
 # =====================================================
 def coerce_numeric(df: pd.DataFrame, cols: list[str]) -> None:
-    """In-place numeric coercion that prevents 'object' numeric columns from breaking Styler."""
     for c in cols:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -96,38 +91,69 @@ def score_from_z(z: pd.Series) -> pd.Series:
     z = pd.to_numeric(z, errors="coerce").fillna(0.0)
     return (50 + 15 * z).clip(0, 100)
 
-def safe_num_fmt(x, decimals=2):
-    """Never crashes if x is str/None."""
-    try:
-        if pd.isna(x):
-            return "—"
-    except Exception:
-        pass
-
-    try:
-        v = float(x)
-        if decimals == 0:
-            return f"{v:,.0f}"
-        return f"{v:,.{decimals}f}"
-    except Exception:
-        return str(x)
-
 def style_table(df: pd.DataFrame, pct_cols: list[str] | None = None):
-    """ASA-like table: percentiles heatmapped; robust formatting (no f-string crashes)."""
+    """
+    Crash-proof styler:
+    - NEVER uses string format codes like "{:,.2f}" that can fail on strings.
+    - Uses callable formatters that attempt float conversion, else fall back to str.
+    """
     pct_cols = pct_cols or []
     pct_cols = [c for c in pct_cols if c in df.columns]
 
-    # Apply callable formatters column-by-column (safe for mixed types)
-    formatters = {}
+    def fmt_num(x, decimals=2):
+        try:
+            if pd.isna(x):
+                return "—"
+        except Exception:
+            pass
+        try:
+            v = float(x)
+            return f"{v:,.{decimals}f}"
+        except Exception:
+            return str(x)
+
+    def fmt_intlike(x):
+        try:
+            if pd.isna(x):
+                return "—"
+        except Exception:
+            pass
+        try:
+            v = float(x)
+            return f"{v:,.0f}"
+        except Exception:
+            return str(x)
+
+    def fmt_pct(x):
+        try:
+            if pd.isna(x):
+                return "—"
+        except Exception:
+            pass
+        try:
+            v = float(x)
+            return f"{v:.0f}"
+        except Exception:
+            return str(x)
+
+    # Per-column callable formatters
+    formatters: dict[str, callable] = {}
     for c in df.columns:
         if c in pct_cols:
-            formatters[c] = lambda x, _d=0: safe_num_fmt(x, decimals=_d)
-        elif pd.api.types.is_numeric_dtype(df[c]):
-            formatters[c] = lambda x, _d=2: safe_num_fmt(x, decimals=_d)
+            formatters[c] = fmt_pct
+        else:
+            # If numeric dtype: choose int-ish vs float-ish
+            if pd.api.types.is_numeric_dtype(df[c]):
+                # if values are mostly whole numbers, format 0 decimals
+                s = df[c].dropna()
+                if len(s) > 0 and (np.abs(s - np.round(s)) < 1e-9).mean() > 0.9:
+                    formatters[c] = fmt_intlike
+                else:
+                    formatters[c] = fmt_num
 
     styler = (
         df.style
-        .format(formatters)  # callable per column; safe for objects
+        .format(formatters)  # callables only
         .set_properties(**{"font-size": "12px"})
         .set_table_styles([
             {"selector": "th", "props": [("font-weight", "700"), ("text-align", "left")]},
@@ -135,10 +161,9 @@ def style_table(df: pd.DataFrame, pct_cols: list[str] | None = None):
         ])
     )
 
-    # Heatmap only on numeric percentiles
+    # Heatmap on percentiles (safe even if some entries are non-numeric)
     if pct_cols:
-        # ensure numeric for gradient
-        tmp = df[pct_cols].apply(pd.to_numeric, errors="coerce")
+        _ = df[pct_cols].apply(pd.to_numeric, errors="coerce")
         styler = styler.background_gradient(subset=pct_cols, cmap="Greys")
 
     return styler
@@ -153,12 +178,12 @@ def load_data(file_path: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Missing {file_path}. Put it next to app.py.")
 
     df = pd.read_excel(fp)
-    df.columns = [c.strip() for c in df.columns]
+    df.columns = [str(c).strip() for c in df.columns]
 
-    # Coerce numeric columns hard (prevents Styler crash)
+    # Hard-coerce numeric columns (Excel often imports numbers as strings)
     coerce_numeric(df, METRICS + [AGE_COL, SHARE_COL])
 
-    # Ensure text columns are strings (safe searching)
+    # Make text columns safe
     for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
         if c in df.columns:
             df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
@@ -166,13 +191,9 @@ def load_data(file_path: str) -> pd.DataFrame:
     return df
 
 df_raw = load_data(DATA_FILE)
-
-# =====================================================
-# BUILD MODEL (percentiles + roles)
-# =====================================================
 df = df_raw.copy()
 
-# Percentiles for base metrics
+# Build metric percentiles
 for m in METRICS:
     if m in df.columns:
         df[m + " (pct)"] = percentile_rank(df[m])
@@ -182,19 +203,19 @@ for role, weights in ROLE_DEFS.items():
     z = pd.Series(0.0, index=df.index)
     for col, w in weights.items():
         if col in df.columns:
-            z = z + (zscore(df[col]) * float(w))
+            z = z + zscore(df[col]) * float(w)
     df[role] = score_from_z(z)
 
-# Force role scores numeric (safety)
+# Ensure role scores are numeric
 coerce_numeric(df, list(ROLE_DEFS.keys()))
 
 # =====================================================
-# SIDEBAR
+# SIDEBAR NAV + FILTERS
 # =====================================================
 st.sidebar.title("⚙️ RWB Scout")
 page = st.sidebar.radio(
     "Navigate",
-    ["Dashboard", "Big Search", "Player Profile", "Role Leaderboards", "Distributions"]
+    ["Dashboard", "Big Search", "Player Profile", "Role Leaderboards", "Distributions", "Compare Players"]
 )
 
 min_share = st.sidebar.slider("Min Match Share", 0.0, 1.0, 0.20, 0.05)
@@ -203,6 +224,19 @@ df_f = df.copy()
 if SHARE_COL in df_f.columns:
     df_f = df_f[df_f[SHARE_COL].fillna(0) >= min_share]
 
+# Optional filters if columns exist
+if COMP_COL in df_f.columns:
+    comps = ["All"] + sorted([c for c in df_f[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
+    comp_pick = st.sidebar.selectbox("Competition", comps)
+    if comp_pick != "All":
+        df_f = df_f[df_f[COMP_COL] == comp_pick]
+
+if TEAM_COL in df_f.columns:
+    teams = ["All"] + sorted([t for t in df_f[TEAM_COL].dropna().unique().tolist() if str(t).strip() != ""])
+    team_pick = st.sidebar.selectbox("Team", teams)
+    if team_pick != "All":
+        df_f = df_f[df_f[TEAM_COL] == team_pick]
+
 # =====================================================
 # HEADER
 # =====================================================
@@ -210,78 +244,83 @@ st.title("⚽ RWB Scout")
 st.caption("ASA-style tables · role scores · percentiles · search")
 
 # =====================================================
-# DASHBOARD
+# PAGES
 # =====================================================
 if page == "Dashboard":
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Players", len(df_f))
     c2.metric("Teams", df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0)
     c3.metric("Competitions", df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0)
+    c4.metric("Avg Match Share", f"{df_f[SHARE_COL].mean():.2f}" if SHARE_COL in df_f.columns and len(df_f) else "—")
 
-    st.subheader("Top Balanced RWB")
+    st.markdown("---")
 
-    show_cols = [
-        NAME_COL, TEAM_COL, COMP_COL, AGE_COL,
-        "Balanced Score", "Attacking Wingback Score",
-        "Progressor Score", "Defensive Wingback Score"
-    ]
-    show_cols = [c for c in show_cols if c in df_f.columns]
+    left, right = st.columns([1.35, 1])
 
-    top = df_f.sort_values("Balanced Score", ascending=False).head(30)[show_cols].copy()
+    with left:
+        st.subheader("Top RWB (Balanced)")
+        show_cols = [c for c in [
+            NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL,
+            "Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score",
+        ] if c in df_f.columns]
 
-    # add percentiles for scores
-    score_cols = [c for c in top.columns if c.endswith("Score")]
-    for c in score_cols:
-        top[c + " (pct)"] = percentile_rank(df_f[c]).reindex(top.index)
+        top = df_f.sort_values("Balanced Score", ascending=False).head(30)[show_cols].copy()
 
-    pct_cols = [c for c in top.columns if c.endswith("(pct)")]
+        # Add percentiles for role scores
+        score_cols = [c for c in ["Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score"] if c in df_f.columns]
+        for c in score_cols:
+            top[c + " (pct)"] = percentile_rank(df_f[c]).reindex(top.index)
 
-    st.dataframe(
-        style_table(top, pct_cols=pct_cols),
-        width="stretch",
-        height=520
-    )
+        pct_cols = [c for c in top.columns if c.endswith("(pct)")]
+        st.dataframe(style_table(top, pct_cols=pct_cols), width="stretch", height=640)
 
-    st.subheader("Top 15 Balanced Score (Bar)")
-    fig = px.bar(
-        df_f.sort_values("Balanced Score", ascending=False).head(15),
-        x="Balanced Score",
-        y=NAME_COL,
-        orientation="h",
-        color="Balanced Score",
-    )
-    fig.update_layout(yaxis=dict(categoryorder="total ascending"))
-    st.plotly_chart(fig, width="stretch")
+    with right:
+        st.subheader("Role Landscape")
+        if all(c in df_f.columns for c in ["Progressor Score", "Attacking Wingback Score", "Balanced Score"]):
+            fig = px.scatter(
+                df_f,
+                x="Progressor Score",
+                y="Attacking Wingback Score",
+                color="Balanced Score",
+                hover_data=[c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] if c in df_f.columns],
+            )
+            fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(fig, width="stretch")
 
-# =====================================================
-# BIG SEARCH
-# =====================================================
+        st.subheader("Top 15 Balanced (Bar)")
+        fig2 = px.bar(
+            df_f.sort_values("Balanced Score", ascending=False).head(15),
+            x="Balanced Score",
+            y=NAME_COL,
+            orientation="h",
+            color="Balanced Score",
+        )
+        fig2.update_layout(height=520, yaxis=dict(categoryorder="total ascending"), margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig2, width="stretch")
+
 elif page == "Big Search":
     st.subheader("Big Search")
-    q = st.text_input("Search player / team / competition / nationality", placeholder="Type anything...")
+    q = st.text_input("Search player / team / competition / nationality", placeholder="Type anything…")
 
     df_s = df_f.copy()
-    if q:
-        ql = q.lower().strip()
+    if q and q.strip():
+        ql = q.strip().lower()
         mask = pd.Series(False, index=df_s.index)
         for col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
             if col in df_s.columns:
                 mask = mask | df_s[col].astype(str).str.lower().str.contains(ql, na=False)
         df_s = df_s[mask]
 
-    st.caption("Sorted by Balanced Score. Use sidebar for Match Share filter.")
-
     base_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in df_s.columns]
     role_cols = [c for c in ROLE_DEFS.keys() if c in df_s.columns]
-    out_cols = base_cols + role_cols
+    key_metrics = [c for c in ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "High Cross", "Low Cross", "Breaking Opponent Defence"] if c in df_s.columns]
 
-    out = df_s.sort_values("Balanced Score", ascending=False)[out_cols].copy()
+    out = df_s.sort_values("Balanced Score", ascending=False)[base_cols + role_cols + key_metrics].copy()
     for c in role_cols:
         out[c + " (pct)"] = percentile_rank(df_s[c]).reindex(out.index)
 
     pct_cols = [c for c in out.columns if c.endswith("(pct)")]
-
-    st.dataframe(style_table(out, pct_cols=pct_cols), width="stretch", height=720)
+    st.dataframe(style_table(out, pct_cols=pct_cols), width="stretch", height=740)
 
     st.download_button(
         "Download filtered table (CSV)",
@@ -290,18 +329,16 @@ elif page == "Big Search":
         mime="text/csv",
     )
 
-# =====================================================
-# PLAYER PROFILE
-# =====================================================
 elif page == "Player Profile":
     st.subheader("Player Profile")
 
-    players = sorted(df_f[NAME_COL].dropna().unique().tolist()) if NAME_COL in df_f.columns else []
-    if not players:
-        st.warning("No players available under current filters.")
+    if NAME_COL not in df_f.columns or df_f.empty:
+        st.warning("No players available with current filters.")
         st.stop()
 
+    players = sorted(df_f[NAME_COL].dropna().unique().tolist())
     player = st.selectbox("Select player", players)
+
     p = df_f[df_f[NAME_COL] == player].head(1)
     if p.empty:
         st.warning("Player not found.")
@@ -315,55 +352,72 @@ elif page == "Player Profile":
     c3.metric("Age", "—" if pd.isna(row.get(AGE_COL, np.nan)) else int(row.get(AGE_COL)))
     c4.metric("Match Share", "—" if pd.isna(row.get(SHARE_COL, np.nan)) else f"{row.get(SHARE_COL):.2f}")
 
-    radar_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
-    if radar_cols:
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(
-            r=[float(row.get(c, np.nan)) for c in radar_cols],
-            theta=[c.replace(" Score", "") for c in radar_cols],
-            fill="toself",
-            name=player
-        ))
-        fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=520)
-        st.plotly_chart(fig, width="stretch")
+    st.markdown("---")
+    left, right = st.columns([1, 1])
 
-    st.markdown("### Player Row")
-    show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] + radar_cols if c in df_f.columns]
-    st.dataframe(p[show], width="stretch", height=120)
+    with left:
+        st.markdown("### Role Scores (percentiles)")
+        for sc in [c for c in ROLE_DEFS.keys() if c in df_f.columns]:
+            pct = percentile_rank(df_f[sc]).loc[p.index[0]]
+            val = row.get(sc, np.nan)
+            st.write(f"**{sc.replace(' Score','')}** — {val:.1f} | {pct:.0f}p" if pd.notna(val) else f"**{sc.replace(' Score','')}** — —")
 
-# =====================================================
-# ROLE LEADERBOARDS
-# =====================================================
+        st.markdown("### Key Metrics (percentiles)")
+        for m in [c for c in METRICS if c in df_f.columns]:
+            val = row.get(m, np.nan)
+            pct = row.get(m + " (pct)", np.nan)
+            if pd.notna(val) and pd.notna(pct):
+                st.write(f"- {m}: **{val:.2f}** | **{pct:.0f}p**")
+            else:
+                st.write(f"- {m}: —")
+
+    with right:
+        st.markdown("### Radar (Role Scores)")
+        radar_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
+        if radar_cols:
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=[float(row.get(c, np.nan)) for c in radar_cols],
+                theta=[c.replace(" Score", "") for c in radar_cols],
+                fill="toself",
+                name=player
+            ))
+            fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=520)
+            st.plotly_chart(fig, width="stretch")
+
+        st.markdown("### Player Row (table)")
+        show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] + radar_cols if c in df_f.columns]
+        st.dataframe(p[show], width="stretch", height=140)
+
 elif page == "Role Leaderboards":
     st.subheader("Role Leaderboards")
 
-    role = st.selectbox("Role", [r for r in ROLE_DEFS.keys() if r in df_f.columns])
+    available_roles = [r for r in ROLE_DEFS.keys() if r in df_f.columns]
+    if not available_roles:
+        st.warning("No role score columns found.")
+        st.stop()
+
+    role = st.selectbox("Role", available_roles, index=available_roles.index("Balanced Score") if "Balanced Score" in available_roles else 0)
     n = st.slider("Rows", 10, 100, 40, 5)
 
     cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, role] if c in df_f.columns]
     out = df_f.sort_values(role, ascending=False).head(n)[cols].copy()
     out[role + " (pct)"] = percentile_rank(df_f[role]).reindex(out.index)
 
-    st.dataframe(
-        style_table(out, pct_cols=[role + " (pct)"]),
-        width="stretch",
-        height=720
-    )
+    st.dataframe(style_table(out, pct_cols=[role + " (pct)"]), width="stretch", height=740)
 
+    st.markdown("### Top 20 Bar Chart")
     fig = px.bar(
         df_f.sort_values(role, ascending=False).head(20),
         x=role,
         y=NAME_COL,
         orientation="h",
         color=role,
-        hover_data=[TEAM_COL, COMP_COL] if TEAM_COL in df_f.columns and COMP_COL in df_f.columns else None,
+        hover_data=[c for c in [TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] if c in df_f.columns],
     )
     fig.update_layout(yaxis=dict(categoryorder="total ascending"), height=650)
     st.plotly_chart(fig, width="stretch")
 
-# =====================================================
-# DISTRIBUTIONS
-# =====================================================
 elif page == "Distributions":
     st.subheader("Distributions")
 
@@ -379,8 +433,74 @@ elif page == "Distributions":
         fig1 = px.histogram(df_f, x=metric, nbins=30)
         fig1.update_layout(height=420)
         st.plotly_chart(fig1, width="stretch")
-
     with c2:
         fig2 = px.box(df_f, y=metric, points="all")
         fig2.update_layout(height=420)
         st.plotly_chart(fig2, width="stretch")
+
+    st.markdown("### Mean by Competition / Team")
+    split_options = [c for c in [COMP_COL, TEAM_COL] if c in df_f.columns]
+    if split_options:
+        split = st.radio("Split by", split_options, horizontal=True)
+        topk = st.slider("Show top groups", 5, 30, 12, 1)
+        g = df_f.groupby(split, dropna=True)[metric].mean().sort_values(ascending=False).head(topk).reset_index()
+        fig3 = px.bar(g, x=metric, y=split, orientation="h", color=metric)
+        fig3.update_layout(height=600, yaxis=dict(categoryorder="total ascending"))
+        st.plotly_chart(fig3, width="stretch")
+
+elif page == "Compare Players":
+    st.subheader("Compare Players")
+
+    if NAME_COL not in df_f.columns or df_f.empty:
+        st.warning("No players available with current filters.")
+        st.stop()
+
+    players = sorted(df_f[NAME_COL].dropna().unique().tolist())
+    picks = st.multiselect("Select 2–6 players", players, default=players[:2])
+
+    if len(picks) < 2:
+        st.info("Pick at least 2 players to compare.")
+        st.stop()
+
+    comp_df = df_f[df_f[NAME_COL].isin(picks)].copy()
+
+    st.markdown("### Role Scores Comparison")
+    role_cols = [c for c in ROLE_DEFS.keys() if c in comp_df.columns]
+    if role_cols:
+        melt = comp_df.melt(
+            id_vars=[c for c in [NAME_COL, TEAM_COL, COMP_COL] if c in comp_df.columns],
+            value_vars=role_cols,
+            var_name="Role",
+            value_name="Score"
+        )
+        fig = px.bar(melt, x="Score", y=NAME_COL, color="Role", barmode="group")
+        fig.update_layout(height=520)
+        st.plotly_chart(fig, width="stretch")
+
+    st.markdown("### Radar (Key Metric Percentiles)")
+    radar_metrics = [m + " (pct)" for m in [
+        "Progressive Receiving",
+        "Breaking Opponent Defence",
+        "Distance Covered Dribbles - Dribble",
+        "High Cross",
+        "Low Cross",
+        "Defensive Ball Control",
+        "Number of presses during opponent build-up",
+        "IMPECT",
+    ] if (m + " (pct)") in comp_df.columns]
+
+    if radar_metrics:
+        fig2 = go.Figure()
+        for name in picks:
+            sub = comp_df[comp_df[NAME_COL] == name].head(1)
+            if sub.empty:
+                continue
+            r = [float(sub.iloc[0].get(m, np.nan)) for m in radar_metrics]
+            theta = [m.replace(" (pct)", "") for m in radar_metrics]
+            fig2.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=name))
+        fig2.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=620)
+        st.plotly_chart(fig2, width="stretch")
+
+    st.markdown("### Comparison Table")
+    show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] + role_cols if c in comp_df.columns]
+    st.dataframe(comp_df[show].sort_values("Balanced Score", ascending=False), width="stretch", height=520)
