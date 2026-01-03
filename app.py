@@ -62,10 +62,61 @@ ROLE_DEFS = {
 }
 
 # =====================================================
+# UI THEME (ASA-ish)
+# =====================================================
+st.markdown(
+    """
+<style>
+/* App bg */
+.stApp { background: #f6f7f9; }
+
+/* Sidebar */
+section[data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid #e5e7eb; }
+
+/* Tight headings */
+h1, h2, h3 { letter-spacing: -0.02em; }
+
+/* Buttons = nav items */
+div.stButton > button {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  padding: 10px 12px;
+  font-weight: 800;
+  text-align: left;
+}
+div.stButton > button:hover { border-color: #111827; }
+
+/* Active nav button wrapper */
+.nav-active div.stButton > button {
+  background: #111827 !important;
+  color: #ffffff !important;
+  border-color: #111827 !important;
+}
+
+/* Card */
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px 14px;
+}
+
+/* Slightly reduce vertical spacing */
+div[data-testid="stVerticalBlock"] > div { gap: 0.65rem; }
+
+/* Dataframe header weight */
+div[data-testid="stDataFrame"] thead tr th { font-weight: 900; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# =====================================================
 # SAFE PARSING + SAFE DISPLAY
 # =====================================================
 def safe_float(x):
-    """Best-effort conversion of Excel numbers-as-text to float."""
     if x is None:
         return np.nan
     if isinstance(x, (int, float, np.number)):
@@ -77,13 +128,12 @@ def safe_float(x):
 
     s = s.replace("%", "")
 
-    # decimal comma: "0,45" -> "0.45"
+    # decimal comma
     if s.count(",") == 1 and s.count(".") == 0:
         s = s.replace(",", ".")
 
-    # if looks like "1,234.56" -> remove commas
+    # thousands separators
     if s.count(",") >= 1 and s.count(".") == 1:
-        # safest approach: remove commas
         s = s.replace(",", "")
 
     try:
@@ -92,7 +142,6 @@ def safe_float(x):
         return np.nan
 
 def safe_fmt(x, decimals=2):
-    """Safe formatting: NEVER throws. Returns '—' if not numeric."""
     v = safe_float(x)
     if np.isnan(v):
         return "—"
@@ -133,14 +182,26 @@ def score_from_z(z: pd.Series) -> pd.Series:
     return (50 + 15 * z).clip(0, 100)
 
 # =====================================================
-# STREAMLIT "PRO TABLE" (NO PANDAS STYLER)
+# "PRO TABLE" (NO PANDAS STYLER) + NICE COLUMN NAMES
 # =====================================================
+DISPLAY_RENAMES = {
+    "Balanced Score": "Balanced",
+    "Attacking Wingback Score": "Attacking WB",
+    "Progressor Score": "Progressor",
+    "Defensive Wingback Score": "Defensive WB",
+    "Match Share": "Share",
+}
+
+def rename_for_display(df_: pd.DataFrame) -> pd.DataFrame:
+    return df_.rename(columns=DISPLAY_RENAMES)
+
 def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int = 600):
     pct_cols = pct_cols or []
     pct_cols = [c for c in pct_cols if c in df.columns]
 
     col_config = {}
 
+    # Percentiles -> bars
     for c in pct_cols:
         col_config[c] = st.column_config.ProgressColumn(
             label=c,
@@ -150,11 +211,20 @@ def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int =
             help="Percentile (0–100)",
         )
 
+    # Numeric columns -> 2 decimals
     for c in df.columns:
         if c in pct_cols:
             continue
         if pd.api.types.is_numeric_dtype(df[c]):
             col_config[c] = st.column_config.NumberColumn(label=c, format="%.2f")
+
+    # Make name/team wider
+    if NAME_COL in df.columns:
+        col_config[NAME_COL] = st.column_config.TextColumn(label=NAME_COL, width="large")
+    if TEAM_COL in df.columns:
+        col_config[TEAM_COL] = st.column_config.TextColumn(label=TEAM_COL, width="medium")
+    if COMP_COL in df.columns:
+        col_config[COMP_COL] = st.column_config.TextColumn(label=COMP_COL, width="medium")
 
     st.dataframe(
         df,
@@ -186,7 +256,7 @@ def load_data(file_path: str) -> pd.DataFrame:
 
 df = load_data(DATA_FILE).copy()
 
-# Metric percentiles
+# Percentiles for metrics
 for m in METRICS:
     if m in df.columns:
         df[m + " (pct)"] = percentile_rank(df[m])
@@ -202,70 +272,175 @@ for role, weights in ROLE_DEFS.items():
 coerce_numeric(df, list(ROLE_DEFS.keys()))
 
 # =====================================================
-# SIDEBAR
+# NAV BUTTONS (instead of radio)
 # =====================================================
-st.sidebar.title("⚙️ RWB Scout")
-page = st.sidebar.radio(
-    "Navigate",
-    ["Dashboard", "Big Search", "Player Profile", "Role Leaderboards", "Distributions", "Compare Players"],
-)
+PAGES = [
+    ("Dashboard", "🏠 Dashboard"),
+    ("Big Search", "🔎 Big Search"),
+    ("Player Profile", "👤 Player Profile"),
+    ("Role Leaderboards", "🏆 Leaderboards"),
+    ("Distributions", "📈 Distributions"),
+    ("Compare Players", "🆚 Compare"),
+]
 
-min_share = st.sidebar.slider("Min Match Share", 0.0, 1.0, 0.20, 0.05)
+if "page" not in st.session_state:
+    st.session_state.page = "Dashboard"
 
+def nav_button(page_key: str, label: str):
+    active = (st.session_state.page == page_key)
+    if active:
+        st.sidebar.markdown('<div class="nav-active">', unsafe_allow_html=True)
+    clicked = st.sidebar.button(label, key=f"nav_{page_key}")
+    if active:
+        st.sidebar.markdown("</div>", unsafe_allow_html=True)
+    if clicked:
+        st.session_state.page = page_key
+
+st.sidebar.markdown("### 🧭 Navigation")
+for key, label in PAGES:
+    nav_button(key, label)
+
+page = st.session_state.page
+st.sidebar.markdown("---")
+
+# =====================================================
+# FILTERS (nice + grouped)
+# =====================================================
+if "filters" not in st.session_state:
+    st.session_state.filters = {
+        "min_share": 0.20,
+        "competitions": [],
+        "teams": [],
+        "q": "",
+    }
+
+def reset_filters():
+    st.session_state.filters = {"min_share": 0.20, "competitions": [], "teams": [], "q": ""}
+
+st.sidebar.markdown("### 🎛️ Filters")
+with st.sidebar.container():
+    st.sidebar.markdown('<div class="card">', unsafe_allow_html=True)
+
+    st.session_state.filters["q"] = st.sidebar.text_input(
+        "Quick search",
+        value=st.session_state.filters["q"],
+        placeholder="Name / Team / Comp / Nat…",
+        key="filter_q",
+    )
+
+    st.session_state.filters["min_share"] = st.sidebar.slider(
+        "Min Match Share",
+        0.0, 1.0,
+        float(st.session_state.filters["min_share"]),
+        0.05,
+        key="filter_min_share",
+    )
+
+    if COMP_COL in df.columns:
+        comps_all = sorted([c for c in df[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
+        st.session_state.filters["competitions"] = st.sidebar.multiselect(
+            "Competitions",
+            comps_all,
+            default=st.session_state.filters["competitions"],
+            key="filter_comps",
+        )
+
+    if TEAM_COL in df.columns:
+        teams_all = sorted([t for t in df[TEAM_COL].dropna().unique().tolist() if str(t).strip() != ""])
+        st.session_state.filters["teams"] = st.sidebar.multiselect(
+            "Teams",
+            teams_all,
+            default=st.session_state.filters["teams"],
+            key="filter_teams",
+        )
+
+    cA, cB = st.sidebar.columns(2)
+    with cA:
+        if st.button("Reset filters", key="reset_filters"):
+            reset_filters()
+            st.rerun()
+    with cB:
+        st.caption("Applies live")
+
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
+
+# Apply filters
 df_f = df.copy()
+
 if SHARE_COL in df_f.columns:
-    df_f = df_f[df_f[SHARE_COL].fillna(0) >= min_share]
+    df_f = df_f[df_f[SHARE_COL].fillna(0) >= st.session_state.filters["min_share"]]
 
-if COMP_COL in df_f.columns:
-    comps = ["All"] + sorted([c for c in df_f[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
-    comp_pick = st.sidebar.selectbox("Competition", comps)
-    if comp_pick != "All":
-        df_f = df_f[df_f[COMP_COL] == comp_pick]
+comps_sel = st.session_state.filters.get("competitions", [])
+if comps_sel and COMP_COL in df_f.columns:
+    df_f = df_f[df_f[COMP_COL].isin(comps_sel)]
 
-if TEAM_COL in df_f.columns:
-    teams = ["All"] + sorted([t for t in df_f[TEAM_COL].dropna().unique().tolist() if str(t).strip() != ""])
-    team_pick = st.sidebar.selectbox("Team", teams)
-    if team_pick != "All":
-        df_f = df_f[df_f[TEAM_COL] == team_pick]
+teams_sel = st.session_state.filters.get("teams", [])
+if teams_sel and TEAM_COL in df_f.columns:
+    df_f = df_f[df_f[TEAM_COL].isin(teams_sel)]
+
+q = st.session_state.filters.get("q", "").strip().lower()
+if q:
+    mask = pd.Series(False, index=df_f.index)
+    for col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
+        if col in df_f.columns:
+            mask = mask | df_f[col].astype(str).str.lower().str.contains(q, na=False)
+    df_f = df_f[mask]
 
 # =====================================================
 # HEADER
 # =====================================================
 st.title("⚽ RWB Scout")
-st.caption("ASA-style tables · role scores · percentiles · search (no Pandas Styler)")
+st.caption("ASA-style tables · role scores · percentile bars · button navigation · clean filters")
 
 # =====================================================
-# PAGES
+# DASHBOARD
 # =====================================================
 if page == "Dashboard":
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Players", len(df_f))
-    c2.metric("Teams", df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0)
-    c3.metric("Competitions", df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0)
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Players", len(df_f))
+    k2.metric("Teams", df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0)
+    k3.metric("Competitions", df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0)
     avg_share = df_f[SHARE_COL].mean() if SHARE_COL in df_f.columns and len(df_f) else np.nan
-    c4.metric("Avg Match Share", safe_fmt(avg_share, 2))
+    k4.metric("Avg Share", safe_fmt(avg_share, 2))
 
     st.markdown("---")
+
+    # Quick view chips
+    st.markdown("#### Quick views")
+    chip1, chip2, chip3, chip4 = st.columns(4)
+    if "quick_role" not in st.session_state:
+        st.session_state.quick_role = "Balanced Score"
+    if chip1.button("⚡ Balanced", key="chip_bal"):
+        st.session_state.quick_role = "Balanced Score"
+    if chip2.button("🚀 Progressor", key="chip_prog"):
+        st.session_state.quick_role = "Progressor Score"
+    if chip3.button("🎯 Attacking WB", key="chip_att"):
+        st.session_state.quick_role = "Attacking Wingback Score"
+    if chip4.button("🧱 Defensive WB", key="chip_def"):
+        st.session_state.quick_role = "Defensive Wingback Score"
+
+    role_sort = st.session_state.quick_role if st.session_state.quick_role in df_f.columns else "Balanced Score"
+
     left, right = st.columns([1.35, 1])
 
     with left:
-        st.subheader("Top RWB (Balanced)")
-        show_cols = [c for c in [
-            NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL,
-            "Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score",
-        ] if c in df_f.columns]
+        st.subheader(f"Top RWB (sorted by {DISPLAY_RENAMES.get(role_sort, role_sort)})")
 
-        top = df_f.sort_values("Balanced Score", ascending=False).head(30)[show_cols].copy()
+        base_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in df_f.columns]
+        role_cols = [c for c in ["Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score"] if c in df_f.columns]
+        show_cols = base_cols + role_cols
 
-        score_cols = [c for c in ["Balanced Score", "Attacking Wingback Score", "Progressor Score", "Defensive Wingback Score"] if c in df_f.columns]
-        for c in score_cols:
+        top = df_f.sort_values(role_sort, ascending=False).head(30)[show_cols].copy()
+
+        for c in role_cols:
             top[c + " (pct)"] = percentile_rank(df_f[c]).reindex(top.index)
 
         pct_cols = [c for c in top.columns if c.endswith("(pct)")]
-        pro_table(top, pct_cols=pct_cols, height=640)
+        top_disp = rename_for_display(top)
+        pro_table(top_disp, pct_cols=pct_cols, height=640)
 
     with right:
-        st.subheader("Role Landscape")
+        st.subheader("Role landscape")
         if all(c in df_f.columns for c in ["Progressor Score", "Attacking Wingback Score", "Balanced Score"]):
             fig = px.scatter(
                 df_f,
@@ -277,40 +452,37 @@ if page == "Dashboard":
             fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig, width="stretch")
 
-        st.subheader("Top 15 Balanced (Bar)")
+        st.subheader("Top 15 (bar)")
         fig2 = px.bar(
-            df_f.sort_values("Balanced Score", ascending=False).head(15),
-            x="Balanced Score",
+            df_f.sort_values(role_sort, ascending=False).head(15),
+            x=role_sort,
             y=NAME_COL,
             orientation="h",
-            color="Balanced Score",
+            color=role_sort,
         )
         fig2.update_layout(height=520, yaxis=dict(categoryorder="total ascending"), margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig2, width="stretch")
 
+# =====================================================
+# BIG SEARCH
+# =====================================================
 elif page == "Big Search":
     st.subheader("Big Search")
-    q = st.text_input("Search player / team / competition / nationality", placeholder="Type anything…")
+    st.caption("Uses the sidebar filters + quick search. Export the current filtered view.")
 
-    df_s = df_f.copy()
-    if q and q.strip():
-        ql = q.strip().lower()
-        mask = pd.Series(False, index=df_s.index)
-        for col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
-            if col in df_s.columns:
-                mask = mask | df_s[col].astype(str).str.lower().str.contains(ql, na=False)
-        df_s = df_s[mask]
+    base_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in df_f.columns]
+    role_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
+    key_metrics = [c for c in ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "High Cross", "Low Cross", "Breaking Opponent Defence"] if c in df_f.columns]
 
-    base_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in df_s.columns]
-    role_cols = [c for c in ROLE_DEFS.keys() if c in df_s.columns]
-    key_metrics = [c for c in ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "High Cross", "Low Cross", "Breaking Opponent Defence"] if c in df_s.columns]
+    out = df_f.sort_values("Balanced Score", ascending=False)[base_cols + role_cols + key_metrics].copy()
 
-    out = df_s.sort_values("Balanced Score", ascending=False)[base_cols + role_cols + key_metrics].copy()
     for c in role_cols:
-        out[c + " (pct)"] = percentile_rank(df_s[c]).reindex(out.index)
+        out[c + " (pct)"] = percentile_rank(df_f[c]).reindex(out.index)
 
     pct_cols = [c for c in out.columns if c.endswith("(pct)")]
-    pro_table(out, pct_cols=pct_cols, height=740)
+    out_disp = rename_for_display(out)
+
+    pro_table(out_disp, pct_cols=pct_cols, height=740)
 
     st.download_button(
         "Download filtered table (CSV)",
@@ -319,6 +491,9 @@ elif page == "Big Search":
         mime="text/csv",
     )
 
+# =====================================================
+# PLAYER PROFILE
+# =====================================================
 elif page == "Player Profile":
     st.subheader("Player Profile")
 
@@ -335,41 +510,82 @@ elif page == "Player Profile":
         st.stop()
     row = p.iloc[0]
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Team", str(row.get(TEAM_COL, "—")))
-    c2.metric("Competition", str(row.get(COMP_COL, "—")))
+    # Top card
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    c1, c2, c3, c4, c5 = st.columns([1.4, 1.4, 0.9, 0.9, 0.9])
+    c1.metric("Player", str(row.get(NAME_COL, "—")))
+    c2.metric("Team", str(row.get(TEAM_COL, "—")))
     c3.metric("Age", safe_int_fmt(row.get(AGE_COL, np.nan)))
-    c4.metric("Match Share", safe_fmt(row.get(SHARE_COL, np.nan), 2))
+    c4.metric("Share", safe_fmt(row.get(SHARE_COL, np.nan), 2))
+    c5.metric("Comp", str(row.get(COMP_COL, "—")))
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-    radar_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
-    if radar_cols:
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(
-            r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
-            theta=[c.replace(" Score", "") for c in radar_cols],
-            fill="toself",
-            name=player
-        ))
-        fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=520)
-        st.plotly_chart(fig, width="stretch")
+    left, right = st.columns([1, 1])
 
-    st.markdown("### Player row")
-    show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] + radar_cols if c in df_f.columns]
-    st.dataframe(p[show], width="stretch", height=140)
+    with left:
+        st.subheader("Role scores")
+        role_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
+        role_row = pd.DataFrame([{
+            "Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""),
+            "Score": safe_float(row.get(c, np.nan)),
+            "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan,
+        } for c in role_cols])
 
+        pro_table(role_row, pct_cols=["Percentile"], height=280)
+
+        st.subheader("Key metrics (percentiles)")
+        key = []
+        for m in METRICS:
+            if m in df_f.columns and (m + " (pct)") in df_f.columns:
+                key.append({
+                    "Metric": m,
+                    "Value": safe_float(row.get(m, np.nan)),
+                    "Percentile": safe_float(row.get(m + " (pct)", np.nan)),
+                })
+        key_df = pd.DataFrame(key)
+        if len(key_df):
+            pro_table(key_df, pct_cols=["Percentile"], height=420)
+        else:
+            st.info("No metric columns found.")
+
+    with right:
+        st.subheader("Radar (role scores)")
+        radar_cols = [c for c in ROLE_DEFS.keys() if c in df_f.columns]
+        if radar_cols:
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatterpolar(
+                    r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
+                    theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
+                    fill="toself",
+                    name=player,
+                )
+            )
+            fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=560)
+            st.plotly_chart(fig, width="stretch")
+
+# =====================================================
+# ROLE LEADERBOARDS
+# =====================================================
 elif page == "Role Leaderboards":
     st.subheader("Role Leaderboards")
 
     available_roles = [r for r in ROLE_DEFS.keys() if r in df_f.columns]
+    if not available_roles:
+        st.warning("No role columns found.")
+        st.stop()
+
     role = st.selectbox("Role", available_roles, index=available_roles.index("Balanced Score") if "Balanced Score" in available_roles else 0)
     n = st.slider("Rows", 10, 100, 40, 5)
 
-    cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, role] if c in df_f.columns]
+    cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL, role] if c in df_f.columns]
     out = df_f.sort_values(role, ascending=False).head(n)[cols].copy()
     out[role + " (pct)"] = percentile_rank(df_f[role]).reindex(out.index)
 
-    pro_table(out, pct_cols=[role + " (pct)"], height=740)
+    pct = [role + " (pct)"]
+    out_disp = rename_for_display(out)
+    pro_table(out_disp, pct_cols=pct, height=740)
 
     st.markdown("### Top 20 Bar Chart")
     fig = px.bar(
@@ -383,6 +599,9 @@ elif page == "Role Leaderboards":
     fig.update_layout(yaxis=dict(categoryorder="total ascending"), height=650)
     st.plotly_chart(fig, width="stretch")
 
+# =====================================================
+# DISTRIBUTIONS
+# =====================================================
 elif page == "Distributions":
     st.subheader("Distributions")
 
@@ -391,7 +610,8 @@ elif page == "Distributions":
         st.warning("No numeric columns available.")
         st.stop()
 
-    metric = st.selectbox("Metric", numeric_cols, index=(numeric_cols.index("Balanced Score") if "Balanced Score" in numeric_cols else 0))
+    default_metric = "Balanced Score" if "Balanced Score" in numeric_cols else numeric_cols[0]
+    metric = st.selectbox("Metric", numeric_cols, index=numeric_cols.index(default_metric))
 
     c1, c2 = st.columns(2)
     with c1:
@@ -413,6 +633,9 @@ elif page == "Distributions":
         fig3.update_layout(height=600, yaxis=dict(categoryorder="total ascending"))
         st.plotly_chart(fig3, width="stretch")
 
+# =====================================================
+# COMPARE PLAYERS
+# =====================================================
 elif page == "Compare Players":
     st.subheader("Compare Players")
 
@@ -436,8 +659,9 @@ elif page == "Compare Players":
             id_vars=[c for c in [NAME_COL, TEAM_COL, COMP_COL] if c in comp_df.columns],
             value_vars=role_cols,
             var_name="Role",
-            value_name="Score"
+            value_name="Score",
         )
+        melt["Role"] = melt["Role"].map(lambda x: DISPLAY_RENAMES.get(x, x).replace(" Score", ""))
         fig = px.bar(melt, x="Score", y=NAME_COL, color="Role", barmode="group")
         fig.update_layout(height=520)
         st.plotly_chart(fig, width="stretch")
