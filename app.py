@@ -6,11 +6,13 @@ import plotly.graph_objects as go
 from pathlib import Path
 
 # =====================================================
-# CONFIG
+# PAGE CONFIG
 # =====================================================
 st.set_page_config(page_title="Scout Lab", layout="wide", page_icon="⚽")
 
-# Standard columns (expected in both sheets if possible)
+# =====================================================
+# CANONICAL COLUMN NAMES (expected if possible)
+# =====================================================
 NAME_COL = "Name"
 TEAM_COL = "Team"
 COMP_COL = "Competition"
@@ -18,7 +20,9 @@ AGE_COL = "Age"
 NAT_COL = "Nationality"
 SHARE_COL = "Match Share"
 
-# ---- Position/Dataset configs (EDIT THESE) ----
+# =====================================================
+# POSITION/DATASET CONFIG  (EDIT THESE TO MATCH YOUR EXCEL COLUMNS)
+# =====================================================
 POSITION_CONFIG = {
     "RWB": {
         "file": "RWB.xlsx",
@@ -65,8 +69,12 @@ POSITION_CONFIG = {
             },
         },
         "key_metrics": [
-            "IMPECT", "Offensive IMPECT", "Defensive IMPECT",
-            "High Cross", "Low Cross", "Breaking Opponent Defence"
+            "IMPECT",
+            "Offensive IMPECT",
+            "Defensive IMPECT",
+            "High Cross",
+            "Low Cross",
+            "Breaking Opponent Defence",
         ],
         "radar_metrics": [
             "Progressive Receiving",
@@ -78,55 +86,59 @@ POSITION_CONFIG = {
             "Number of presses during opponent build-up",
             "IMPECT",
         ],
+        "default_sort": "Balanced Score",
     },
 
-    # NOTE: Replace the metric/role names below with YOUR actual CM.xlsx columns.
+    # NOTE: You said "CM.xlsx is used for central defenders" — rename key if you want.
+    # Replace placeholder metric names with EXACT CM.xlsx headers.
     "CM": {
         "file": "CM.xlsx",
-        "title": "Central Midfielder (CM)",
+        "title": "Central Defender (from CM.xlsx)",
         "metrics": [
-            # Example CM metrics — change to match your CM.xlsx columns exactly
+            # PLACEHOLDERS — change these to match your CM.xlsx headers
             "Progressive Passing",
-            "Progressive Carrying",
             "Pass Completion %",
-            "Final Third Entries",
+            "Aerial Duels Won %",
             "Defensive Duels Won %",
             "Interceptions",
+            "Blocks",
+            "Clearances",
             "Pressures",
             "IMPECT",
-            "Offensive IMPECT",
             "Defensive IMPECT",
+            "Offensive IMPECT",
         ],
         "role_defs": {
-            # Example roles — adjust weights + columns
-            "Creator Score": {
-                "Progressive Passing": 0.35,
-                "Final Third Entries": 0.25,
-                "Offensive IMPECT": 0.25,
-                "Pass Completion %": 0.15,
+            # PLACEHOLDERS — change columns/weights to match your model
+            "Stopper Score": {
+                "Defensive Duels Won %": 0.30,
+                "Blocks": 0.20,
+                "Clearances": 0.20,
+                "Defensive IMPECT": 0.30,
             },
-            "Progressor Score": {
-                "Progressive Carrying": 0.35,
-                "Progressive Passing": 0.25,
-                "Final Third Entries": 0.20,
+            "Ball-Playing Score": {
+                "Progressive Passing": 0.35,
+                "Pass Completion %": 0.25,
+                "Offensive IMPECT": 0.20,
                 "IMPECT": 0.20,
             },
-            "Ball Winner Score": {
-                "Interceptions": 0.30,
-                "Pressures": 0.25,
-                "Defensive Duels Won %": 0.25,
+            "Aerial Score": {
+                "Aerial Duels Won %": 0.45,
+                "Clearances": 0.20,
+                "Blocks": 0.15,
                 "Defensive IMPECT": 0.20,
             },
             "Balanced Score": {
                 "IMPECT": 0.30,
-                "Offensive IMPECT": 0.20,
-                "Defensive IMPECT": 0.20,
-                "Progressive Passing": 0.15,
-                "Progressive Carrying": 0.15,
+                "Defensive IMPECT": 0.25,
+                "Progressive Passing": 0.20,
+                "Defensive Duels Won %": 0.15,
+                "Aerial Duels Won %": 0.10,
             },
         },
-        "key_metrics": ["IMPECT", "Progressive Passing", "Progressive Carrying", "Pressures", "Interceptions"],
-        "radar_metrics": ["Progressive Passing", "Progressive Carrying", "Final Third Entries", "Interceptions", "Pressures", "IMPECT"],
+        "key_metrics": ["IMPECT", "Defensive IMPECT", "Progressive Passing", "Interceptions", "Aerial Duels Won %"],
+        "radar_metrics": ["Progressive Passing", "Pass Completion %", "Interceptions", "Blocks", "Aerial Duels Won %", "IMPECT"],
+        "default_sort": "Balanced Score",
     },
 }
 
@@ -134,46 +146,96 @@ DISPLAY_RENAMES = {
     "Balanced Score": "Balanced",
     "Attacking Wingback Score": "Attacking WB",
     "Defensive Wingback Score": "Defensive WB",
-    "Creator Score": "Creator",
     "Progressor Score": "Progressor",
-    "Ball Winner Score": "Ball Winner",
+    "Stopper Score": "Stopper",
+    "Ball-Playing Score": "Ball-Playing",
+    "Aerial Score": "Aerial",
     "Match Share": "Share",
 }
 
 # =====================================================
-# UI THEME (ASA-ish)
+# UI THEME (clean / TransferLab-ish)
 # =====================================================
 st.markdown(
     """
 <style>
-.stApp { background: #f6f7f9; }
-section[data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid #e5e7eb; }
-h1, h2, h3 { letter-spacing: -0.02em; }
+:root{
+  --bg:#f6f7f9;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+  --border:#e5e7eb;
+  --brand:#111827;
+}
 
-div.stButton > button {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  padding: 10px 12px;
-  font-weight: 800;
-  text-align: left;
-}
-div.stButton > button:hover { border-color: #111827; }
-.nav-active div.stButton > button {
-  background: #111827 !important;
-  color: #ffffff !important;
-  border-color: #111827 !important;
-}
+.stApp { background: var(--bg); color: var(--text); }
+section[data-testid="stSidebar"] { background: var(--card); border-right: 1px solid var(--border); }
+
+h1,h2,h3 { letter-spacing: -0.02em; }
+.small { color: var(--muted); font-size: 0.92rem; }
+
 .card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
   padding: 14px 14px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
-div[data-testid="stVerticalBlock"] > div { gap: 0.65rem; }
+
+.headerbar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.header-left { display:flex; gap:10px; align-items:baseline; flex-wrap: wrap; }
+.pill {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid var(--border);
+  background:#fff;
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:900;
+  font-size:0.9rem;
+}
+.pill-dark {
+  border-color: var(--brand);
+  background: var(--brand);
+  color:#fff;
+}
+
+.chip {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid var(--border);
+  background:#fff;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:0.9rem;
+  color: var(--text);
+  margin-right:6px;
+  margin-bottom:6px;
+}
+.chip strong { font-weight:900; }
+
+.player-row{
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fff;
+  padding:12px 12px;
+}
+.player-row:hover{ border-color:#cbd5e1; }
+.player-name{ font-weight:950; font-size:1.02rem; }
+.player-meta{ color:var(--muted); font-size:0.9rem; margin-top:2px; }
+
+div[data-testid="stVerticalBlock"] > div { gap: 0.7rem; }
 div[data-testid="stDataFrame"] thead tr th { font-weight: 900; }
-.small-muted { color: #6b7280; font-size: 0.9rem; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -187,19 +249,14 @@ def safe_float(x):
         return np.nan
     if isinstance(x, (int, float, np.number)):
         return float(x)
-
     s = str(x).strip()
     if s == "" or s.lower() in {"nan", "none", "null", "na", "n/a", "-", "—"}:
         return np.nan
-
     s = s.replace("%", "")
-    # decimal comma
     if s.count(",") == 1 and s.count(".") == 0:
         s = s.replace(",", ".")
-    # thousands separators
     if s.count(",") >= 1 and s.count(".") == 1:
         s = s.replace(",", "")
-
     try:
         return float(s)
     except Exception:
@@ -274,7 +331,7 @@ def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int =
     st.dataframe(df, width="stretch", height=height, column_config=col_config, hide_index=True)
 
 # =====================================================
-# LOAD + PREP DATA PER POSITION
+# LOAD + PREP DATA
 # =====================================================
 @st.cache_data(show_spinner=False)
 def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
@@ -286,20 +343,16 @@ def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
     df = pd.read_excel(fp)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Coerce key numeric fields
     coerce_numeric(df, cfg["metrics"] + [AGE_COL, SHARE_COL])
 
-    # Clean text fields
     for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
         if c in df.columns:
             df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
 
-    # Metric percentiles
     for m in cfg["metrics"]:
         if m in df.columns:
             df[m + " (pct)"] = percentile_rank(df[m])
 
-    # Role scores
     for role, weights in cfg["role_defs"].items():
         z = pd.Series(0.0, index=df.index)
         for col, w in weights.items():
@@ -311,16 +364,20 @@ def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
     return df, cfg
 
 # =====================================================
-# SCOUTING FEATURES (SHORTLIST + SIMILARITY)
+# STATE + SHORTLIST
 # =====================================================
 def ensure_state():
-    if "page" not in st.session_state:
-        st.session_state.page = "Dashboard"
     if "filters" not in st.session_state:
         st.session_state.filters = {}
     if "shortlist" not in st.session_state:
-        # shortlist: dict key=(position, player_name) -> {tags, notes}
+        # key: "POS||Name" -> {"tags":"", "notes":""}
         st.session_state.shortlist = {}
+    if "pinned" not in st.session_state:
+        st.session_state.pinned = {}
+    if "selected_player" not in st.session_state:
+        st.session_state.selected_player = None
+    if "compare_picks" not in st.session_state:
+        st.session_state.compare_picks = {}
 
 def shortlist_key(position_key: str, player_name: str) -> str:
     return f"{position_key}||{player_name}"
@@ -336,7 +393,6 @@ def remove_from_shortlist(position_key: str, player_name: str):
         del st.session_state.shortlist[k]
 
 def cosine_similarity_matrix(X: np.ndarray) -> np.ndarray:
-    # X: (n, d)
     X = np.nan_to_num(X, nan=0.0)
     norms = np.linalg.norm(X, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
@@ -344,485 +400,652 @@ def cosine_similarity_matrix(X: np.ndarray) -> np.ndarray:
     return Xn @ Xn.T
 
 def similar_players(df_f: pd.DataFrame, player_name: str, feature_cols: list[str], topk: int = 10) -> pd.DataFrame:
-    if df_f.empty or player_name not in df_f[NAME_COL].values:
+    if df_f.empty or NAME_COL not in df_f.columns:
+        return pd.DataFrame()
+    if player_name not in df_f[NAME_COL].values:
         return pd.DataFrame()
 
     cols = [c for c in feature_cols if c in df_f.columns and pd.api.types.is_numeric_dtype(df_f[c])]
     if not cols:
         return pd.DataFrame()
 
-    X = df_f[cols].apply(zscore).to_numpy()
+    X = np.column_stack([zscore(df_f[c]).to_numpy() for c in cols])
     sim = cosine_similarity_matrix(X)
+
     idx = df_f.index[df_f[NAME_COL] == player_name][0]
-    scores = pd.Series(sim[df_f.index.get_loc(idx)], index=df_f.index)
+    base_i = df_f.index.get_loc(idx)
+    scores = pd.Series(sim[base_i], index=df_f.index)
 
     out = df_f.loc[scores.sort_values(ascending=False).index].copy()
     out["Similarity"] = scores.loc[out.index].values
     out = out[out[NAME_COL] != player_name].head(topk)
 
-    show_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] if c in out.columns] + ["Similarity"]
+    show_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in out.columns] + ["Similarity"]
     return out[show_cols]
 
-# =====================================================
-# NAV
-# =====================================================
-PAGES = [
-    ("Dashboard", "🏠 Dashboard"),
-    ("Search", "🔎 Search"),
-    ("Player", "👤 Player Profile"),
-    ("Leaderboards", "🏆 Leaderboards"),
-    ("Distributions", "📈 Distributions"),
-    ("Compare", "🆚 Compare"),
-    ("Shortlist", "⭐ Shortlist"),
-]
+def player_meta(row: pd.Series) -> str:
+    team = str(row.get(TEAM_COL, "—"))
+    comp = str(row.get(COMP_COL, "—"))
+    nat = str(row.get(NAT_COL, "—"))
+    age = safe_int_fmt(row.get(AGE_COL, np.nan))
+    share = safe_fmt(row.get(SHARE_COL, np.nan), 2)
+    return f"{team} · {comp} · {nat} · Age {age} · Share {share}"
 
-def nav_button(page_key: str, label: str):
-    active = (st.session_state.page == page_key)
-    if active:
-        st.sidebar.markdown('<div class="nav-active">', unsafe_allow_html=True)
-    clicked = st.sidebar.button(label, key=f"nav_{page_key}")
-    if active:
-        st.sidebar.markdown("</div>", unsafe_allow_html=True)
-    if clicked:
-        st.session_state.page = page_key
+def strengths_weaknesses(cfg: dict, row: pd.Series, topn: int = 6):
+    pairs = []
+    for m in cfg["metrics"]:
+        pct = safe_float(row.get(m + " (pct)", np.nan))
+        if not np.isnan(pct):
+            pairs.append((m, pct))
+    pairs.sort(key=lambda x: x[1], reverse=True)
+    top = pairs[:topn]
+    bottom = list(reversed(pairs[-topn:])) if len(pairs) >= topn else list(reversed(pairs))
+    return top, bottom
 
 # =====================================================
-# APP
+# FILTERS
+# =====================================================
+def default_filters_for(df: pd.DataFrame):
+    # Try to set sane bounds for age if possible
+    if AGE_COL in df.columns and len(df):
+        vals = df[AGE_COL].dropna()
+        if len(vals):
+            lo = int(max(15, np.floor(vals.min())))
+            hi = int(min(50, np.ceil(vals.max())))
+        else:
+            lo, hi = 15, 45
+    else:
+        lo, hi = 15, 45
+
+    return {
+        "q": "",
+        "min_share": 0.20,
+        "competitions": [],
+        "teams": [],
+        "nats": [],
+        "age_range": (lo, hi),
+    }
+
+def apply_filters(df: pd.DataFrame, f: dict) -> pd.DataFrame:
+    out = df.copy()
+
+    if SHARE_COL in out.columns:
+        out = out[out[SHARE_COL].fillna(0) >= float(f.get("min_share", 0.0))]
+
+    if AGE_COL in out.columns and "age_range" in f:
+        lo, hi = f["age_range"]
+        out = out[(out[AGE_COL].fillna(lo) >= lo) & (out[AGE_COL].fillna(hi) <= hi)]
+
+    if f.get("competitions") and COMP_COL in out.columns:
+        out = out[out[COMP_COL].isin(f["competitions"])]
+
+    if f.get("teams") and TEAM_COL in out.columns:
+        out = out[out[TEAM_COL].isin(f["teams"])]
+
+    if f.get("nats") and NAT_COL in out.columns:
+        out = out[out[NAT_COL].isin(f["nats"])]
+
+    q = str(f.get("q", "")).strip().lower()
+    if q:
+        mask = pd.Series(False, index=out.index)
+        for col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
+            if col in out.columns:
+                mask = mask | out[col].astype(str).str.lower().str.contains(q, na=False)
+        out = out[mask]
+
+    return out
+
+# =====================================================
+# APP START
 # =====================================================
 ensure_state()
 
-# Position selector (top of sidebar)
+# Sidebar: dataset + filters
 st.sidebar.markdown("### 🧩 Dataset")
 position = st.sidebar.selectbox("Position", list(POSITION_CONFIG.keys()), index=0)
 df, cfg = load_and_prepare(position)
 role_cols_all = [r for r in cfg["role_defs"].keys() if r in df.columns]
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧭 Navigation")
-for key, label in PAGES:
-    nav_button(key, label)
-page = st.session_state.page
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎛️ Filters")
+default_sort = cfg.get("default_sort", "Balanced Score")
+if default_sort not in df.columns and role_cols_all:
+    default_sort = role_cols_all[0]
 
 # Initialize filters per position
-default_filters = {
-    "q": "",
-    "min_share": 0.20,
-    "competitions": [],
-    "teams": [],
-    "age_range": (15, 45),
-    "nats": [],
-}
 if position not in st.session_state.filters:
-    st.session_state.filters[position] = default_filters.copy()
-
-def reset_filters():
-    st.session_state.filters[position] = default_filters.copy()
+    st.session_state.filters[position] = default_filters_for(df)
 
 f = st.session_state.filters[position]
 
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎛️ Filters")
 with st.sidebar.container():
     st.sidebar.markdown('<div class="card">', unsafe_allow_html=True)
 
-    f["q"] = st.sidebar.text_input("Quick search", value=f["q"], placeholder="Name / Team / Comp / Nat…")
+    f["q"] = st.sidebar.text_input("Quick search", value=f.get("q", ""), placeholder="Name / Team / Comp / Nat…")
 
-    f["min_share"] = st.sidebar.slider("Min Match Share", 0.0, 1.0, float(f["min_share"]), 0.05)
+    f["min_share"] = st.sidebar.slider("Min Match Share", 0.0, 1.0, float(f.get("min_share", 0.2)), 0.05)
 
-    if AGE_COL in df.columns:
-        min_age, max_age = int(np.nanmin(df[AGE_COL].values) if len(df) else 15), int(np.nanmax(df[AGE_COL].values) if len(df) else 45)
-        min_age = max(15, min_age)
-        max_age = min(50, max_age)
-        lo, hi = f["age_range"]
+    # Age
+    if AGE_COL in df.columns and len(df):
+        vals = df[AGE_COL].dropna()
+        if len(vals):
+            min_age = int(max(15, np.floor(vals.min())))
+            max_age = int(min(50, np.ceil(vals.max())))
+        else:
+            min_age, max_age = 15, 45
+        lo, hi = f.get("age_range", (min_age, max_age))
         lo = max(min_age, lo)
         hi = min(max_age, hi)
         f["age_range"] = st.sidebar.slider("Age range", min_age, max_age, (lo, hi), 1)
 
+    # Competition
     if COMP_COL in df.columns:
         comps_all = sorted([c for c in df[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
-        f["competitions"] = st.sidebar.multiselect("Competitions", comps_all, default=f["competitions"])
+        f["competitions"] = st.sidebar.multiselect("Competitions", comps_all, default=f.get("competitions", []))
 
+    # Team
     if TEAM_COL in df.columns:
         teams_all = sorted([t for t in df[TEAM_COL].dropna().unique().tolist() if str(t).strip() != ""])
-        f["teams"] = st.sidebar.multiselect("Teams", teams_all, default=f["teams"])
+        f["teams"] = st.sidebar.multiselect("Teams", teams_all, default=f.get("teams", []))
 
+    # Nationality
     if NAT_COL in df.columns:
         nats_all = sorted([n for n in df[NAT_COL].dropna().unique().tolist() if str(n).strip() != ""])
-        f["nats"] = st.sidebar.multiselect("Nationalities", nats_all, default=f["nats"])
+        f["nats"] = st.sidebar.multiselect("Nationalities", nats_all, default=f.get("nats", []))
 
-    cA, cB = st.sidebar.columns(2)
-    with cA:
-        if st.button("Reset filters"):
-            reset_filters()
+    c1, c2 = st.sidebar.columns(2)
+    with c1:
+        if st.button("Reset filters", key=f"reset_{position}"):
+            st.session_state.filters[position] = default_filters_for(df)
             st.rerun()
-    with cB:
+    with c2:
         st.caption("Applies live")
 
     st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 # Apply filters
-df_f = df.copy()
+df_f = apply_filters(df, f)
 
-if SHARE_COL in df_f.columns:
-    df_f = df_f[df_f[SHARE_COL].fillna(0) >= f["min_share"]]
+# Pinned player default
+if position not in st.session_state.pinned:
+    if len(df_f) and NAME_COL in df_f.columns:
+        st.session_state.pinned[position] = df_f.sort_values(default_sort, ascending=False).iloc[0][NAME_COL]
+    else:
+        st.session_state.pinned[position] = None
 
-if AGE_COL in df_f.columns:
-    lo, hi = f["age_range"]
-    df_f = df_f[(df_f[AGE_COL].fillna(lo) >= lo) & (df_f[AGE_COL].fillna(hi) <= hi)]
+# Compare picks per position
+if position not in st.session_state.compare_picks:
+    st.session_state.compare_picks[position] = []
 
-if f["competitions"] and COMP_COL in df_f.columns:
-    df_f = df_f[df_f[COMP_COL].isin(f["competitions"])]
+# Header bar
+shortlist_count = len(st.session_state.shortlist)
+st.markdown(
+    f"""
+<div class="headerbar">
+  <div class="header-left">
+    <div style="font-size:1.35rem;font-weight:950;">⚽ Scout Lab</div>
+    <span class="pill">{cfg["title"]}</span>
+    <span class="pill">Players <strong>{len(df_f)}</strong></span>
+    <span class="pill">Teams <strong>{df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0}</strong></span>
+    <span class="pill">Comps <strong>{df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0}</strong></span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <span class="pill pill-dark">⭐ Shortlist {shortlist_count}</span>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
-if f["teams"] and TEAM_COL in df_f.columns:
-    df_f = df_f[df_f[TEAM_COL].isin(f["teams"])]
-
-if f["nats"] and NAT_COL in df_f.columns:
-    df_f = df_f[df_f[NAT_COL].isin(f["nats"])]
-
-q = f["q"].strip().lower()
-if q:
-    mask = pd.Series(False, index=df_f.index)
-    for col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
-        if col in df_f.columns:
-            mask = mask | df_f[col].astype(str).str.lower().str.contains(q, na=False)
-    df_f = df_f[mask]
-
-# Header
-st.title("⚽ Scout Lab")
-st.caption(f"TransferLab-style scouting workflow · {cfg['title']} · percentile bars · shortlist · similarity")
+tabs = st.tabs(["🔎 Search", "👤 Profile", "🆚 Compare", "🏆 Leaderboards", "📈 Distributions", "⭐ Shortlist"])
 
 # =====================================================
-# PAGES
+# TAB: SEARCH (results list + pinned preview)
 # =====================================================
-if page == "Dashboard":
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Players", len(df_f))
-    k2.metric("Teams", df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0)
-    k3.metric("Competitions", df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0)
-    avg_share = df_f[SHARE_COL].mean() if SHARE_COL in df_f.columns and len(df_f) else np.nan
-    k4.metric("Avg Share", safe_fmt(avg_share, 2))
+with tabs[0]:
+    st.markdown("### Search")
 
-    st.markdown("---")
+    if df_f.empty:
+        st.info("No players match your filters. Try lowering Min Match Share or clearing filters.")
+        c1, c2, c3 = st.columns(3)
+        if c1.button("Lower share to 0.10", key=f"lowshare_{position}"):
+            f["min_share"] = 0.10
+            st.rerun()
+        if c2.button("Clear search text", key=f"clearq_{position}"):
+            f["q"] = ""
+            st.rerun()
+        if c3.button("Reset all filters", key=f"resetall_{position}"):
+            st.session_state.filters[position] = default_filters_for(df)
+            st.rerun()
+    else:
+        # Sort selector
+        sort_options = [c for c in ([default_sort] + role_cols_all) if c in df_f.columns]
+        if not sort_options:
+            sort_options = [c for c in df_f.columns if pd.api.types.is_numeric_dtype(df_f[c])]
+        sort_col = st.selectbox("Sort by", options=sort_options, index=0, key=f"sort_{position}")
 
-    if "quick_role" not in st.session_state:
-        st.session_state.quick_role = "Balanced Score" if "Balanced Score" in df_f.columns else (role_cols_all[0] if role_cols_all else None)
+        # Search layout
+        left, right = st.columns([1.2, 1])
 
-    st.markdown("#### Quick views")
-    chips = st.columns(min(4, max(1, len(role_cols_all))))
-    for i, r in enumerate(role_cols_all[:4]):
-        if chips[i].button(f"⚡ {DISPLAY_RENAMES.get(r, r).replace(' Score','')}", key=f"chip_{position}_{r}"):
-            st.session_state.quick_role = r
+        with left:
+            st.markdown("#### Results")
+            results = df_f.sort_values(sort_col, ascending=False).head(50).copy()
 
-    role_sort = st.session_state.quick_role if st.session_state.quick_role in df_f.columns else ("Balanced Score" if "Balanced Score" in df_f.columns else None)
-    if role_sort is None:
-        st.warning("No role score columns found for this dataset.")
-        st.stop()
+            for _, r in results.iterrows():
+                name = str(r.get(NAME_COL, "—"))
+                in_sl = shortlist_key(position, name) in st.session_state.shortlist
 
-    left, right = st.columns([1.35, 1])
+                st.markdown('<div class="player-row">', unsafe_allow_html=True)
+                a, b, c = st.columns([3.2, 1.2, 1.4])
+                with a:
+                    st.markdown(f'<div class="player-name">{name}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="player-meta">{player_meta(r)}</div>', unsafe_allow_html=True)
+                with b:
+                    st.metric(DISPLAY_RENAMES.get(sort_col, sort_col).replace(" Score", ""), safe_fmt(r.get(sort_col, np.nan), 1))
+                with c:
+                    if st.button("Open", key=f"open_{position}_{name}"):
+                        st.session_state.pinned[position] = name
+                        st.session_state.selected_player = name
+                        st.rerun()
+                    if st.button("★" if not in_sl else "✓", key=f"slq_{position}_{name}"):
+                        add_to_shortlist(position, name) if not in_sl else remove_from_shortlist(position, name)
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
-    with left:
-        st.subheader(f"Top players (sorted by {DISPLAY_RENAMES.get(role_sort, role_sort)})")
-        base_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in df_f.columns]
-        role_cols = [c for c in role_cols_all if c in df_f.columns]
-        show_cols = base_cols + role_cols
+        with right:
+            st.markdown("#### Pinned preview")
+            pinned = st.session_state.pinned.get(position)
 
-        top = df_f.sort_values(role_sort, ascending=False).head(30)[show_cols].copy()
-        for c in role_cols:
-            top[c + " (pct)"] = percentile_rank(df_f[c]).reindex(top.index)
+            if not pinned:
+                st.caption("Select a player in Results to preview here.")
+            else:
+                p = df_f[df_f[NAME_COL] == pinned].head(1)
+                if p.empty:
+                    st.caption("Pinned player not found in the filtered set.")
+                else:
+                    row = p.iloc[0]
 
-        pct_cols = [c for c in top.columns if c.endswith("(pct)")]
-        pro_table(rename_for_display(top), pct_cols=pct_cols, height=640)
+                    st.markdown('<div class="card">', unsafe_allow_html=True)
+                    st.markdown(f"### {pinned}")
+                    st.caption(player_meta(row))
+                    st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        st.subheader("Role landscape")
-        # Pick two roles to plot (fallback)
-        r1 = "Progressor Score" if "Progressor Score" in df_f.columns else role_cols_all[0]
-        r2 = "Attacking Wingback Score" if "Attacking Wingback Score" in df_f.columns else (role_cols_all[1] if len(role_cols_all) > 1 else role_cols_all[0])
+                    # Role tiles
+                    st.markdown("##### Role scores")
+                    tiles = st.columns(min(4, max(1, len(role_cols_all))))
+                    for i, rc in enumerate(role_cols_all[:4]):
+                        tiles[i].metric(DISPLAY_RENAMES.get(rc, rc).replace(" Score", ""), safe_fmt(row.get(rc, np.nan), 1))
 
-        fig = px.scatter(
-            df_f,
-            x=r1,
-            y=r2,
-            color=("Balanced Score" if "Balanced Score" in df_f.columns else r1),
-            hover_data=[c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] if c in df_f.columns],
-        )
-        fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig, width="stretch")
+                    # Strengths / weaknesses
+                    st.markdown("##### Snapshot (percentiles)")
+                    top, bottom = strengths_weaknesses(cfg, row, topn=5)
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("**Strengths**")
+                        for m, pct in top:
+                            st.write(f"↑ {m} — {pct:.0f}")
+                    with c2:
+                        st.markdown("**Weaknesses**")
+                        for m, pct in bottom:
+                            st.write(f"↓ {m} — {pct:.0f}")
 
-        st.subheader("Top 15 (bar)")
-        fig2 = px.bar(
-            df_f.sort_values(role_sort, ascending=False).head(15),
-            x=role_sort,
-            y=NAME_COL,
-            orientation="h",
-            color=role_sort,
-        )
-        fig2.update_layout(height=520, yaxis=dict(categoryorder="total ascending"), margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig2, width="stretch")
+                    # Actions
+                    st.markdown("##### Actions")
+                    a1, a2, a3 = st.columns(3)
+                    with a1:
+                        in_sl = shortlist_key(position, pinned) in st.session_state.shortlist
+                        if st.button("⭐ Shortlist" if not in_sl else "✅ Shortlisted", key=f"sl_pin_{position}"):
+                            add_to_shortlist(position, pinned) if not in_sl else remove_from_shortlist(position, pinned)
+                            st.rerun()
+                    with a2:
+                        picks = st.session_state.compare_picks[position]
+                        if st.button("➕ Add to Compare", key=f"addcmp_{position}"):
+                            if pinned not in picks:
+                                picks.append(pinned)
+                                st.session_state.compare_picks[position] = picks[:6]
+                            st.rerun()
+                    with a3:
+                        st.caption("Open Profile tab → player preselected")
 
+# =====================================================
+# TAB: PROFILE (scouting report feel)
+# =====================================================
+with tabs[1]:
+    st.markdown("### Player Profile")
 
-elif page == "Search":
-    st.subheader("Search")
-    st.caption("Filtered scouting table + export. Add players to Shortlist from Profile page.")
-
-    base_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] if c in df_f.columns]
-    role_cols = [c for c in role_cols_all if c in df_f.columns]
-    key_metrics = [c for c in cfg["key_metrics"] if c in df_f.columns]
-
-    sort_role = "Balanced Score" if "Balanced Score" in df_f.columns else role_cols[0]
-    out = df_f.sort_values(sort_role, ascending=False)[base_cols + role_cols + key_metrics].copy()
-
-    for c in role_cols:
-        out[c + " (pct)"] = percentile_rank(df_f[c]).reindex(out.index)
-
-    pct_cols = [c for c in out.columns if c.endswith("(pct)")]
-    pro_table(rename_for_display(out), pct_cols=pct_cols, height=740)
-
-    st.download_button(
-        "Download filtered table (CSV)",
-        data=out.to_csv(index=False).encode("utf-8"),
-        file_name=f"{position}_search_export.csv",
-        mime="text/csv",
-    )
-
-
-elif page == "Player":
-    st.subheader("Player Profile")
-
-    if NAME_COL not in df_f.columns or df_f.empty:
+    if df_f.empty or NAME_COL not in df_f.columns:
         st.warning("No players available with current filters.")
-        st.stop()
+    else:
+        players = sorted(df_f[NAME_COL].dropna().unique().tolist())
+        default_player = (
+            st.session_state.selected_player
+            or st.session_state.pinned.get(position)
+            or (players[0] if players else None)
+        )
+        if default_player not in players and players:
+            default_player = players[0]
 
-    players = sorted(df_f[NAME_COL].dropna().unique().tolist())
-    player = st.selectbox("Select player", players)
+        player = st.selectbox("Player", players, index=players.index(default_player) if default_player in players else 0, key=f"profile_{position}")
 
-    p = df_f[df_f[NAME_COL] == player].head(1)
-    if p.empty:
-        st.warning("Player not found.")
-        st.stop()
+        p = df_f[df_f[NAME_COL] == player].head(1)
+        row = p.iloc[0]
 
-    row = p.iloc[0]
-
-    # Header card
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    c1, c2, c3, c4, c5, c6 = st.columns([1.4, 1.4, 0.9, 0.9, 0.9, 1.0])
-    c1.metric("Player", str(row.get(NAME_COL, "—")))
-    c2.metric("Team", str(row.get(TEAM_COL, "—")))
-    c3.metric("Age", safe_int_fmt(row.get(AGE_COL, np.nan)))
-    c4.metric("Share", safe_fmt(row.get(SHARE_COL, np.nan), 2))
-    c5.metric("Comp", str(row.get(COMP_COL, "—")))
-    in_sl = shortlist_key(position, player) in st.session_state.shortlist
-    if c6.button("⭐ Shortlist" if not in_sl else "✅ Shortlisted", key=f"shortlist_btn_{position}_{player}"):
-        if in_sl:
-            remove_from_shortlist(position, player)
+        # Header card
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        c1, c2, c3, c4, c5 = st.columns([2.2, 1, 1, 1, 1.2])
+        c1.markdown(f"### {player}")
+        c1.caption(player_meta(row))
+        c2.metric("Age", safe_int_fmt(row.get(AGE_COL, np.nan)))
+        c3.metric("Share", safe_fmt(row.get(SHARE_COL, np.nan), 2))
+        if "Balanced Score" in df_f.columns:
+            c4.metric("Balanced", safe_fmt(row.get("Balanced Score", np.nan), 1))
         else:
-            add_to_shortlist(position, player)
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+            c4.metric("Score", "—")
+        in_sl = shortlist_key(position, player) in st.session_state.shortlist
+        if c5.button("⭐ Shortlist" if not in_sl else "✅ Shortlisted", key=f"sl_profile_{position}_{player}"):
+            add_to_shortlist(position, player) if not in_sl else remove_from_shortlist(position, player)
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # Notes/tags if shortlisted
-    if shortlist_key(position, player) in st.session_state.shortlist:
-        st.markdown("#### Notes & tags")
-        sl = st.session_state.shortlist[shortlist_key(position, player)]
-        a, b = st.columns([1, 2])
-        sl["tags"] = a.text_input("Tags (comma separated)", value=sl.get("tags", ""))
-        sl["notes"] = b.text_area("Notes", value=sl.get("notes", ""), height=90)
+        # Notes/tags (only if shortlisted)
+        if shortlist_key(position, player) in st.session_state.shortlist:
+            meta = st.session_state.shortlist[shortlist_key(position, player)]
+            st.markdown("#### Notes & tags")
+            a, b = st.columns([1, 2])
+            meta["tags"] = a.text_input("Tags (comma separated)", value=meta.get("tags", ""), key=f"tags_{position}_{player}")
+            meta["notes"] = b.text_area("Notes", value=meta.get("notes", ""), height=90, key=f"notes_{position}_{player}")
 
-    st.markdown("---")
-    left, right = st.columns([1, 1])
+        st.markdown("---")
 
-    with left:
-        st.subheader("Role scores")
-        role_cols = [c for c in role_cols_all if c in df_f.columns]
-        role_row = pd.DataFrame([{
-            "Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""),
-            "Score": safe_float(row.get(c, np.nan)),
-            "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan,
-        } for c in role_cols])
+        # Strengths / Weaknesses
+        top, bottom = strengths_weaknesses(cfg, row, topn=6)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("#### Strengths (pct)")
+            for m, pct in top:
+                st.write(f"↑ **{m}** — {pct:.0f} pct")
+        with c2:
+            st.markdown("#### Weaknesses (pct)")
+            for m, pct in bottom:
+                st.write(f"↓ **{m}** — {pct:.0f} pct")
 
-        pro_table(role_row, pct_cols=["Percentile"], height=280)
+        st.markdown("---")
+        left, right = st.columns([1, 1])
 
-        st.subheader("Key metrics (percentiles)")
-        key = []
-        for m in cfg["metrics"]:
-            if m in df_f.columns and (m + " (pct)") in df_f.columns:
-                key.append({
-                    "Metric": m,
-                    "Value": safe_float(row.get(m, np.nan)),
-                    "Percentile": safe_float(row.get(m + " (pct)", np.nan)),
-                })
-        key_df = pd.DataFrame(key)
-        if len(key_df):
-            pro_table(key_df, pct_cols=["Percentile"], height=420)
-        else:
-            st.info("No metric columns found.")
-
-    with right:
-        st.subheader("Radar (role scores)")
-        radar_cols = [c for c in role_cols_all if c in df_f.columns]
-        if radar_cols:
-            fig = go.Figure()
-            fig.add_trace(
-                go.Scatterpolar(
-                    r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
-                    theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
-                    fill="toself",
-                    name=player,
-                )
+        with left:
+            st.markdown("#### Role scores")
+            role_cols = [c for c in role_cols_all if c in df_f.columns]
+            role_row = pd.DataFrame(
+                [
+                    {
+                        "Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""),
+                        "Score": safe_float(row.get(c, np.nan)),
+                        "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan,
+                    }
+                    for c in role_cols
+                ]
             )
-            fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=520)
+            pro_table(role_row, pct_cols=["Percentile"], height=320)
+
+            st.markdown("#### Key metrics (percentiles)")
+            key = []
+            for m in cfg["metrics"]:
+                if m in df_f.columns and (m + " (pct)") in df_f.columns:
+                    key.append(
+                        {
+                            "Metric": m,
+                            "Value": safe_float(row.get(m, np.nan)),
+                            "Percentile": safe_float(row.get(m + " (pct)", np.nan)),
+                        }
+                    )
+            key_df = pd.DataFrame(key)
+            if len(key_df):
+                pro_table(key_df, pct_cols=["Percentile"], height=520)
+            else:
+                st.info("No metric columns found.")
+
+        with right:
+            st.markdown("#### Radar (role scores)")
+            radar_cols = [c for c in role_cols_all if c in df_f.columns]
+            if radar_cols:
+                fig = go.Figure()
+                fig.add_trace(
+                    go.Scatterpolar(
+                        r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
+                        theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
+                        fill="toself",
+                        name=player,
+                    )
+                )
+                fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=520)
+                st.plotly_chart(fig, width="stretch")
+
+            st.markdown("#### Similar players")
+            st.caption("Cosine similarity on selected numeric features (z-scored).")
+            sim_default = [m for m in cfg["radar_metrics"] if m in df_f.columns][:6]
+            sim_features = st.multiselect(
+                "Similarity features",
+                options=[m for m in cfg["metrics"] if m in df_f.columns],
+                default=sim_default,
+                key=f"simfeat_{position}",
+            )
+            topk = st.slider("Top K", 5, 25, 10, 1, key=f"simk_{position}")
+            sim_df = similar_players(df_f, player, sim_features, topk=topk)
+            if len(sim_df):
+                pro_table(sim_df, pct_cols=[], height=360)
+                if st.button("➕ Add top similar to Compare", key=f"addsimcmp_{position}_{player}"):
+                    picks = st.session_state.compare_picks[position]
+                    for nm in sim_df[NAME_COL].head(3).tolist():
+                        if nm not in picks:
+                            picks.append(nm)
+                    st.session_state.compare_picks[position] = picks[:6]
+                    st.rerun()
+            else:
+                st.info("Not enough data/features to compute similarity.")
+
+# =====================================================
+# TAB: COMPARE
+# =====================================================
+with tabs[2]:
+    st.markdown("### Compare Players")
+
+    if df_f.empty or NAME_COL not in df_f.columns:
+        st.warning("No players available with current filters.")
+    else:
+        players = sorted(df_f[NAME_COL].dropna().unique().tolist())
+        picks = st.session_state.compare_picks.get(position, [])
+        # Keep only those still present
+        picks = [p for p in picks if p in players]
+
+        default = picks[:]
+        if len(default) < 2 and len(players) >= 2:
+            default = players[:2]
+
+        chosen = st.multiselect("Select 2–6 players", players, default=default, key=f"cmp_{position}")
+        st.session_state.compare_picks[position] = chosen
+
+        if len(chosen) < 2:
+            st.info("Pick at least 2 players to compare.")
+        else:
+            comp_df = df_f[df_f[NAME_COL].isin(chosen)].copy()
+
+            st.markdown("#### Quick cards")
+            cols = st.columns(min(4, len(chosen)))
+            for i, nm in enumerate(chosen[:4]):
+                r = comp_df[comp_df[NAME_COL] == nm].head(1).iloc[0]
+                cols[i].markdown('<div class="card">', unsafe_allow_html=True)
+                cols[i].markdown(f"**{nm}**")
+                cols[i].caption(player_meta(r))
+                if "Balanced Score" in comp_df.columns:
+                    cols[i].metric("Balanced", safe_fmt(r.get("Balanced Score", np.nan), 1))
+                cols[i].markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.markdown("#### Role Scores Comparison")
+            role_cols = [c for c in role_cols_all if c in comp_df.columns]
+            if role_cols:
+                melt = comp_df.melt(
+                    id_vars=[c for c in [NAME_COL, TEAM_COL, COMP_COL] if c in comp_df.columns],
+                    value_vars=role_cols,
+                    var_name="Role",
+                    value_name="Score",
+                )
+                melt["Role"] = melt["Role"].map(lambda x: DISPLAY_RENAMES.get(x, x).replace(" Score", ""))
+                fig = px.bar(melt, x="Score", y=NAME_COL, color="Role", barmode="group")
+                fig.update_layout(height=520)
+                st.plotly_chart(fig, width="stretch")
+
+            st.markdown("#### Radar (Key Metric Percentiles)")
+            radar_metrics = [m + " (pct)" for m in cfg["radar_metrics"] if (m + " (pct)") in comp_df.columns]
+            if radar_metrics:
+                fig2 = go.Figure()
+                for nm in chosen:
+                    sub = comp_df[comp_df[NAME_COL] == nm].head(1)
+                    r = [safe_float(sub.iloc[0].get(m, np.nan)) if not np.isnan(safe_float(sub.iloc[0].get(m, np.nan))) else 0 for m in radar_metrics]
+                    theta = [m.replace(" (pct)", "") for m in radar_metrics]
+                    fig2.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=nm))
+                fig2.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=620)
+                st.plotly_chart(fig2, width="stretch")
+
+            st.markdown("#### Comparison Table")
+            show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] + role_cols if c in comp_df.columns]
+            sort_role = "Balanced Score" if "Balanced Score" in comp_df.columns else (role_cols[0] if role_cols else show[-1])
+            st.dataframe(comp_df[show].sort_values(sort_role, ascending=False), width="stretch", height=520)
+
+# =====================================================
+# TAB: LEADERBOARDS
+# =====================================================
+with tabs[3]:
+    st.markdown("### Leaderboards")
+
+    if df_f.empty:
+        st.info("No players to rank with current filters.")
+    else:
+        available_roles = [r for r in role_cols_all if r in df_f.columns]
+        if not available_roles:
+            st.warning("No role score columns found for this dataset.")
+        else:
+            role = st.selectbox(
+                "Role",
+                available_roles,
+                index=available_roles.index(default_sort) if default_sort in available_roles else 0,
+                key=f"lb_role_{position}",
+            )
+            n = st.slider("Rows", 10, 100, 40, 5, key=f"lb_n_{position}")
+
+            cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL, role] if c in df_f.columns]
+            out = df_f.sort_values(role, ascending=False).head(n)[cols].copy()
+            out[role + " (pct)"] = percentile_rank(df_f[role]).reindex(out.index)
+
+            pro_table(rename_for_display(out), pct_cols=[role + " (pct)"], height=740)
+
+            st.markdown("#### Top 20 Bar Chart")
+            fig = px.bar(
+                df_f.sort_values(role, ascending=False).head(20),
+                x=role,
+                y=NAME_COL,
+                orientation="h",
+                color=role,
+                hover_data=[c for c in [TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] if c in df_f.columns],
+            )
+            fig.update_layout(yaxis=dict(categoryorder="total ascending"), height=650)
             st.plotly_chart(fig, width="stretch")
 
-        st.subheader("Similar players")
-        st.caption("Cosine similarity on selected numeric features (z-scored).")
-        sim_features = st.multiselect(
-            "Similarity features",
-            options=[c for c in cfg["metrics"] if c in df_f.columns],
-            default=[c for c in cfg["radar_metrics"] if c in df_f.columns][:6],
-            key=f"sim_feat_{position}",
-        )
-        topk = st.slider("Top K", 5, 25, 10, 1, key=f"sim_topk_{position}")
-        sim_df = similar_players(df_f, player, sim_features, topk=topk)
-        if len(sim_df):
-            pro_table(sim_df, pct_cols=[], height=360)
+# =====================================================
+# TAB: DISTRIBUTIONS
+# =====================================================
+with tabs[4]:
+    st.markdown("### Distributions")
+
+    if df_f.empty:
+        st.info("No players with current filters.")
+    else:
+        numeric_cols = df_f.select_dtypes(include=[np.number]).columns.tolist()
+        if not numeric_cols:
+            st.warning("No numeric columns available.")
         else:
-            st.info("Not enough data/features to compute similarity.")
+            default_metric = default_sort if default_sort in numeric_cols else numeric_cols[0]
+            metric = st.selectbox("Metric", numeric_cols, index=numeric_cols.index(default_metric), key=f"dist_{position}")
 
+            c1, c2 = st.columns(2)
+            with c1:
+                fig1 = px.histogram(df_f, x=metric, nbins=30)
+                fig1.update_layout(height=420)
+                st.plotly_chart(fig1, width="stretch")
+            with c2:
+                fig2 = px.box(df_f, y=metric, points="all")
+                fig2.update_layout(height=420)
+                st.plotly_chart(fig2, width="stretch")
 
-elif page == "Leaderboards":
-    st.subheader("Role Leaderboards")
+            st.markdown("#### Mean by Competition / Team")
+            split_options = [c for c in [COMP_COL, TEAM_COL] if c in df_f.columns]
+            if split_options:
+                split = st.radio("Split by", split_options, horizontal=True, key=f"split_{position}")
+                topk = st.slider("Show top groups", 5, 30, 12, 1, key=f"topk_{position}")
+                g = df_f.groupby(split, dropna=True)[metric].mean().sort_values(ascending=False).head(topk).reset_index()
+                fig3 = px.bar(g, x=metric, y=split, orientation="h", color=metric)
+                fig3.update_layout(height=600, yaxis=dict(categoryorder="total ascending"))
+                st.plotly_chart(fig3, width="stretch")
 
-    available_roles = [r for r in role_cols_all if r in df_f.columns]
-    if not available_roles:
-        st.warning("No role columns found.")
-        st.stop()
-
-    default_role = "Balanced Score" if "Balanced Score" in available_roles else available_roles[0]
-    role = st.selectbox("Role", available_roles, index=available_roles.index(default_role))
-    n = st.slider("Rows", 10, 100, 40, 5)
-
-    cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL, role] if c in df_f.columns]
-    out = df_f.sort_values(role, ascending=False).head(n)[cols].copy()
-    out[role + " (pct)"] = percentile_rank(df_f[role]).reindex(out.index)
-
-    pro_table(rename_for_display(out), pct_cols=[role + " (pct)"], height=740)
-
-    st.markdown("### Top 20 Bar Chart")
-    fig = px.bar(
-        df_f.sort_values(role, ascending=False).head(20),
-        x=role,
-        y=NAME_COL,
-        orientation="h",
-        color=role,
-        hover_data=[c for c in [TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] if c in df_f.columns],
-    )
-    fig.update_layout(yaxis=dict(categoryorder="total ascending"), height=650)
-    st.plotly_chart(fig, width="stretch")
-
-
-elif page == "Distributions":
-    st.subheader("Distributions")
-
-    numeric_cols = df_f.select_dtypes(include=[np.number]).columns.tolist()
-    if not numeric_cols:
-        st.warning("No numeric columns available.")
-        st.stop()
-
-    default_metric = "Balanced Score" if "Balanced Score" in numeric_cols else numeric_cols[0]
-    metric = st.selectbox("Metric", numeric_cols, index=numeric_cols.index(default_metric))
-
-    c1, c2 = st.columns(2)
-    with c1:
-        fig1 = px.histogram(df_f, x=metric, nbins=30)
-        fig1.update_layout(height=420)
-        st.plotly_chart(fig1, width="stretch")
-    with c2:
-        fig2 = px.box(df_f, y=metric, points="all")
-        fig2.update_layout(height=420)
-        st.plotly_chart(fig2, width="stretch")
-
-    st.markdown("### Mean by Competition / Team")
-    split_options = [c for c in [COMP_COL, TEAM_COL] if c in df_f.columns]
-    if split_options:
-        split = st.radio("Split by", split_options, horizontal=True)
-        topk = st.slider("Show top groups", 5, 30, 12, 1)
-        g = df_f.groupby(split, dropna=True)[metric].mean().sort_values(ascending=False).head(topk).reset_index()
-        fig3 = px.bar(g, x=metric, y=split, orientation="h", color=metric)
-        fig3.update_layout(height=600, yaxis=dict(categoryorder="total ascending"))
-        st.plotly_chart(fig3, width="stretch")
-
-
-elif page == "Compare":
-    st.subheader("Compare Players")
-
-    if NAME_COL not in df_f.columns or df_f.empty:
-        st.warning("No players available with current filters.")
-        st.stop()
-
-    players = sorted(df_f[NAME_COL].dropna().unique().tolist())
-    default = players[:2] if len(players) >= 2 else players
-    picks = st.multiselect("Select 2–6 players", players, default=default)
-
-    if len(picks) < 2:
-        st.info("Pick at least 2 players to compare.")
-        st.stop()
-
-    comp_df = df_f[df_f[NAME_COL].isin(picks)].copy()
-
-    st.markdown("### Role Scores Comparison")
-    role_cols = [c for c in role_cols_all if c in comp_df.columns]
-    if role_cols:
-        melt = comp_df.melt(
-            id_vars=[c for c in [NAME_COL, TEAM_COL, COMP_COL] if c in comp_df.columns],
-            value_vars=role_cols,
-            var_name="Role",
-            value_name="Score",
-        )
-        melt["Role"] = melt["Role"].map(lambda x: DISPLAY_RENAMES.get(x, x).replace(" Score", ""))
-        fig = px.bar(melt, x="Score", y=NAME_COL, color="Role", barmode="group")
-        fig.update_layout(height=520)
-        st.plotly_chart(fig, width="stretch")
-
-    st.markdown("### Radar (Key Metric Percentiles)")
-    radar_metrics = [m + " (pct)" for m in cfg["radar_metrics"] if (m + " (pct)") in comp_df.columns]
-    if radar_metrics:
-        fig2 = go.Figure()
-        for name in picks:
-            sub = comp_df[comp_df[NAME_COL] == name].head(1)
-            if sub.empty:
-                continue
-            r = [safe_float(sub.iloc[0].get(m, np.nan)) if not np.isnan(safe_float(sub.iloc[0].get(m, np.nan))) else 0 for m in radar_metrics]
-            theta = [m.replace(" (pct)", "") for m in radar_metrics]
-            fig2.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=name))
-        fig2.update_layout(polar=dict(radialaxis=dict(range=[0, 100])), height=620)
-        st.plotly_chart(fig2, width="stretch")
-
-    st.markdown("### Comparison Table")
-    show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] + role_cols if c in comp_df.columns]
-    sort_role = "Balanced Score" if "Balanced Score" in comp_df.columns else role_cols[0]
-    st.dataframe(comp_df[show].sort_values(sort_role, ascending=False), width="stretch", height=520)
-
-
-elif page == "Shortlist":
-    st.subheader("⭐ Shortlist")
-    st.caption("Your saved targets across datasets (session-only). Export at the bottom.")
+# =====================================================
+# TAB: SHORTLIST (editable + export)
+# =====================================================
+with tabs[5]:
+    st.markdown("### ⭐ Shortlist")
+    st.caption("Saved targets across datasets (session-only). Edit tags/notes and export.")
 
     items = []
     for k, meta in st.session_state.shortlist.items():
         pos, name = k.split("||", 1)
-        items.append({"Position": pos, "Name": name, "Tags": meta.get("tags", ""), "Notes": meta.get("notes", "")})
+        items.append(
+            {
+                "Position": pos,
+                "Name": name,
+                "Tags": meta.get("tags", ""),
+                "Notes": meta.get("notes", ""),
+            }
+        )
 
     if not items:
-        st.info("Shortlist is empty. Add players from Player Profile.")
-        st.stop()
+        st.info("Shortlist is empty. Add players from Search or Profile.")
+    else:
+        sl_df = pd.DataFrame(items)
 
-    sl_df = pd.DataFrame(items)
-    st.dataframe(sl_df, width="stretch", height=520)
+        edited = st.data_editor(
+            sl_df,
+            use_container_width=True,
+            height=520,
+            num_rows="dynamic",
+            column_config={
+                "Position": st.column_config.TextColumn(width="small"),
+                "Name": st.column_config.TextColumn(width="medium"),
+                "Tags": st.column_config.TextColumn(width="medium"),
+                "Notes": st.column_config.TextColumn(width="large"),
+            },
+            key="shortlist_editor",
+        )
 
-    st.download_button(
-        "Download shortlist (CSV)",
-        data=sl_df.to_csv(index=False).encode("utf-8"),
-        file_name="shortlist.csv",
-        mime="text/csv",
-    )
+        # Write edits back to session_state.shortlist
+        new_shortlist = {}
+        for _, r in edited.iterrows():
+            pos = str(r.get("Position", "")).strip()
+            name = str(r.get("Name", "")).strip()
+            if not pos or not name:
+                continue
+            new_shortlist[shortlist_key(pos, name)] = {
+                "tags": str(r.get("Tags", "") or ""),
+                "notes": str(r.get("Notes", "") or ""),
+            }
+        st.session_state.shortlist = new_shortlist
+
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.download_button(
+                "Download shortlist (CSV)",
+                data=edited.to_csv(index=False).encode("utf-8"),
+                file_name="shortlist.csv",
+                mime="text/csv",
+            )
+        with c2:
+            if st.button("Clear shortlist", key="clear_shortlist"):
+                st.session_state.shortlist = {}
+                st.rerun()
