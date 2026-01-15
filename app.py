@@ -23,7 +23,7 @@ COLORS = {
 }
 
 # =====================================================
-# CANONICAL COLUMN NAMES (shared)
+# CANONICAL COLUMN NAMES
 # =====================================================
 NAME_COL = "Name"
 TEAM_COL = "Team"
@@ -33,8 +33,8 @@ NAT_COL = "Nationality"
 SHARE_COL = "Match Share"
 
 # =====================================================
-# POSITION/DATASET CONFIG (EACH POSITION GETS FULL SAME FEATURES)
-# Only thing that changes per position: file, metrics, role defs, key/radar defaults.
+# POSITION CONFIG
+# IMPORTANT: CM metric names must match your CM.xlsx headers EXACTLY.
 # =====================================================
 POSITION_CONFIG = {
     "RWB": {
@@ -105,7 +105,7 @@ POSITION_CONFIG = {
         "file": "CM.xlsx",
         "title": "Central Defender / CM Dataset (CM.xlsx)",
         "metrics": [
-            # Replace these placeholders with EXACT CM.xlsx headers
+            # Replace with exact CM.xlsx headers
             "Progressive Passing",
             "Pass Completion %",
             "Aerial Duels Won %",
@@ -176,74 +176,107 @@ DISPLAY_RENAMES = {
 }
 
 # =====================================================
-# UI THEME (tight / dark / custom)
+# ULTRA TIGHT "WEBAPP" CSS
 # =====================================================
 st.markdown(
     f"""
 <style>
+/* Hide Streamlit chrome */
 #MainMenu {{ visibility: hidden; }}
 footer {{ visibility: hidden; }}
 header {{ visibility: hidden; }}
+
+/* Reduce outer padding massively */
+.block-container {{
+  padding-top: 0.65rem !important;
+  padding-bottom: 1.0rem !important;
+  padding-left: 1.0rem !important;
+  padding-right: 1.0rem !important;
+  max-width: 1180px;   /* webapp feel */
+  margin: 0 auto;
+}}
 
 .stApp {{
   background: {COLORS["background"]};
   color: {COLORS["white"]};
 }}
 
+/* Sidebar compact */
 section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, rgba(11,11,11,0.92) 0%, rgba(14,17,23,0.96) 100%);
   border-right: 1px solid rgba(244,196,48,0.12);
 }}
 section[data-testid="stSidebar"] * {{ color: {COLORS["white"]}; }}
 
-h1, h2, h3 {{ letter-spacing: -0.03em; }}
-.small {{ color: {COLORS["grey"]}; font-size: 0.92rem; }}
+/* Typography tighter */
+h1,h2,h3 {{
+  letter-spacing: -0.03em;
+  margin-bottom: 0.25rem !important;
+}}
+/* make st.caption less "spaced" */
+[data-testid="stCaptionContainer"] {{
+  margin-top: -0.35rem;
+}}
+
 .kicker {{
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: {COLORS["grey"]};
   font-weight: 900;
+  margin-bottom: 0.2rem;
 }}
 
+/* Reduce vertical spacing between elements */
+div[data-testid="stVerticalBlock"] > div {{ gap: 0.45rem; }}
+
+/* Cards */
 .card {{
-  background: rgba(11,11,11,0.65);
+  background: rgba(11,11,11,0.62);
   border: 1px solid rgba(244,196,48,0.10);
-  border-radius: 16px;
-  padding: 14px 14px;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.30);
+  border-radius: 14px;
+  padding: 12px 12px;
 }}
 .card-strong {{
   background: rgba(11,11,11,0.78);
   border: 1px solid rgba(244,196,48,0.18);
 }}
 
-.headerbar {{
-  background: linear-gradient(135deg, rgba(11,11,11,0.85) 0%, rgba(14,17,23,0.85) 100%);
+/* Sticky header */
+.topbar {{
+  position: sticky;
+  top: 0;
+  z-index: 99;
+  background: linear-gradient(135deg, rgba(11,11,11,0.92) 0%, rgba(14,17,23,0.92) 100%);
   border: 1px solid rgba(244,196,48,0.16);
-  border-radius: 18px;
-  padding: 14px 16px;
+  border-radius: 16px;
+  padding: 12px 14px;
   display:flex;
   align-items:center;
   justify-content:space-between;
+  backdrop-filter: blur(8px);
 }}
-.header-left {{
+
+.topbar-left {{
   display:flex;
   gap:10px;
   align-items:baseline;
   flex-wrap: wrap;
 }}
-.brand {{ font-size: 1.35rem; font-weight: 950; }}
+.brand {{
+  font-size: 1.20rem;
+  font-weight: 950;
+}}
 .pill {{
   display:inline-flex;
   align-items:center;
   gap:8px;
   border: 1px solid rgba(247,247,247,0.10);
   background: rgba(11,11,11,0.55);
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-weight: 900;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   color: {COLORS["white"]};
 }}
 .pill-accent {{
@@ -256,22 +289,35 @@ h1, h2, h3 {{ letter-spacing: -0.03em; }}
   color: {COLORS["black"]};
 }}
 
+/* Player row compact */
 .player-row {{
-  border: 1px solid rgba(247,247,247,0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(247,247,247,0.07);
+  border-radius: 12px;
   background: rgba(11,11,11,0.55);
-  padding: 12px 12px;
+  padding: 10px 10px;
 }}
 .player-row:hover {{ border-color: rgba(244,196,48,0.28); }}
-.player-name {{ font-weight: 950; font-size: 1.03rem; color: {COLORS["white"]}; }}
-.player-meta {{ color: {COLORS["grey"]}; font-size: 0.9rem; margin-top: 2px; }}
 
+.player-name {{
+  font-weight: 950;
+  font-size: 0.98rem;
+  line-height: 1.1;
+}}
+.player-meta {{
+  color: {COLORS["grey"]};
+  font-size: 0.86rem;
+  line-height: 1.2;
+  margin-top: 2px;
+}}
+
+/* Buttons compact */
 div.stButton > button {{
-  border-radius: 12px;
+  border-radius: 11px;
   border: 1px solid rgba(247,247,247,0.12);
   background: rgba(11,11,11,0.55);
   color: {COLORS["white"]};
   font-weight: 900;
+  padding: 0.35rem 0.55rem;
 }}
 div.stButton > button:hover {{
   border-color: rgba(244,196,48,0.45);
@@ -284,25 +330,33 @@ button[kind="primary"] {{
   font-weight: 950 !important;
 }}
 
+/* Inputs compact */
 div[data-baseweb="input"] > div {{
-  border-radius: 12px !important;
+  border-radius: 11px !important;
   background: rgba(11,11,11,0.55) !important;
   border: 1px solid rgba(247,247,247,0.10) !important;
 }}
 div[data-baseweb="select"] > div {{
-  border-radius: 12px !important;
+  border-radius: 11px !important;
   background: rgba(11,11,11,0.55) !important;
   border: 1px solid rgba(247,247,247,0.10) !important;
 }}
 
-div[data-testid="stSlider"] > div {{
-  border-radius: 14px;
-  background: rgba(11,11,11,0.40);
-  border: 1px solid rgba(247,247,247,0.08);
-  padding: 8px 10px;
+/* Tabs tighter */
+button[data-baseweb="tab"] {{
+  font-weight: 950 !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}}
+div[data-baseweb="tab-list"] {{ gap: 4px; }}
+
+/* Sticky pinned panel (right side) */
+.sticky {{
+  position: sticky;
+  top: 78px; /* below topbar */
 }}
 
-div[data-testid="stVerticalBlock"] > div {{ gap: 0.62rem; }}
+/* Dataframe header weight */
 div[data-testid="stDataFrame"] thead tr th {{ font-weight: 950; }}
 </style>
 """,
@@ -367,24 +421,15 @@ def score_from_z(z: pd.Series) -> pd.Series:
     z = z.map(safe_float).fillna(0.0)
     return (50 + 15 * z).clip(0, 100)
 
-# =====================================================
-# UNIQUE ROW ID (fixes StreamlitDuplicateElementKey)
-# =====================================================
 def make_rowid(row: pd.Series, position: str) -> str:
-    parts = [
-        position,
-        str(row.get(NAME_COL, "")),
-        str(row.get(TEAM_COL, "")),
-        str(row.get(COMP_COL, "")),
-        str(row.name),
-    ]
+    parts = [position, str(row.get(NAME_COL, "")), str(row.get(TEAM_COL, "")), str(row.get(COMP_COL, "")), str(row.name)]
     raw = "||".join(parts)
     return hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
 
 # =====================================================
-# TABLE (NO STYLER)
+# TABLE
 # =====================================================
-def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int = 600):
+def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int = 520):
     pct_cols = pct_cols or []
     pct_cols = [c for c in pct_cols if c in df.columns]
     col_config = {}
@@ -414,7 +459,7 @@ def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int =
     st.dataframe(df, width="stretch", height=height, column_config=col_config, hide_index=True)
 
 # =====================================================
-# LOAD + PREP DATA (works identically for RWB and CM)
+# LOAD + PREP
 # =====================================================
 @st.cache_data(show_spinner=False)
 def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
@@ -447,19 +492,19 @@ def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
     return df, cfg
 
 # =====================================================
-# STATE (per dataset)
+# STATE
 # =====================================================
 def ensure_state():
     if "filters" not in st.session_state:
-        st.session_state.filters = {}  # position -> filter dict
+        st.session_state.filters = {}
     if "shortlist" not in st.session_state:
-        st.session_state.shortlist = {}  # "POS||Name" -> {"tags","notes"}
+        st.session_state.shortlist = {}
     if "pinned" not in st.session_state:
-        st.session_state.pinned = {}  # position -> player name
+        st.session_state.pinned = {}
     if "selected_player" not in st.session_state:
-        st.session_state.selected_player = {}  # position -> player name
+        st.session_state.selected_player = {}
     if "compare_picks" not in st.session_state:
-        st.session_state.compare_picks = {}  # position -> list[player names]
+        st.session_state.compare_picks = {}
 
 def shortlist_key(position_key: str, player_name: str) -> str:
     return f"{position_key}||{player_name}"
@@ -525,7 +570,7 @@ def similar_players(df_f: pd.DataFrame, player_name: str, feature_cols: list[str
     return out[show_cols]
 
 # =====================================================
-# FILTERS (position-agnostic)
+# FILTERS
 # =====================================================
 def default_filters_for(df: pd.DataFrame):
     if AGE_COL in df.columns and len(df):
@@ -578,7 +623,7 @@ position = st.sidebar.selectbox("Dataset", list(POSITION_CONFIG.keys()), index=0
 
 df, cfg = load_and_prepare(position)
 
-# Per-position state init
+# per-position state
 if position not in st.session_state.filters:
     st.session_state.filters[position] = default_filters_for(df)
 if position not in st.session_state.pinned:
@@ -589,15 +634,16 @@ if position not in st.session_state.compare_picks:
     st.session_state.compare_picks[position] = []
 
 f = st.session_state.filters[position]
-
 role_cols_all = [r for r in cfg["role_defs"].keys() if r in df.columns]
 default_sort = cfg.get("default_sort", "Balanced Score")
 if default_sort not in df.columns and role_cols_all:
     default_sort = role_cols_all[0]
 
-with st.sidebar.expander("Filters", expanded=True):
-    f["q"] = st.text_input("Search", value=f.get("q", ""), placeholder="Name / Team / Comp / Nat…")
-    f["min_share"] = st.slider("Min Share", 0.0, 1.0, float(f.get("min_share", 0.20)), 0.05)
+# sidebar filters (tight)
+with st.sidebar.container():
+    st.sidebar.markdown('<div class="card">', unsafe_allow_html=True)
+    f["q"] = st.sidebar.text_input("Search", value=f.get("q", ""), placeholder="Name / Team / Comp / Nat…")
+    f["min_share"] = st.sidebar.slider("Min Share", 0.0, 1.0, float(f.get("min_share", 0.20)), 0.05)
 
     if AGE_COL in df.columns and len(df):
         vals = df[AGE_COL].dropna()
@@ -606,29 +652,30 @@ with st.sidebar.expander("Filters", expanded=True):
         lo, hi = f.get("age_range", (min_age, max_age))
         lo = max(min_age, lo)
         hi = min(max_age, hi)
-        f["age_range"] = st.slider("Age", min_age, max_age, (lo, hi), 1)
+        f["age_range"] = st.sidebar.slider("Age", min_age, max_age, (lo, hi), 1)
 
     if COMP_COL in df.columns:
         comps_all = sorted([c for c in df[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
-        f["competitions"] = st.multiselect("Competitions", comps_all, default=f.get("competitions", []))
+        f["competitions"] = st.sidebar.multiselect("Competitions", comps_all, default=f.get("competitions", []))
 
     if TEAM_COL in df.columns:
         teams_all = sorted([t for t in df[TEAM_COL].dropna().unique().tolist() if str(t).strip() != ""])
-        f["teams"] = st.multiselect("Teams", teams_all, default=f.get("teams", []))
+        f["teams"] = st.sidebar.multiselect("Teams", teams_all, default=f.get("teams", []))
 
     if NAT_COL in df.columns:
         nats_all = sorted([n for n in df[NAT_COL].dropna().unique().tolist() if str(n).strip() != ""])
-        f["nats"] = st.multiselect("Nationalities", nats_all, default=f.get("nats", []))
+        f["nats"] = st.sidebar.multiselect("Nationalities", nats_all, default=f.get("nats", []))
 
-    c1, c2 = st.columns(2)
+    c1, c2 = st.sidebar.columns(2)
     with c1:
         if st.button("Reset", type="primary", key=f"reset_{position}"):
             st.session_state.filters[position] = default_filters_for(df)
             st.rerun()
     with c2:
         st.caption("Live")
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
-# Apply filters + add unique row ids (critical for no duplicate keys)
+# apply filters + row ids
 df_f = apply_filters(df, f)
 if not df_f.empty:
     df_f = df_f.copy()
@@ -636,29 +683,29 @@ if not df_f.empty:
 else:
     df_f["_rowid"] = []
 
-# Default pinned
+# default pinned
 if st.session_state.pinned[position] is None and len(df_f) and NAME_COL in df_f.columns:
     st.session_state.pinned[position] = df_f.sort_values(default_sort, ascending=False).iloc[0][NAME_COL]
 if st.session_state.selected_player[position] is None and st.session_state.pinned[position] is not None:
     st.session_state.selected_player[position] = st.session_state.pinned[position]
 
-# Header
+# topbar
 shortlist_count = len(st.session_state.shortlist)
 teams_n = df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0
 comps_n = df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0
 
 st.markdown(
     f"""
-<div class="headerbar">
-  <div class="header-left">
-    <div class="brand">⚽ Scout Lab</div>
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="brand">Scout Lab</div>
     <span class="pill pill-accent">{cfg["title"]}</span>
     <span class="pill">Players <strong>{len(df_f)}</strong></span>
     <span class="pill">Teams <strong>{teams_n}</strong></span>
     <span class="pill">Comps <strong>{comps_n}</strong></span>
   </div>
-  <div style="display:flex;gap:10px;align-items:center;">
-    <span class="pill pill-solid">⭐ Shortlist {shortlist_count}</span>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span class="pill pill-solid">⭐ {shortlist_count}</span>
   </div>
 </div>
 """,
@@ -668,11 +715,10 @@ st.markdown(
 tabs = st.tabs(["Search", "Profile", "Compare", "Leaderboards", "Distributions", "Shortlist"])
 
 # =====================================================
-# SEARCH
+# SEARCH (two pane, pinned sticky)
 # =====================================================
 with tabs[0]:
     st.markdown('<div class="kicker">Scout</div>', unsafe_allow_html=True)
-    st.markdown("## Search")
 
     if df_f.empty:
         st.info("No players match your filters.")
@@ -682,10 +728,15 @@ with tabs[0]:
             sort_options = [c for c in df_f.columns if pd.api.types.is_numeric_dtype(df_f[c])]
         sort_col = st.selectbox("Sort", options=sort_options, index=0, key=f"sort_{position}")
 
-        left, right = st.columns([1.15, 1])
+        left, right = st.columns([1.10, 0.90], gap="medium")
 
         with left:
-            st.markdown("### Results")
+            # Compact results header
+            h1, h2, h3 = st.columns([1.4, 1.0, 0.6])
+            h1.markdown("### Results")
+            h2.caption("Click Open → updates pinned")
+            h3.caption(f"{len(df_f)} rows")
+
             results = df_f.sort_values(sort_col, ascending=False).head(60).copy()
             for _, r in results.iterrows():
                 name = str(r.get(NAME_COL, "—"))
@@ -693,7 +744,7 @@ with tabs[0]:
                 in_sl = shortlist_key(position, name) in st.session_state.shortlist
 
                 st.markdown('<div class="player-row">', unsafe_allow_html=True)
-                a, b, c = st.columns([3.3, 1.1, 1.4])
+                a, b, c = st.columns([3.2, 1.1, 1.2], gap="small")
                 with a:
                     st.markdown(f'<div class="player-name">{name}</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="player-meta">{player_meta(r)}</div>', unsafe_allow_html=True)
@@ -710,11 +761,12 @@ with tabs[0]:
                 st.markdown("</div>", unsafe_allow_html=True)
 
         with right:
+            st.markdown('<div class="sticky">', unsafe_allow_html=True)
             st.markdown("### Pinned")
             pinned = st.session_state.pinned.get(position)
 
             if not pinned:
-                st.caption("Pick a player in Results.")
+                st.caption("Open a player in Results.")
             else:
                 p = df_f[df_f[NAME_COL] == pinned].head(1)
                 if p.empty:
@@ -722,176 +774,152 @@ with tabs[0]:
                 else:
                     row = p.iloc[0]
                     st.markdown('<div class="card card-strong">', unsafe_allow_html=True)
-                    st.markdown(f"### {pinned}")
+                    st.markdown(f"**{pinned}**")
                     st.caption(player_meta(row))
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                    st.markdown("#### Role snapshot")
-                    tiles = st.columns(min(4, max(1, len(role_cols_all))))
+                    # compact role tiles
+                    st.markdown("#### Roles")
+                    tiles = st.columns(min(4, max(1, len(role_cols_all))), gap="small")
                     for i, rc in enumerate(role_cols_all[:4]):
                         tiles[i].metric(DISPLAY_RENAMES.get(rc, rc).replace(" Score", ""), safe_fmt(row.get(rc, np.nan), 1))
 
                     st.markdown("#### Signals (pct)")
-                    top, bottom = strengths_weaknesses(cfg, row, topn=5)
-                    c1, c2 = st.columns(2)
+                    top, bottom = strengths_weaknesses(cfg, row, topn=4)
+                    c1, c2 = st.columns(2, gap="small")
                     with c1:
-                        st.markdown("**Strengths**")
                         for m, pct in top:
                             st.write(f"↑ {m} — {pct:.0f}")
                     with c2:
-                        st.markdown("**Risks**")
                         for m, pct in bottom:
                             st.write(f"↓ {m} — {pct:.0f}")
 
-                    st.markdown("#### Actions")
-                    a1, a2, a3 = st.columns(3)
-                    with a1:
-                        in_sl = shortlist_key(position, pinned) in st.session_state.shortlist
-                        if st.button("Shortlist" if not in_sl else "Shortlisted", key=f"sl_pin_{position}", type="primary"):
-                            add_to_shortlist(position, pinned) if not in_sl else remove_from_shortlist(position, pinned)
-                            st.rerun()
-                    with a2:
+                    a1, a2 = st.columns(2, gap="small")
+                    in_sl = shortlist_key(position, pinned) in st.session_state.shortlist
+                    if a1.button("Shortlist" if not in_sl else "Shortlisted", key=f"sl_pin_{position}", type="primary"):
+                        add_to_shortlist(position, pinned) if not in_sl else remove_from_shortlist(position, pinned)
+                        st.rerun()
+                    if a2.button("Add Compare", key=f"addcmp_{position}"):
                         picks = st.session_state.compare_picks[position]
-                        if st.button("Add to Compare", key=f"addcmp_{position}"):
-                            if pinned not in picks:
-                                picks.append(pinned)
-                                st.session_state.compare_picks[position] = picks[:6]
-                            st.rerun()
-                    with a3:
-                        st.caption("Profile uses pinned")
+                        if pinned not in picks:
+                            picks.append(pinned)
+                            st.session_state.compare_picks[position] = picks[:6]
+                        st.rerun()
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # =====================================================
 # PROFILE
 # =====================================================
 with tabs[1]:
     st.markdown('<div class="kicker">Report</div>', unsafe_allow_html=True)
-    st.markdown("## Player Profile")
 
     if df_f.empty or NAME_COL not in df_f.columns:
         st.warning("No players available with current filters.")
     else:
         players = sorted(df_f[NAME_COL].dropna().unique().tolist())
-        default_player = (
-            st.session_state.selected_player.get(position)
-            or st.session_state.pinned.get(position)
-            or (players[0] if players else None)
-        )
+        default_player = st.session_state.selected_player.get(position) or st.session_state.pinned.get(position) or (players[0] if players else None)
         if default_player not in players and players:
             default_player = players[0]
 
-        player = st.selectbox("Player", players, index=players.index(default_player) if default_player in players else 0, key=f"profile_{position}")
+        # compact row: select + actions
+        csel, cact = st.columns([2.3, 1.0], gap="small")
+        player = csel.selectbox("Player", players, index=players.index(default_player) if default_player in players else 0, key=f"profile_{position}")
         st.session_state.selected_player[position] = player
 
         p = df_f[df_f[NAME_COL] == player].head(1)
         row = p.iloc[0]
 
+        in_sl = shortlist_key(position, player) in st.session_state.shortlist
+        if cact.button("Shortlist" if not in_sl else "Shortlisted", type="primary", key=f"sl_profile_{position}_{player}"):
+            add_to_shortlist(position, player) if not in_sl else remove_from_shortlist(position, player)
+            st.rerun()
+
+        # header card
         st.markdown('<div class="card card-strong">', unsafe_allow_html=True)
-        c1, c2, c3, c4, c5 = st.columns([2.2, 1, 1, 1, 1.2])
+        c1, c2, c3, c4 = st.columns([2.4, 1, 1, 1], gap="small")
         c1.markdown(f"### {player}")
         c1.caption(player_meta(row))
         c2.metric("Age", safe_int_fmt(row.get(AGE_COL, np.nan)))
         c3.metric("Share", safe_fmt(row.get(SHARE_COL, np.nan), 2))
-        if "Balanced Score" in df_f.columns:
-            c4.metric("Balanced", safe_fmt(row.get("Balanced Score", np.nan), 1))
-        else:
-            c4.metric("Score", "—")
-
-        in_sl = shortlist_key(position, player) in st.session_state.shortlist
-        if c5.button("Shortlist" if not in_sl else "Shortlisted", key=f"sl_profile_{position}_{player}", type="primary"):
-            add_to_shortlist(position, player) if not in_sl else remove_from_shortlist(position, player)
-            st.rerun()
+        c4.metric("Balanced" if "Balanced Score" in df_f.columns else "Score", safe_fmt(row.get("Balanced Score", np.nan), 1) if "Balanced Score" in df_f.columns else "—")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        if shortlist_key(position, player) in st.session_state.shortlist:
-            meta = st.session_state.shortlist[shortlist_key(position, player)]
-            st.markdown("### Notes")
-            a, b = st.columns([1, 2])
-            meta["tags"] = a.text_input("Tags", value=meta.get("tags", ""), key=f"tags_{position}_{player}")
-            meta["notes"] = b.text_area("Notes", value=meta.get("notes", ""), height=90, key=f"notes_{position}_{player}")
-
-        st.markdown("---")
-
+        # strengths / risks compact
         top, bottom = strengths_weaknesses(cfg, row, topn=6)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("### Strengths (pct)")
+        left, right = st.columns(2, gap="medium")
+        with left:
+            st.markdown("#### Strengths (pct)")
             for m, pct in top:
                 st.write(f"↑ **{m}** — {pct:.0f}")
-        with c2:
-            st.markdown("### Risks (pct)")
+        with right:
+            st.markdown("#### Risks (pct)")
             for m, pct in bottom:
                 st.write(f"↓ **{m}** — {pct:.0f}")
 
         st.markdown("---")
-        left, right = st.columns([1, 1])
 
-        with left:
-            st.markdown("### Role scores")
-            role_cols = [c for c in role_cols_all if c in df_f.columns]
+        colA, colB = st.columns([1.0, 1.0], gap="medium")
+        with colA:
+            st.markdown("#### Role scores")
+            role_cols = [c for c in cfg["role_defs"].keys() if c in df_f.columns]
             role_row = pd.DataFrame(
-                [
-                    {
-                        "Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""),
-                        "Score": safe_float(row.get(c, np.nan)),
-                        "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan,
-                    }
-                    for c in role_cols
-                ]
+                [{
+                    "Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""),
+                    "Score": safe_float(row.get(c, np.nan)),
+                    "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan,
+                } for c in role_cols]
             )
-            pro_table(role_row, pct_cols=["Percentile"], height=320)
+            pro_table(role_row, pct_cols=["Percentile"], height=270)
 
-            st.markdown("### Key metrics (pct)")
+            st.markdown("#### Key metrics (pct)")
             key = []
             for m in cfg["metrics"]:
                 if m in df_f.columns and (m + " (pct)") in df_f.columns:
-                    key.append(
-                        {
-                            "Metric": m,
-                            "Value": safe_float(row.get(m, np.nan)),
-                            "Percentile": safe_float(row.get(m + " (pct)", np.nan)),
-                        }
-                    )
+                    key.append({"Metric": m, "Value": safe_float(row.get(m, np.nan)), "Percentile": safe_float(row.get(m + " (pct)", np.nan))})
             key_df = pd.DataFrame(key)
-            pro_table(key_df, pct_cols=["Percentile"], height=520) if len(key_df) else st.info("No metric columns found.")
+            if len(key_df):
+                pro_table(key_df, pct_cols=["Percentile"], height=420)
+            else:
+                st.info("No metric columns found.")
 
-        with right:
-            st.markdown("### Radar (roles)")
-            radar_cols = [c for c in role_cols_all if c in df_f.columns]
+        with colB:
+            st.markdown("#### Radar (roles)")
+            radar_cols = [c for c in cfg["role_defs"].keys() if c in df_f.columns]
             if radar_cols:
                 fig = go.Figure()
-                fig.add_trace(
-                    go.Scatterpolar(
-                        r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
-                        theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
-                        fill="toself",
-                        name=player,
-                    )
-                )
+                fig.add_trace(go.Scatterpolar(
+                    r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
+                    theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
+                    fill="toself",
+                    name=player,
+                ))
                 fig.update_layout(
                     polar=dict(radialaxis=dict(range=[0, 100], gridcolor="rgba(247,247,247,0.10)")),
                     height=520,
-                    margin=dict(l=10, r=10, t=30, b=10),
+                    margin=dict(l=10, r=10, t=20, b=10),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["white"]),
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-            st.markdown("### Similar players")
-            st.caption("Cosine similarity on selected features (z-scored).")
+            st.markdown("#### Similar players")
             sim_default = [m for m in cfg["radar_metrics"] if m in df_f.columns][:6]
             sim_features = st.multiselect("Features", options=[m for m in cfg["metrics"] if m in df_f.columns], default=sim_default, key=f"simfeat_{position}")
             topk = st.slider("Top K", 5, 25, 10, 1, key=f"simk_{position}")
+
             sim_df = similar_players(df_f, player, sim_features, topk=topk)
-            pro_table(sim_df, pct_cols=[], height=360) if len(sim_df) else st.info("Not enough data/features.")
+            if len(sim_df):
+                pro_table(sim_df, pct_cols=[], height=320)
+            else:
+                st.info("Not enough data/features to compute similarity.")
 
 # =====================================================
 # COMPARE
 # =====================================================
 with tabs[2]:
     st.markdown('<div class="kicker">Decision</div>', unsafe_allow_html=True)
-    st.markdown("## Compare")
-
     if df_f.empty or NAME_COL not in df_f.columns:
         st.warning("No players available with current filters.")
     else:
@@ -906,9 +934,8 @@ with tabs[2]:
             st.info("Pick at least 2 players to compare.")
         else:
             comp_df = df_f[df_f[NAME_COL].isin(chosen)].copy()
+            role_cols = [c for c in cfg["role_defs"].keys() if c in comp_df.columns]
 
-            st.markdown("### Role bars")
-            role_cols = [c for c in role_cols_all if c in comp_df.columns]
             if role_cols:
                 melt = comp_df.melt(
                     id_vars=[c for c in [NAME_COL, TEAM_COL, COMP_COL] if c in comp_df.columns],
@@ -918,10 +945,14 @@ with tabs[2]:
                 )
                 melt["Role"] = melt["Role"].map(lambda x: DISPLAY_RENAMES.get(x, x).replace(" Score", ""))
                 fig = px.bar(melt, x="Score", y=NAME_COL, color="Role", barmode="group")
-                fig.update_layout(height=520, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=COLORS["white"]))
+                fig.update_layout(
+                    height=520,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color=COLORS["white"]),
+                )
                 st.plotly_chart(fig, use_container_width=True)
 
-            st.markdown("### Radar (key metric pct)")
             radar_metrics = [m + " (pct)" for m in cfg["radar_metrics"] if (m + " (pct)") in comp_df.columns]
             if radar_metrics:
                 fig2 = go.Figure()
@@ -932,47 +963,42 @@ with tabs[2]:
                     fig2.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=nm))
                 fig2.update_layout(
                     polar=dict(radialaxis=dict(range=[0, 100], gridcolor="rgba(247,247,247,0.10)")),
-                    height=620,
+                    height=560,
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["white"]),
                 )
                 st.plotly_chart(fig2, use_container_width=True)
 
-            st.markdown("### Table")
             show = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL] + role_cols if c in comp_df.columns]
             sort_role = "Balanced Score" if "Balanced Score" in comp_df.columns else (role_cols[0] if role_cols else show[-1])
-            st.dataframe(comp_df[show].sort_values(sort_role, ascending=False), use_container_width=True, height=520)
+            st.dataframe(comp_df[show].sort_values(sort_role, ascending=False), use_container_width=True, height=460)
 
 # =====================================================
 # LEADERBOARDS
 # =====================================================
 with tabs[3]:
     st.markdown('<div class="kicker">Market</div>', unsafe_allow_html=True)
-    st.markdown("## Leaderboards")
-
     if df_f.empty:
         st.info("No players to rank with current filters.")
     else:
-        available_roles = [r for r in role_cols_all if r in df_f.columns]
-        if not available_roles:
+        role_cols = [c for c in cfg["role_defs"].keys() if c in df_f.columns]
+        if not role_cols:
             st.warning("No role score columns found.")
         else:
-            role = st.selectbox("Role", available_roles, index=available_roles.index(default_sort) if default_sort in available_roles else 0, key=f"lb_role_{position}")
+            role = st.selectbox("Role", role_cols, index=role_cols.index(default_sort) if default_sort in role_cols else 0, key=f"lb_role_{position}")
             n = st.slider("Rows", 10, 100, 40, 5, key=f"lb_n_{position}")
 
             cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL, NAT_COL, role] if c in df_f.columns]
             out = df_f.sort_values(role, ascending=False).head(n)[cols].copy()
             out[role + " (pct)"] = percentile_rank(df_f[role]).reindex(out.index)
-            pro_table(out, pct_cols=[role + " (pct)"], height=740)
+            pro_table(out, pct_cols=[role + " (pct)"], height=560)
 
 # =====================================================
 # DISTRIBUTIONS
 # =====================================================
 with tabs[4]:
     st.markdown('<div class="kicker">Context</div>', unsafe_allow_html=True)
-    st.markdown("## Distributions")
-
     if df_f.empty:
         st.info("No players with current filters.")
     else:
@@ -983,14 +1009,14 @@ with tabs[4]:
             default_metric = default_sort if default_sort in numeric_cols else numeric_cols[0]
             metric = st.selectbox("Metric", numeric_cols, index=numeric_cols.index(default_metric), key=f"dist_{position}")
 
-            c1, c2 = st.columns(2)
+            c1, c2 = st.columns(2, gap="small")
             with c1:
                 fig1 = px.histogram(df_f, x=metric, nbins=30)
-                fig1.update_layout(height=420, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=COLORS["white"]))
+                fig1.update_layout(height=360, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=COLORS["white"]))
                 st.plotly_chart(fig1, use_container_width=True)
             with c2:
                 fig2 = px.box(df_f, y=metric, points="all")
-                fig2.update_layout(height=420, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=COLORS["white"]))
+                fig2.update_layout(height=360, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=COLORS["white"]))
                 st.plotly_chart(fig2, use_container_width=True)
 
 # =====================================================
@@ -998,9 +1024,6 @@ with tabs[4]:
 # =====================================================
 with tabs[5]:
     st.markdown('<div class="kicker">Targets</div>', unsafe_allow_html=True)
-    st.markdown("## Shortlist")
-    st.caption("Saved targets across datasets. Edit tags/notes and export.")
-
     items = []
     for k, meta in st.session_state.shortlist.items():
         pos, name = k.split("||", 1)
@@ -1013,7 +1036,7 @@ with tabs[5]:
         edited = st.data_editor(
             sl_df,
             use_container_width=True,
-            height=520,
+            height=480,
             num_rows="dynamic",
             column_config={
                 "Position": st.column_config.TextColumn(width="small"),
@@ -1030,13 +1053,10 @@ with tabs[5]:
             name = str(r.get("Name", "")).strip()
             if not pos or not name:
                 continue
-            new_shortlist[shortlist_key(pos, name)] = {
-                "tags": str(r.get("Tags", "") or ""),
-                "notes": str(r.get("Notes", "") or ""),
-            }
+            new_shortlist[shortlist_key(pos, name)] = {"tags": str(r.get("Tags", "") or ""), "notes": str(r.get("Notes", "") or "")}
         st.session_state.shortlist = new_shortlist
 
-        c1, c2 = st.columns([1, 1])
+        c1, c2 = st.columns(2, gap="small")
         with c1:
             st.download_button(
                 "Download shortlist (CSV)",
