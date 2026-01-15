@@ -178,7 +178,7 @@ h4 {{font-size: 1.1rem; margin-bottom: 0.3rem;}}
 .header-bar {{
     background: linear-gradient(135deg, {COLORS["card"]} 0%, {COLORS["dark"]} 100%);
     border: 1px solid {COLORS["border"]};
-    border-radius: 20px;
+    border-radius: 14px;
     padding: 1.5rem 2rem;
     margin-bottom: 2rem;
     display: flex;
@@ -231,7 +231,7 @@ h4 {{font-size: 1.1rem; margin-bottom: 0.3rem;}}
     font-size: 0.9rem;
     font-weight: 600;
     color: {COLORS["text"]};
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 .stat-pill:hover {{
@@ -248,11 +248,11 @@ h4 {{font-size: 1.1rem; margin-bottom: 0.3rem;}}
 .modern-card {{
     background: linear-gradient(135deg, {COLORS["card"]} 0%, {COLORS["dark"]} 100%);
     border: 1px solid {COLORS["border"]};
-    border-radius: 16px;
+    border-radius: 14px;
     padding: 1.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.2rem;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 .modern-card:hover {{
@@ -264,10 +264,10 @@ h4 {{font-size: 1.1rem; margin-bottom: 0.3rem;}}
 .player-card {{
     background: {COLORS["card"]};
     border: 1px solid {COLORS["border"]};
-    border-radius: 12px;
-    padding: 1.25rem;
+    border-radius: 10px;
+    padding: 1rem;
     margin-bottom: 1rem;
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
 }}
 
@@ -287,7 +287,7 @@ h4 {{font-size: 1.1rem; margin-bottom: 0.3rem;}}
 }}
 
 .player-meta {{
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: {COLORS["muted"]};
     line-height: 1.4;
 }}
@@ -296,10 +296,10 @@ h4 {{font-size: 1.1rem; margin-bottom: 0.3rem;}}
 .metric-card {{
     background: linear-gradient(135deg, {COLORS["card"]} 0%, {COLORS["dark"]} 100%);
     border: 1px solid {COLORS["border"]};
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 1rem;
     text-align: center;
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 .metric-card:hover {{
@@ -334,12 +334,23 @@ div.stButton > button {{
     border-radius: 10px;
     padding: 0.6rem 1.5rem;
     font-weight: 800;
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     letter-spacing: 0.01em;
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3);
 }}
 
+div.stButton > button:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 217, 255, 0.5);
+}}
+
+div.stButton > button:active {{
+    transform: translateY(0px);
+    box-shadow: 0 2px 8px rgba(0, 217, 255, 0.4);
+}}
+
+/* Prevent double hover */
 div.stButton > button:hover {{
     transform: translateY(-2px);
     box-shadow: 0 6px 25px rgba(0, 217, 255, 0.5);
@@ -365,13 +376,14 @@ div[data-baseweb="base-input"] {{
     border: 1px solid {COLORS["border"]} !important;
     border-radius: 10px !important;
     color: {COLORS["text"]} !important;
-    transition: all 0.3s ease !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }}
 
 div[data-baseweb="input"] > div:focus-within,
 div[data-baseweb="select"] > div:focus-within {{
     border-color: {COLORS["primary"]} !important;
     box-shadow: 0 0 0 2px {COLORS["primary"]}20 !important;
+    transform: translateY(-1px);
 }}
 
 /* Tabs */
@@ -382,7 +394,7 @@ button[data-baseweb="tab"] {{
     font-weight: 700 !important;
     font-size: 1rem !important;
     padding: 0.75rem 1.5rem !important;
-    transition: all 0.3s ease !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }}
 
 button[data-baseweb="tab"][aria-selected="true"] {{
@@ -398,7 +410,7 @@ button[data-baseweb="tab"]:hover {{
 div[data-testid="stDataFrame"] {{
     background: {COLORS["card"]};
     border: 1px solid {COLORS["border"]};
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
 }}
 
@@ -432,13 +444,13 @@ div[data-testid="stDataFrame"] tbody tr:hover {{
 .strength-item {{
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
     padding: 0.75rem;
     background: {COLORS["card"]};
     border: 1px solid {COLORS["border"]};
     border-radius: 8px;
     margin-bottom: 0.5rem;
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 .strength-item:hover {{
@@ -449,13 +461,13 @@ div[data-testid="stDataFrame"] tbody tr:hover {{
 .weakness-item {{
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
     padding: 0.75rem;
     background: {COLORS["card"]};
     border: 1px solid {COLORS["border"]};
     border-radius: 8px;
     margin-bottom: 0.5rem;
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 .weakness-item:hover {{
@@ -488,14 +500,14 @@ div[data-testid="stProgress"] > div > div > div {{
 /* Captions */
 .stCaption, [data-testid="stCaptionContainer"] {{
     color: {COLORS["muted"]} !important;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
 }}
 
 /* Info/Warning boxes */
 div[data-testid="stNotification"] {{
     background: {COLORS["card"]} !important;
     border: 1px solid {COLORS["border"]} !important;
-    border-radius: 12px !important;
+    border-radius: 10px !important;
     color: {COLORS["text"]} !important;
 }}
 
@@ -503,13 +515,13 @@ div[data-testid="stNotification"] {{
 div[data-testid="stExpander"] {{
     background: {COLORS["card"]};
     border: 1px solid {COLORS["border"]};
-    border-radius: 12px;
+    border-radius: 10px;
 }}
 
 /* Scrollbar */
 ::-webkit-scrollbar {{
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }}
 
 ::-webkit-scrollbar-track {{
@@ -538,7 +550,7 @@ div[data-testid="stExpander"] {{
 }}
 
 .loading {{
-    animation: pulse 2s ease-in-out infinite;
+    animation: pulse 1.5s ease-in-out infinite;
 }}
 
 /* Responsive */
@@ -552,6 +564,21 @@ div[data-testid="stExpander"] {{
     .block-container {{
         padding: 1rem !important;
     }}
+}}
+
+/* Performance optimization - GPU acceleration */
+.player-card,
+.modern-card,
+.metric-card,
+.stat-pill,
+button {{
+    will-change: transform;
+    transform: translateZ(0);
+}}
+
+/* Smooth scroll */
+html {{
+    scroll-behavior: smooth;
 }}
 </style>
 """,
@@ -925,7 +952,7 @@ with tabs[0]:
         with left_col:
             st.markdown('<div class="section-header">Search Results</div>', unsafe_allow_html=True)
             
-            results = df_f.sort_values(sort_col, ascending=False).head(50).copy()
+            results = df_f.sort_values(sort_col, ascending=False).head(30).copy()
             
             for _, r in results.iterrows():
                 name = str(r.get(NAME_COL, "—"))
@@ -1118,7 +1145,7 @@ with tabs[1]:
                     f'<span style="color: {COLORS["success"]}; font-size: 1.3rem; font-weight: 900;">↑</span>'
                     f'<div style="flex: 1;">'
                     f'<div style="font-weight: 700;">{m}</div>'
-                    f'<div style="color: {COLORS["muted"]}; font-size: 0.85rem;">{pct:.0f}th percentile</div>'
+                    f'<div style="color: {COLORS["muted"]}; font-size: 0.8rem;">{pct:.0f}th percentile</div>'
                     f'</div>'
                     f'</div>',
                     unsafe_allow_html=True
@@ -1132,7 +1159,7 @@ with tabs[1]:
                     f'<span style="color: {COLORS["secondary"]}; font-size: 1.3rem; font-weight: 900;">↓</span>'
                     f'<div style="flex: 1;">'
                     f'<div style="font-weight: 700;">{m}</div>'
-                    f'<div style="color: {COLORS["muted"]}; font-size: 0.85rem;">{pct:.0f}th percentile</div>'
+                    f'<div style="color: {COLORS["muted"]}; font-size: 0.8rem;">{pct:.0f}th percentile</div>'
                     f'</div>'
                     f'</div>',
                     unsafe_allow_html=True
@@ -1157,14 +1184,14 @@ with tabs[1]:
                 ))
                 fig.update_layout(
                     polar=dict(
-                        radialaxis=dict(range=[0, 100], gridcolor=COLORS["border"], showticklabels=True),
-                        angularaxis=dict(gridcolor=COLORS["border"])
+                        radialaxis=dict(range=[0, 100], gridcolor=COLORS["border"], showticklabels=True, tickfont=dict(size=10)),
+                        angularaxis=dict(gridcolor=COLORS["border"], tickfont=dict(size=10))
                     ),
-                    height=500,
-                    margin=dict(l=80, r=80, t=40, b=40),
+                    height=380,
+                    margin=dict(l=70, r=70, t=30, b=30),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color=COLORS["text"], size=11),
+                    font=dict(color=COLORS["text"], size=10),
                     showlegend=False
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -1182,7 +1209,7 @@ with tabs[1]:
                             f'<span style="font-weight: 700; font-size: 0.9rem;">{rc[:25]}</span>'
                             f'<span style="font-weight: 900; color: {COLORS["primary"]};">{pct:.0f}%</span>'
                             f'</div>'
-                            f'<div style="width: 100%; height: 8px; background: {COLORS["border"]}; border-radius: 4px; overflow: hidden;">'
+                            f'<div style="width: 100%; height: 6px; background: {COLORS["border"]}; border-radius: 4px; overflow: hidden;">'
                             f'<div style="width: {pct}%; height: 100%; background: linear-gradient(90deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%);"></div>'
                             f'</div>'
                             f'</div>',
@@ -1227,7 +1254,7 @@ with tabs[2]:
                     orientation="h"
                 )
                 fig.update_layout(
-                    height=400,
+                    height=360,
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["text"]),
@@ -1272,12 +1299,13 @@ with tabs[2]:
                     ))
                 
                 fig2.update_layout(
-                    polar=dict(radialaxis=dict(range=[0, 100], gridcolor=COLORS["border"])),
-                    height=550,
+                    polar=dict(radialaxis=dict(range=[0, 100], gridcolor=COLORS["border"], tickfont=dict(size=9))),
+                    height=500,
+                    margin=dict(l=60, r=60, t=30, b=60),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color=COLORS["text"]),
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5)
+                    font=dict(color=COLORS["text"], size=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.18, xanchor="center", x=0.5, font=dict(size=10))
                 )
                 st.plotly_chart(fig2, use_container_width=True)
             
@@ -1287,7 +1315,7 @@ with tabs[2]:
             st.dataframe(
                 comp_df[show_cols].sort_values(cfg.get("role_cols", [])[0] if cfg.get("role_cols", []) else show_cols[-1], ascending=False),
                 use_container_width=True,
-                height=400
+                height=360
             )
 
 # =====================================================
@@ -1323,7 +1351,7 @@ with tabs[3]:
             st.dataframe(
                 out,
                 use_container_width=True,
-                height=600,
+                height=360,
                 column_config={
                     "Rank": st.column_config.NumberColumn("🏆 Rank", width="small"),
                     metric + " (pct)": st.column_config.ProgressColumn(
@@ -1357,7 +1385,7 @@ with tabs[4]:
                 st.markdown("#### 📊 Distribution")
                 fig1 = px.histogram(df_f, x=metric, nbins=30, color_discrete_sequence=[COLORS["primary"]])
                 fig1.update_layout(
-                    height=400,
+                    height=360,
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["text"]),
@@ -1371,7 +1399,7 @@ with tabs[4]:
                 st.markdown("#### 📦 Box Plot")
                 fig2 = px.box(df_f, y=metric, points="all", color_discrete_sequence=[COLORS["secondary"]])
                 fig2.update_layout(
-                    height=400,
+                    height=360,
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["text"]),
