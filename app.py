@@ -9,7 +9,7 @@ import hashlib
 # =====================================================
 # PAGE CONFIG
 # =====================================================
-st.set_page_config(page_title="FCHK DATA LAB", layout="wide", page_icon="⚽")
+st.set_page_config(page_title="Scout Lab Pro", layout="wide", page_icon="⚽")
 
 # =====================================================
 # MODERN COLOR PALETTE
@@ -633,8 +633,8 @@ def player_meta(row: pd.Series) -> str:
 # DATA LOADING
 # =====================================================
 @st.cache_data(show_spinner=False)
-def load_position_data(position_key: str) -> pd.DataFrame:
-    cfg = POSITION_CONFIG[position_key]
+def load_position_data(position_key: str) -> tuple[pd.DataFrame, dict]:
+    cfg = POSITION_CONFIG[position_key].copy()
     fp = Path(cfg["file"])
     
     if not fp.exists():
@@ -676,7 +676,7 @@ def load_position_data(position_key: str) -> pd.DataFrame:
     cfg["metric_cols"] = metric_cols
     cfg["all_metrics"] = role_cols + metric_cols
     
-    return df
+    return df, cfg
 
 # =====================================================
 # FILTERS
@@ -781,8 +781,7 @@ with st.sidebar:
 
 # Load data
 with st.spinner("Loading data..."):
-    df = load_position_data(position)
-    cfg = POSITION_CONFIG[position]
+    df, cfg = load_position_data(position)
 
 # Initialize position-specific state
 if position not in st.session_state.filters:
