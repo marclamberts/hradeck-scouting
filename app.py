@@ -672,9 +672,9 @@ def load_position_data(position_key: str) -> tuple[pd.DataFrame, dict]:
             df[m + " (pct)"] = percentile_rank(df[m])
     
     # Store configuration
-    cfg.get("role_cols", []) = role_cols
-    cfg.get("metric_cols", []) = metric_cols
-    cfg.get("all_metrics", []) = role_cols + metric_cols
+    cfg.get("role_cols", []) == role_cols
+    cfg.get("metric_cols", []) == metric_cols
+    cfg.get("all_metrics", []) == role_cols + metric_cols
     
     return df, cfg
 
