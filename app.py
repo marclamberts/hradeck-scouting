@@ -584,8 +584,18 @@ def create_enhanced_plotly_theme():
             'font': {'color': COLORS["text"], 'size': 12, 'family': 'Plus Jakarta Sans, system-ui, sans-serif'},
             'colorway': [COLORS["primary"], COLORS["secondary"], COLORS["success"], COLORS["warning"], COLORS["danger"]],
             'margin': {'l': 60, 'r': 60, 't': 60, 'b': 60},
-            'xaxis': {'gridcolor': COLORS["border"], 'linecolor': COLORS["border"], 'tickfont': {'color': COLORS["text_muted"]}, 'titlefont': {'color': COLORS["text"]}},
-            'yaxis': {'gridcolor': COLORS["border"], 'linecolor': COLORS["border"], 'tickfont': {'color': COLORS["text_muted"]}, 'titlefont': {'color': COLORS["text"]}},
+            'xaxis': {
+                'gridcolor': COLORS["border"], 
+                'linecolor': COLORS["border"], 
+                'tickfont': {'color': COLORS["text_muted"]},
+                'title': {'font': {'color': COLORS["text"]}}
+            },
+            'yaxis': {
+                'gridcolor': COLORS["border"], 
+                'linecolor': COLORS["border"], 
+                'tickfont': {'color': COLORS["text_muted"]},
+                'title': {'font': {'color': COLORS["text"]}}
+            },
             'legend': {'bgcolor': COLORS["glass"], 'bordercolor': COLORS["border"], 'borderwidth': 1, 'font': {'color': COLORS["text"]}}
         }
     }
