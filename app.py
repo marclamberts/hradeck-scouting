@@ -672,9 +672,9 @@ def load_position_data(position_key: str) -> tuple[pd.DataFrame, dict]:
             df[m + " (pct)"] = percentile_rank(df[m])
     
     # Store configuration
-    cfg["role_cols"] = role_cols
-    cfg["metric_cols"] = metric_cols
-    cfg["all_metrics"] = role_cols + metric_cols
+    cfg.get("role_cols", []) = role_cols
+    cfg.get("metric_cols", []) = metric_cols
+    cfg.get("all_metrics", []) = role_cols + metric_cols
     
     return df, cfg
 
@@ -724,7 +724,7 @@ def apply_filters(df: pd.DataFrame, f: dict) -> pd.DataFrame:
 
 def strengths_weaknesses(cfg: dict, row: pd.Series, topn: int = 5):
     pairs = []
-    for m in cfg["metric_cols"]:
+    for m in cfg.get("metric_cols", []):
         if m in ["IMPECT - BetterThan", "Offensive IMPECT - BetterThan", "Defensive IMPECT - BetterThan"]:
             continue
         pct = safe_float(row.get(m + " (pct)", np.nan))
@@ -889,11 +889,16 @@ with tabs[0]:
         st.info("🔍 No players match your current filters. Try adjusting the criteria in the sidebar.")
     else:
         # Sort options
-        sort_options = ["IMPECT"] + cfg["role_cols"] if "IMPECT" in df_f.columns else cfg["role_cols"]
+        sort_options = ["IMPECT"] + cfg.get("role_cols", []) if "IMPECT" in df_f.columns else cfg.get("role_cols", [])
         sort_options = [c for c in sort_options if c in df_f.columns]
         
-        if not sort_options and cfg["metric_cols"]:
-            sort_options = [c for c in cfg["metric_cols"] if c in df_f.columns][:5]
+        if not sort_options and cfg.get("metric_cols", []):
+            sort_options = [c for c in cfg.get("metric_cols", []) if c in df_f.columns][:5]
+        
+        # Fallback if still no options
+        if not sort_options:
+            numeric_cols = df_f.select_dtypes(include=[np.number]).columns.tolist()
+            sort_options = numeric_cols[:1] if numeric_cols else [NAME_COL]
         
         sort_col = st.selectbox("📊 Sort by", options=sort_options, index=0, key=f"sort_{position}")
         
@@ -963,10 +968,10 @@ with tabs[0]:
                     st.markdown('</div>', unsafe_allow_html=True)
                     
                     # Role scores
-                    if cfg["role_cols"]:
+                    if cfg.get("role_cols", []):
                         st.markdown("#### 🎯 Role Fit")
-                        role_display_cols = st.columns(min(2, len(cfg["role_cols"])))
-                        for i, rc in enumerate(cfg["role_cols"][:4]):
+                        role_display_cols = st.columns(min(2, len(cfg.get("role_cols", []))))
+                        for i, rc in enumerate(cfg.get("role_cols", [])[:4]):
                             with role_display_cols[i % 2]:
                                 val = safe_fmt(row.get(rc, np.nan), 0)
                                 st.markdown(
@@ -1122,11 +1127,11 @@ with tabs[1]:
         
         with radar_col:
             st.markdown("#### 🎯 Role Suitability Radar")
-            if cfg["role_cols"]:
+            if cfg.get("role_cols", []):
                 fig = go.Figure()
                 fig.add_trace(go.Scatterpolar(
-                    r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in cfg["role_cols"]],
-                    theta=[c.replace(" Score", "")[:25] for c in cfg["role_cols"]],
+                    r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in cfg.get("role_cols", [])],
+                    theta=[c.replace(" Score", "")[:25] for c in cfg.get("role_cols", [])],
                     fill="toself",
                     name=player,
                     line=dict(color=COLORS["primary"], width=2),
@@ -1148,8 +1153,8 @@ with tabs[1]:
         
         with data_col:
             st.markdown("#### 📊 Role Scores")
-            if cfg["role_cols"]:
-                for rc in cfg["role_cols"]:
+            if cfg.get("role_cols", []):
+                for rc in cfg.get("role_cols", []):
                     val = safe_float(row.get(rc, np.nan))
                     if not np.isnan(val):
                         pct = val
@@ -1186,11 +1191,11 @@ with tabs[2]:
             comp_df = df_f[df_f[NAME_COL].isin(chosen)].copy()
             
             # Role comparison
-            if cfg["role_cols"]:
+            if cfg.get("role_cols", []):
                 st.markdown("#### 🎯 Role Suitability Comparison")
                 melt = comp_df.melt(
                     id_vars=[c for c in [NAME_COL] if c in comp_df.columns],
-                    value_vars=cfg["role_cols"],
+                    value_vars=cfg.get("role_cols", []),
                     var_name="Role",
                     value_name="Score"
                 )
@@ -1215,7 +1220,7 @@ with tabs[2]:
                 st.plotly_chart(fig, use_container_width=True)
             
             # Radar comparison
-            radar_metrics = [m + " (pct)" for m in cfg["key_metrics"] if (m + " (pct)") in comp_df.columns]
+            radar_metrics = [m + " (pct)" for m in cfg.get("key_metrics", []) if (m + " (pct)") in comp_df.columns]
             if radar_metrics:
                 st.markdown("#### 📊 Key Metrics Radar (Percentiles)")
                 fig2 = go.Figure()
@@ -1248,9 +1253,9 @@ with tabs[2]:
             
             # Data table
             st.markdown("#### 📋 Detailed Comparison")
-            show_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] + cfg["role_cols"] + cfg["key_metrics"] if c in comp_df.columns]
+            show_cols = [c for c in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, SHARE_COL] + cfg.get("role_cols", []) + cfg.get("key_metrics", []) if c in comp_df.columns]
             st.dataframe(
-                comp_df[show_cols].sort_values(cfg["role_cols"][0] if cfg["role_cols"] else show_cols[-1], ascending=False),
+                comp_df[show_cols].sort_values(cfg.get("role_cols", [])[0] if cfg.get("role_cols", []) else show_cols[-1], ascending=False),
                 use_container_width=True,
                 height=400
             )
@@ -1262,7 +1267,7 @@ with tabs[3]:
     if df_f.empty:
         st.info("No players to rank with current filters.")
     else:
-        all_sortable = ["IMPECT", "Offensive IMPECT", "Defensive IMPECT"] + cfg["role_cols"] + cfg["metric_cols"]
+        all_sortable = ["IMPECT", "Offensive IMPECT", "Defensive IMPECT"] + cfg.get("role_cols", []) + cfg.get("metric_cols", [])
         all_sortable = [c for c in all_sortable if c in df_f.columns and c not in ["IMPECT - BetterThan", "Offensive IMPECT - BetterThan", "Defensive IMPECT - BetterThan"]]
         
         if not all_sortable:
