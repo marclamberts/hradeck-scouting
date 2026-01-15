@@ -925,13 +925,13 @@ def main():
                     
                     action_col1, action_col2, action_col3 = st.columns([1, 1, 2])
                     with action_col1:
-                        if st.button("👁️ View", key=f"view_{position}_{rid}", use_container_width=True):
+                        if st.button("👁️ View", key=f"view_{position}_{rid}", width="stretch"):
                             st.session_state.pinned[position] = name
                             st.session_state.selected_player[position] = name
                             st.rerun()
                     
                     with action_col2:
-                        if st.button("⭐" if not in_sl else "✓", key=f"sl_{position}_{rid}", use_container_width=True, type="secondary"):
+                        if st.button("⭐" if not in_sl else "✓", key=f"sl_{position}_{rid}", width="stretch", type="secondary"):
                             if not in_sl:
                                 add_to_shortlist(position, name)
                             else:
@@ -939,7 +939,7 @@ def main():
                             st.rerun()
                     
                     with action_col3:
-                        if st.button("➕ Compare", key=f"cmp_{position}_{rid}", use_container_width=True, type="secondary"):
+                        if st.button("➕ Compare", key=f"cmp_{position}_{rid}", width="stretch", type="secondary"):
                             picks = st.session_state.compare_picks[position]
                             if name not in picks:
                                 picks.append(name)
@@ -1008,14 +1008,14 @@ def main():
                         ac1, ac2 = st.columns(2)
                         in_sl = shortlist_key(position, pinned) in st.session_state.shortlist
                         with ac1:
-                            if st.button("⭐ Shortlist" if not in_sl else "✓ Shortlisted", key="sl_pin", use_container_width=True):
+                            if st.button("⭐ Shortlist" if not in_sl else "✓ Shortlisted", key="sl_pin", width="stretch"):
                                 if not in_sl:
                                     add_to_shortlist(position, pinned)
                                 else:
                                     remove_from_shortlist(position, pinned)
                                 st.rerun()
                         with ac2:
-                            if st.button("➕ Compare", key="cmp_pin", use_container_width=True, type="secondary"):
+                            if st.button("➕ Compare", key="cmp_pin", width="stretch", type="secondary"):
                                 picks = st.session_state.compare_picks[position]
                                 if pinned not in picks:
                                     picks.append(pinned)
@@ -1072,12 +1072,126 @@ def main():
             
             with col4:
                 in_sl = shortlist_key(position, player) in st.session_state.shortlist
-                if st.button("⭐ Shortlist" if not in_sl else "✓ Shortlisted", use_container_width=True):
+                if st.button("⭐ Shortlist" if not in_sl else "✓ Shortlisted", width="stretch"):
                     if not in_sl:
                         add_to_shortlist(position, player)
                     else:
                         remove_from_shortlist(position, player)
                     st.rerun()
+            
+            # Enhanced Strengths & Weaknesses Analysis
+            st.markdown("---")
+            top, bottom = strengths_weaknesses(cfg, row, topn=8)
+            
+            str_col, weak_col = st.columns(2, gap="large")
+            
+            with str_col:
+                st.markdown("#### ⬆️ Standout Strengths")
+                if not top:
+                    st.info("No strength metrics available with current data")
+                else:
+                    for i, (m, pct) in enumerate(top):
+                        # Color based on percentile
+                        if pct >= 90:
+                            color = COLORS["success"]
+                            icon = "🔥"
+                            level = "Elite"
+                        elif pct >= 75:
+                            color = COLORS["primary"] 
+                            icon = "⭐"
+                            level = "Strong"
+                        else:
+                            color = COLORS["warning"]
+                            icon = "↑"
+                            level = "Above Avg"
+                            
+                        st.markdown(f'''
+                            <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--glass); border-radius: var(--radius-md); margin-bottom: 0.75rem; border-left: 4px solid {color}; backdrop-filter: blur(10px); transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0px)'">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 1.2rem;">{icon}</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 700; font-size: 1rem; color: var(--text); margin-bottom: 0.25rem;">{m}</div>
+                                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                            <div style="color: {color}; font-weight: 800; font-size: 0.9rem; font-family: 'JetBrains Mono', monospace;">{pct:.0f}th percentile</div>
+                                            <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.2rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">
+                                                {level}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+            
+            with weak_col:
+                st.markdown("#### ⬇️ Development Areas")
+                if not bottom:
+                    st.info("No development area metrics available with current data")
+                else:
+                    for i, (m, pct) in enumerate(bottom):
+                        # Color based on how low the percentile is
+                        if pct <= 25:
+                            color = COLORS["danger"]
+                            icon = "⚠️"
+                            level = "Weak"
+                        elif pct <= 50:
+                            color = COLORS["secondary"]
+                            icon = "↓"
+                            level = "Below Avg"
+                        else:
+                            color = COLORS["warning"]
+                            icon = "≈"
+                            level = "Average"
+                            
+                        st.markdown(f'''
+                            <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--glass); border-radius: var(--radius-md); margin-bottom: 0.75rem; border-left: 4px solid {color}; backdrop-filter: blur(10px); transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0px)'">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 1.2rem;">{icon}</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 700; font-size: 1rem; color: var(--text); margin-bottom: 0.25rem;">{m}</div>
+                                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                            <div style="color: {color}; font-weight: 800; font-size: 0.9rem; font-family: 'JetBrains Mono', monospace;">{pct:.0f}th percentile</div>
+                                            <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.2rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">
+                                                {level}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+            
+            # Role Analysis if available
+            if cfg.get("role_cols", []):
+                st.markdown("---")
+                st.markdown("#### 🎯 Role Suitability Analysis")
+                
+                role_cols = st.columns(min(3, len(cfg.get("role_cols", []))))
+                for idx, rc in enumerate(cfg.get("role_cols", [])[:3]):
+                    with role_cols[idx % 3]:
+                        val = safe_float(row.get(rc, np.nan))
+                        if not np.isnan(val):
+                            # Determine fit level and color
+                            if val >= 80:
+                                fit_level = "Excellent"
+                                color = COLORS["success"]
+                            elif val >= 65:
+                                fit_level = "Good"
+                                color = COLORS["primary"]
+                            elif val >= 50:
+                                fit_level = "Average"
+                                color = COLORS["warning"]
+                            else:
+                                fit_level = "Poor"
+                                color = COLORS["danger"]
+                                
+                            st.markdown(f'''
+                                <div style="padding: 1rem; background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-md); backdrop-filter: blur(10px); text-align: center; transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.borderColor='{color}'; this.style.transform='translateY(-4px)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0px)'">
+                                    <div style="font-weight: 700; font-size: 0.8rem; color: var(--text); margin-bottom: 0.5rem;">{rc[:20]}</div>
+                                    <div style="font-family: 'JetBrains Mono', monospace; font-weight: 900; font-size: 2rem; color: {color}; margin: 0.5rem 0;">{val:.0f}%</div>
+                                    <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700; display: inline-block;">
+                                        {fit_level}
+                                    </div>
+                                </div>
+                            ''', unsafe_allow_html=True)
 
     # =====================================================
     # TAB 3: HEAD-TO-HEAD
@@ -1098,7 +1212,7 @@ def main():
             else:
                 comp_df = df_f[df_f[NAME_COL].isin(chosen)].copy()
                 quick_cols = [c for c in [NAME_COL, TEAM_COL, AGE_COL, SHARE_COL] + cfg.get("key_metrics", []) if c in comp_df.columns]
-                st.dataframe(comp_df[quick_cols], use_container_width=True)
+                st.dataframe(comp_df[quick_cols], width="stretch")
 
     # =====================================================
     # TAB 4: RANKINGS
@@ -1117,7 +1231,7 @@ def main():
                 out = df_f.sort_values(metric, ascending=False).head(n)[[NAME_COL, TEAM_COL, metric]].copy()
                 out.insert(0, "Rank", range(1, len(out) + 1))
                 
-                st.dataframe(out, use_container_width=True)
+                st.dataframe(out, width="stretch")
 
     # =====================================================
     # TAB 5: ANALYTICS
@@ -1203,7 +1317,7 @@ def main():
             sl_df = pd.DataFrame(items)
             edited = st.data_editor(
                 sl_df,
-                use_container_width=True,
+                width="stretch",
                 height=400,
                 num_rows="dynamic",
                 column_config={
@@ -1244,11 +1358,11 @@ def main():
                     data=csv_data,
                     file_name=f"shortlist_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    width="stretch"
                 )
             
             with col2:
-                if st.button("🗑️ Clear All", use_container_width=True, type="secondary"):
+                if st.button("🗑️ Clear All", width="stretch", type="secondary"):
                     st.session_state.shortlist = {}
                     st.rerun()
             
