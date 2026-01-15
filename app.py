@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
+import hashlib
 
 # =====================================================
 # PAGE CONFIG
@@ -100,10 +101,6 @@ POSITION_CONFIG = {
         ],
         "default_sort": "Balanced Score",
     },
-
-    # IMPORTANT:
-    # CM below is FULLY EQUIVALENT in capabilities to RWB.
-    # You only need to ensure its column names match CM.xlsx exactly.
     "CM": {
         "file": "CM.xlsx",
         "title": "Central Defender / CM Dataset (CM.xlsx)",
@@ -371,6 +368,20 @@ def score_from_z(z: pd.Series) -> pd.Series:
     return (50 + 15 * z).clip(0, 100)
 
 # =====================================================
+# UNIQUE ROW ID (fixes StreamlitDuplicateElementKey)
+# =====================================================
+def make_rowid(row: pd.Series, position: str) -> str:
+    parts = [
+        position,
+        str(row.get(NAME_COL, "")),
+        str(row.get(TEAM_COL, "")),
+        str(row.get(COMP_COL, "")),
+        str(row.name),
+    ]
+    raw = "||".join(parts)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+
+# =====================================================
 # TABLE (NO STYLER)
 # =====================================================
 def pro_table(df: pd.DataFrame, pct_cols: list[str] | None = None, height: int = 600):
@@ -415,20 +426,16 @@ def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
     df = pd.read_excel(fp)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # numeric coercion for relevant cols
     coerce_numeric(df, cfg["metrics"] + [AGE_COL, SHARE_COL])
 
-    # clean text cols
     for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
         if c in df.columns:
             df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
 
-    # metric percentiles
     for m in cfg["metrics"]:
         if m in df.columns:
             df[m + " (pct)"] = percentile_rank(df[m])
 
-    # role scores
     for role, weights in cfg["role_defs"].items():
         z = pd.Series(0.0, index=df.index)
         for col, w in weights.items():
@@ -440,19 +447,19 @@ def load_and_prepare(position_key: str) -> tuple[pd.DataFrame, dict]:
     return df, cfg
 
 # =====================================================
-# STATE (per dataset) — identical functionality for CM & RWB
+# STATE (per dataset)
 # =====================================================
 def ensure_state():
     if "filters" not in st.session_state:
-        st.session_state.filters = {}          # position -> filter dict
+        st.session_state.filters = {}  # position -> filter dict
     if "shortlist" not in st.session_state:
-        st.session_state.shortlist = {}        # "POS||Name" -> {"tags","notes"}
+        st.session_state.shortlist = {}  # "POS||Name" -> {"tags","notes"}
     if "pinned" not in st.session_state:
-        st.session_state.pinned = {}           # position -> player name
+        st.session_state.pinned = {}  # position -> player name
     if "selected_player" not in st.session_state:
         st.session_state.selected_player = {}  # position -> player name
     if "compare_picks" not in st.session_state:
-        st.session_state.compare_picks = {}    # position -> list[player names]
+        st.session_state.compare_picks = {}  # position -> list[player names]
 
 def shortlist_key(position_key: str, player_name: str) -> str:
     return f"{position_key}||{player_name}"
@@ -566,13 +573,12 @@ def apply_filters(df: pd.DataFrame, f: dict) -> pd.DataFrame:
 # =====================================================
 ensure_state()
 
-# Sidebar dataset selector
 st.sidebar.markdown("### ⚙️ Control Room")
 position = st.sidebar.selectbox("Dataset", list(POSITION_CONFIG.keys()), index=0)
 
 df, cfg = load_and_prepare(position)
 
-# Make sure per-position state exists (THIS is what makes CM identical in functionality)
+# Per-position state init
 if position not in st.session_state.filters:
     st.session_state.filters[position] = default_filters_for(df)
 if position not in st.session_state.pinned:
@@ -589,7 +595,6 @@ default_sort = cfg.get("default_sort", "Balanced Score")
 if default_sort not in df.columns and role_cols_all:
     default_sort = role_cols_all[0]
 
-# Sidebar filters (identical for CM and RWB)
 with st.sidebar.expander("Filters", expanded=True):
     f["q"] = st.text_input("Search", value=f.get("q", ""), placeholder="Name / Team / Comp / Nat…")
     f["min_share"] = st.slider("Min Share", 0.0, 1.0, float(f.get("min_share", 0.20)), 0.05)
@@ -623,10 +628,15 @@ with st.sidebar.expander("Filters", expanded=True):
     with c2:
         st.caption("Live")
 
-# Apply filters
+# Apply filters + add unique row ids (critical for no duplicate keys)
 df_f = apply_filters(df, f)
+if not df_f.empty:
+    df_f = df_f.copy()
+    df_f["_rowid"] = df_f.apply(lambda r: make_rowid(r, position), axis=1)
+else:
+    df_f["_rowid"] = []
 
-# Default pinned for THIS position only
+# Default pinned
 if st.session_state.pinned[position] is None and len(df_f) and NAME_COL in df_f.columns:
     st.session_state.pinned[position] = df_f.sort_values(default_sort, ascending=False).iloc[0][NAME_COL]
 if st.session_state.selected_player[position] is None and st.session_state.pinned[position] is not None:
@@ -658,7 +668,7 @@ st.markdown(
 tabs = st.tabs(["Search", "Profile", "Compare", "Leaderboards", "Distributions", "Shortlist"])
 
 # =====================================================
-# SEARCH (IDENTICAL FOR CM and RWB)
+# SEARCH
 # =====================================================
 with tabs[0]:
     st.markdown('<div class="kicker">Scout</div>', unsafe_allow_html=True)
@@ -679,6 +689,7 @@ with tabs[0]:
             results = df_f.sort_values(sort_col, ascending=False).head(60).copy()
             for _, r in results.iterrows():
                 name = str(r.get(NAME_COL, "—"))
+                rid = str(r.get("_rowid", r.name))
                 in_sl = shortlist_key(position, name) in st.session_state.shortlist
 
                 st.markdown('<div class="player-row">', unsafe_allow_html=True)
@@ -689,11 +700,11 @@ with tabs[0]:
                 with b:
                     st.metric(DISPLAY_RENAMES.get(sort_col, sort_col).replace(" Score", ""), safe_fmt(r.get(sort_col, np.nan), 1))
                 with c:
-                    if st.button("Open", key=f"open_{position}_{name}"):
+                    if st.button("Open", key=f"open_{position}_{rid}"):
                         st.session_state.pinned[position] = name
                         st.session_state.selected_player[position] = name
                         st.rerun()
-                    if st.button("★" if not in_sl else "✓", key=f"slq_{position}_{name}"):
+                    if st.button("★" if not in_sl else "✓", key=f"sl_{position}_{rid}"):
                         add_to_shortlist(position, name) if not in_sl else remove_from_shortlist(position, name)
                         st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -750,7 +761,7 @@ with tabs[0]:
                         st.caption("Profile uses pinned")
 
 # =====================================================
-# PROFILE (IDENTICAL FOR CM and RWB)
+# PROFILE
 # =====================================================
 with tabs[1]:
     st.markdown('<div class="kicker">Report</div>', unsafe_allow_html=True)
@@ -760,7 +771,11 @@ with tabs[1]:
         st.warning("No players available with current filters.")
     else:
         players = sorted(df_f[NAME_COL].dropna().unique().tolist())
-        default_player = st.session_state.selected_player.get(position) or st.session_state.pinned.get(position) or (players[0] if players else None)
+        default_player = (
+            st.session_state.selected_player.get(position)
+            or st.session_state.pinned.get(position)
+            or (players[0] if players else None)
+        )
         if default_player not in players and players:
             default_player = players[0]
 
@@ -814,9 +829,14 @@ with tabs[1]:
             st.markdown("### Role scores")
             role_cols = [c for c in role_cols_all if c in df_f.columns]
             role_row = pd.DataFrame(
-                [{"Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""), "Score": safe_float(row.get(c, np.nan)),
-                  "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan}
-                 for c in role_cols]
+                [
+                    {
+                        "Role": DISPLAY_RENAMES.get(c, c).replace(" Score", ""),
+                        "Score": safe_float(row.get(c, np.nan)),
+                        "Percentile": safe_float(percentile_rank(df_f[c]).loc[p.index[0]]) if c in df_f.columns else np.nan,
+                    }
+                    for c in role_cols
+                ]
             )
             pro_table(role_row, pct_cols=["Percentile"], height=320)
 
@@ -824,7 +844,13 @@ with tabs[1]:
             key = []
             for m in cfg["metrics"]:
                 if m in df_f.columns and (m + " (pct)") in df_f.columns:
-                    key.append({"Metric": m, "Value": safe_float(row.get(m, np.nan)), "Percentile": safe_float(row.get(m + " (pct)", np.nan))})
+                    key.append(
+                        {
+                            "Metric": m,
+                            "Value": safe_float(row.get(m, np.nan)),
+                            "Percentile": safe_float(row.get(m + " (pct)", np.nan)),
+                        }
+                    )
             key_df = pd.DataFrame(key)
             pro_table(key_df, pct_cols=["Percentile"], height=520) if len(key_df) else st.info("No metric columns found.")
 
@@ -833,12 +859,14 @@ with tabs[1]:
             radar_cols = [c for c in role_cols_all if c in df_f.columns]
             if radar_cols:
                 fig = go.Figure()
-                fig.add_trace(go.Scatterpolar(
-                    r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
-                    theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
-                    fill="toself",
-                    name=player,
-                ))
+                fig.add_trace(
+                    go.Scatterpolar(
+                        r=[safe_float(row.get(c, np.nan)) if not np.isnan(safe_float(row.get(c, np.nan))) else 0 for c in radar_cols],
+                        theta=[DISPLAY_RENAMES.get(c, c).replace(" Score", "") for c in radar_cols],
+                        fill="toself",
+                        name=player,
+                    )
+                )
                 fig.update_layout(
                     polar=dict(radialaxis=dict(range=[0, 100], gridcolor="rgba(247,247,247,0.10)")),
                     height=520,
@@ -858,11 +886,8 @@ with tabs[1]:
             pro_table(sim_df, pct_cols=[], height=360) if len(sim_df) else st.info("Not enough data/features.")
 
 # =====================================================
-# COMPARE / LEADERBOARDS / DISTRIBUTIONS / SHORTLIST
-# are already position-agnostic because they use df_f + cfg + role_cols_all + state keyed by position.
-# (Omitted here for brevity? No — user asked full same, so keep them.)
+# COMPARE
 # =====================================================
-
 with tabs[2]:
     st.markdown('<div class="kicker">Decision</div>', unsafe_allow_html=True)
     st.markdown("## Compare")
@@ -872,8 +897,8 @@ with tabs[2]:
     else:
         players = sorted(df_f[NAME_COL].dropna().unique().tolist())
         picks = [p for p in st.session_state.compare_picks.get(position, []) if p in players]
-
         default = picks[:] if len(picks) else (players[:2] if len(players) >= 2 else players[:])
+
         chosen = st.multiselect("Players (2–6)", players, default=default, key=f"cmp_{position}")
         st.session_state.compare_picks[position] = chosen
 
@@ -919,6 +944,9 @@ with tabs[2]:
             sort_role = "Balanced Score" if "Balanced Score" in comp_df.columns else (role_cols[0] if role_cols else show[-1])
             st.dataframe(comp_df[show].sort_values(sort_role, ascending=False), use_container_width=True, height=520)
 
+# =====================================================
+# LEADERBOARDS
+# =====================================================
 with tabs[3]:
     st.markdown('<div class="kicker">Market</div>', unsafe_allow_html=True)
     st.markdown("## Leaderboards")
@@ -938,6 +966,9 @@ with tabs[3]:
             out[role + " (pct)"] = percentile_rank(df_f[role]).reindex(out.index)
             pro_table(out, pct_cols=[role + " (pct)"], height=740)
 
+# =====================================================
+# DISTRIBUTIONS
+# =====================================================
 with tabs[4]:
     st.markdown('<div class="kicker">Context</div>', unsafe_allow_html=True)
     st.markdown("## Distributions")
@@ -962,6 +993,9 @@ with tabs[4]:
                 fig2.update_layout(height=420, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=COLORS["white"]))
                 st.plotly_chart(fig2, use_container_width=True)
 
+# =====================================================
+# SHORTLIST
+# =====================================================
 with tabs[5]:
     st.markdown('<div class="kicker">Targets</div>', unsafe_allow_html=True)
     st.markdown("## Shortlist")
@@ -996,7 +1030,10 @@ with tabs[5]:
             name = str(r.get("Name", "")).strip()
             if not pos or not name:
                 continue
-            new_shortlist[shortlist_key(pos, name)] = {"tags": str(r.get("Tags", "") or ""), "notes": str(r.get("Notes", "") or "")}
+            new_shortlist[shortlist_key(pos, name)] = {
+                "tags": str(r.get("Tags", "") or ""),
+                "notes": str(r.get("Notes", "") or ""),
+            }
         st.session_state.shortlist = new_shortlist
 
         c1, c2 = st.columns([1, 1])
