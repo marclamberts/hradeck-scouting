@@ -1153,7 +1153,7 @@ with tabs[1]:
                     fill="toself",
                     name=player,
                     line=dict(color=COLORS["primary"], width=2),
-                    fillcolor=f"{COLORS['primary']}40"
+                    fillcolor="rgba(0, 217, 255, 0.25)"  # Convert hex to rgba with 25% opacity
                 ))
                 fig.update_layout(
                     polar=dict(
@@ -1243,20 +1243,32 @@ with tabs[2]:
                 st.markdown("#### 📊 Key Metrics Radar (Percentiles)")
                 fig2 = go.Figure()
                 
-                colors_cycle = [COLORS["primary"], COLORS["secondary"], COLORS["success"], COLORS["warning"]]
+                colors_cycle = [
+                    COLORS["primary"], 
+                    COLORS["secondary"], 
+                    COLORS["success"], 
+                    COLORS["warning"]
+                ]
+                colors_rgba = [
+                    "rgba(0, 217, 255, 0.2)",  # primary with 20% opacity
+                    "rgba(255, 107, 157, 0.2)",  # secondary
+                    "rgba(0, 245, 160, 0.2)",  # success
+                    "rgba(255, 217, 61, 0.2)"   # warning
+                ]
                 
                 for idx, nm in enumerate(chosen):
                     sub = comp_df[comp_df[NAME_COL] == nm].head(1)
                     r = [safe_float(sub.iloc[0].get(m, np.nan)) if not np.isnan(safe_float(sub.iloc[0].get(m, np.nan))) else 0 for m in radar_metrics]
                     theta = [m.replace(" (pct)", "") for m in radar_metrics]
                     color = colors_cycle[idx % len(colors_cycle)]
+                    color_rgba = colors_rgba[idx % len(colors_rgba)]
                     fig2.add_trace(go.Scatterpolar(
                         r=r,
                         theta=theta,
                         fill="toself",
                         name=nm,
                         line=dict(color=color, width=2),
-                        fillcolor=f"{color}30"
+                        fillcolor=color_rgba
                     ))
                 
                 fig2.update_layout(
