@@ -20,6 +20,17 @@ st.set_page_config(
 )
 
 # =====================================================
+# NAVIGATION STATE
+# =====================================================
+def ensure_navigation_state():
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "landing"
+    if "show_scout_app" not in st.session_state:
+        st.session_state.show_scout_app = False
+
+ensure_navigation_state()
+
+# =====================================================
 # ENHANCED COLOR PALETTE & DESIGN TOKENS
 # =====================================================
 COLORS = {
@@ -137,7 +148,325 @@ SHARE_COL = "Match Share"
 ID_COL = "Player-ID"
 
 # =====================================================
-# ULTRA-MODERN CSS
+# LANDING PAGE
+# =====================================================
+def render_landing_page():
+    st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
+    
+    # Hero Section
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, var(--darker) 0%, var(--dark) 50%, var(--darker) 100%);
+        padding: 4rem 2rem;
+        text-align: center;
+        border-radius: var(--radius-lg);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        backdrop-filter: blur(20px);
+    ">
+        <div style="
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(0,217,255,0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255,107,157,0.1) 0%, transparent 50%);
+            animation: float 20s ease-in-out infinite;
+        "></div>
+        <div style="position: relative; z-index: 2;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">⚽</div>
+            <h1 style="
+                font-size: clamp(3rem, 6vw, 5rem);
+                font-weight: 900;
+                background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 1rem;
+                letter-spacing: -0.02em;
+            ">Scout Lab Pro</h1>
+            <p style="
+                font-size: 1.25rem;
+                color: var(--text-accent);
+                margin-bottom: 2rem;
+                max-width: 600px;
+                margin-left: auto;
+                margin-right: auto;
+                line-height: 1.6;
+            ">
+                Advanced Football Analytics Platform for Professional Scouting and Player Analysis
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Quick Stats
+    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+    
+    with stat_col1:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">{len(POSITION_CONFIG)}</div>
+                <div class="metric-label">Positions Covered</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with stat_col2:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem; color: {COLORS["success"]};">50+</div>
+                <div class="metric-label">Performance Metrics</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with stat_col3:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem; color: {COLORS["warning"]};">∞</div>
+                <div class="metric-label">Player Comparisons</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with stat_col4:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem; color: {COLORS["secondary"]};">AI</div>
+                <div class="metric-label">Powered Analysis</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    # Features Section
+    st.markdown("## 🚀 Platform Features")
+    
+    feature_col1, feature_col2 = st.columns(2, gap="large")
+    
+    with feature_col1:
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["primary"]}40, {COLORS["secondary"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        🔍
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Advanced Player Search</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Powerful filtering system to discover players by position, age, performance metrics, 
+                    teams, competitions, and custom criteria. Find your next signing with precision.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["success"]}40, {COLORS["primary"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        📊
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Performance Analytics</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Comprehensive statistical analysis with IMPECT scores, role suitability ratings, 
+                    strengths/weaknesses identification, and percentile rankings vs. peers.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with feature_col2:
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["warning"]}40, {COLORS["success"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        ⚖️
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Player Comparisons</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Side-by-side analysis of multiple players with interactive radar charts, 
+                    head-to-head statistics, and detailed performance breakdowns.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["secondary"]}40, {COLORS["warning"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        ⭐
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Smart Shortlisting</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Create and manage player shortlists with notes, tags, and export capabilities. 
+                    Never lose track of promising talent again.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    # Positions Grid
+    st.markdown("## ⚽ Available Positions")
+    
+    pos_cols = st.columns(5)
+    for idx, (pos_key, pos_config) in enumerate(POSITION_CONFIG.items()):
+        with pos_cols[idx % 5]:
+            st.markdown(f'''
+                <div style="
+                    padding: 1.5rem;
+                    background: var(--glass);
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-lg);
+                    text-align: center;
+                    transition: all var(--duration-normal) var(--easing);
+                    cursor: pointer;
+                    backdrop-filter: blur(20px);
+                " onmouseover="this.style.borderColor='{pos_config["color"]}'; this.style.transform='translateY(-4px)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0px)'">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">{pos_config["icon"]}</div>
+                    <div style="font-weight: 700; color: var(--text); margin-bottom: 0.25rem;">{pos_key}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">{pos_config["title"]}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+    
+    # CTA Section
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown(f'''
+            <div style="text-align: center; padding: 2rem;">
+                <h3 style="margin-bottom: 1.5rem; color: var(--text);">Ready to Start Scouting?</h3>
+                <p style="color: var(--text-muted); margin-bottom: 2rem; max-width: 400px; margin-left: auto; margin-right: auto;">
+                    Launch the full scouting platform and discover your next star player with advanced analytics and AI-powered insights.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        if st.button("🚀 Launch Scout Lab Pro", width="stretch", type="primary"):
+            st.session_state.current_page = "scout_app"
+            st.session_state.show_scout_app = True
+            st.rerun()
+
+# =====================================================
+# NAVIGATION
+# =====================================================
+def render_navigation():
+    """Render top navigation bar"""
+    st.markdown(f"""
+    <div style="
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 2rem;
+        background: var(--glass);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        margin-bottom: 2rem;
+        backdrop-filter: blur(20px);
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+    ">
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <div style="font-size: 1.5rem; font-weight: 900; background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                ⚽ Scout Lab Pro
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="padding: 0.5rem 1rem; background: rgba(0,217,255,0.2); border: 1px solid rgba(0,217,255,0.4); border-radius: 20px; color: #00D9FF; font-weight: 700; font-size: 0.8rem;">
+                v2.0 Enhanced
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Navigation buttons
+    nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
+    
+    with nav_col2:
+        nav_buttons = st.columns(3)
+        
+        with nav_buttons[0]:
+            if st.button("🏠 Home", width="stretch", type="secondary" if st.session_state.current_page != "landing" else "primary"):
+                st.session_state.current_page = "landing"
+                st.session_state.show_scout_app = False
+                st.rerun()
+        
+        with nav_buttons[1]:
+            if st.button("⚽ Scout Platform", width="stretch", type="secondary" if st.session_state.current_page != "scout_app" else "primary"):
+                st.session_state.current_page = "scout_app"
+                st.session_state.show_scout_app = True
+                st.rerun()
+        
+        with nav_buttons[2]:
+            if st.button("📖 About", width="stretch", type="secondary" if st.session_state.current_page != "about" else "primary"):
+                st.session_state.current_page = "about"
+                st.session_state.show_scout_app = False
+                st.rerun()
+
+# =====================================================
+# ABOUT PAGE
+# =====================================================
+def render_about_page():
+    st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
+    
+    st.markdown(f'''
+        <div class="modern-card" style="text-align: center; margin-bottom: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚽</div>
+            <h1 style="background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">About Scout Lab Pro</h1>
+            <p style="color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
+                Professional Football Analytics Platform for Modern Scouting
+            </p>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2, gap="large")
+    
+    with col1:
+        st.markdown('''
+            <div class="modern-card">
+                <h3>🎯 Mission</h3>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Scout Lab Pro revolutionizes football scouting by providing advanced analytics, 
+                    AI-powered insights, and comprehensive player analysis tools for professionals 
+                    in the beautiful game.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown('''
+            <div class="modern-card">
+                <h3>🔬 Technology</h3>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Built with cutting-edge web technologies including Streamlit, Plotly for 
+                    interactive visualizations, and advanced statistical analysis algorithms 
+                    for meaningful player insights.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('''
+            <div class="modern-card">
+                <h3>📊 Features</h3>
+                <ul style="color: var(--text-muted); line-height: 1.6;">
+                    <li>Advanced player search and filtering</li>
+                    <li>Comprehensive performance analytics</li>
+                    <li>Interactive player comparisons</li>
+                    <li>Role suitability analysis</li>
+                    <li>Smart shortlisting system</li>
+                    <li>Export and reporting tools</li>
+                </ul>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown('''
+            <div class="modern-card">
+                <h3>🎨 Design</h3>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Features a modern glass morphism design with smooth animations, 
+                    responsive layout, and position-specific color schemes for 
+                    an intuitive user experience.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
 # =====================================================
 def generate_enhanced_css():
     return f"""
@@ -729,9 +1058,22 @@ def remove_from_shortlist(position_key: str, player_name: str):
         del st.session_state.shortlist[k]
 
 # =====================================================
-# MAIN APP
+# MAIN APP WITH NAVIGATION
 # =====================================================
 def main():
+    # Always render navigation
+    if st.session_state.current_page != "landing":
+        render_navigation()
+    
+    # Route to appropriate page
+    if st.session_state.current_page == "landing":
+        render_landing_page()
+    elif st.session_state.current_page == "about":
+        render_about_page()
+    elif st.session_state.current_page == "scout_app":
+        render_scout_app()
+
+def render_scout_app():
     st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
     ensure_state()
 
@@ -800,7 +1142,7 @@ def main():
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🔄 Reset", use_container_width=True):
+            if st.button("🔄 Reset", width="stretch"):
                 st.session_state.filters[position] = default_filters_for(df)
                 st.rerun()
         with col2:
@@ -1162,11 +1504,67 @@ def main():
             # Role Analysis if available
             if cfg.get("role_cols", []):
                 st.markdown("---")
-                st.markdown("#### 🎯 Role Suitability Analysis")
                 
-                role_cols = st.columns(min(3, len(cfg.get("role_cols", []))))
-                for idx, rc in enumerate(cfg.get("role_cols", [])[:3]):
-                    with role_cols[idx % 3]:
+                # Role scores section with radar chart
+                radar_col, data_col = st.columns([1.3, 0.7], gap="large")
+                
+                with radar_col:
+                    st.markdown("#### 🎯 Role Suitability Radar")
+                    
+                    # Create radar chart
+                    role_values = []
+                    role_labels = []
+                    for rc in cfg.get("role_cols", []):
+                        val = safe_float(row.get(rc, np.nan))
+                        if not np.isnan(val):
+                            role_values.append(val)
+                            role_labels.append(rc.replace(" Score", "")[:20])
+                    
+                    if role_values:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(
+                            r=role_values,
+                            theta=role_labels,
+                            fill='toself',
+                            name=player,
+                            line=dict(color=position_color, width=3),
+                            fillcolor=f"rgba({int(position_color[1:3], 16)}, {int(position_color[3:5], 16)}, {int(position_color[5:7], 16)}, 0.25)",
+                            marker=dict(size=8, color=position_color)
+                        ))
+                        
+                        fig.update_layout(
+                            polar=dict(
+                                radialaxis=dict(
+                                    range=[0, 100],
+                                    gridcolor=COLORS["border"],
+                                    showticklabels=True,
+                                    tickfont=dict(size=10, color=COLORS["text_muted"]),
+                                    tickmode='linear',
+                                    tick0=0,
+                                    dtick=20
+                                ),
+                                angularaxis=dict(
+                                    gridcolor=COLORS["border"],
+                                    tickfont=dict(size=11, color=COLORS["text"]),
+                                    linecolor=COLORS["border"]
+                                ),
+                                bgcolor="rgba(0,0,0,0)"
+                            ),
+                            height=400,
+                            margin=dict(l=80, r=80, t=50, b=50),
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            font=dict(color=COLORS["text"], size=11, family='Plus Jakarta Sans, system-ui, sans-serif'),
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No role data available for radar chart")
+                
+                with data_col:
+                    st.markdown("#### 📊 Role Scores")
+                    for rc in cfg.get("role_cols", []):
                         val = safe_float(row.get(rc, np.nan))
                         if not np.isnan(val):
                             # Determine fit level and color
@@ -1184,12 +1582,46 @@ def main():
                                 color = COLORS["danger"]
                                 
                             st.markdown(f'''
-                                <div style="padding: 1rem; background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-md); backdrop-filter: blur(10px); text-align: center; transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.borderColor='{color}'; this.style.transform='translateY(-4px)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0px)'">
-                                    <div style="font-weight: 700; font-size: 0.8rem; color: var(--text); margin-bottom: 0.5rem;">{rc[:20]}</div>
-                                    <div style="font-family: 'JetBrains Mono', monospace; font-weight: 900; font-size: 2rem; color: {color}; margin: 0.5rem 0;">{val:.0f}%</div>
-                                    <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700; display: inline-block;">
-                                        {fit_level}
+                                <div style="margin-bottom: 1rem; padding: 1rem; background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-md); backdrop-filter: blur(10px); transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.borderColor='{color}'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0px)'">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                        <span style="font-weight: 700; font-size: 0.9rem; color: var(--text);">{rc[:25]}</span>
+                                        <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 700;">
+                                            {fit_level}
+                                        </div>
                                     </div>
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <div style="flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">
+                                            <div style="width: {val}%; height: 100%; background: linear-gradient(90deg, {color} 0%, {color}80 100%); transition: width 0.5s ease;"></div>
+                                        </div>
+                                        <div style="font-weight: 900; color: {color}; font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; min-width: 3rem;">
+                                            {val:.0f}%
+                                        </div>
+                                    </div>
+                                </div>
+                            ''', unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Role comparison grid
+                st.markdown("#### 🔄 Quick Role Comparison")
+                role_comparison_cols = st.columns(min(4, len(cfg.get("role_cols", []))))
+                for idx, rc in enumerate(cfg.get("role_cols", [])[:4]):
+                    with role_comparison_cols[idx % 4]:
+                        val = safe_float(row.get(rc, np.nan))
+                        if not np.isnan(val):
+                            if val >= 80:
+                                color = COLORS["success"]
+                            elif val >= 65:
+                                color = COLORS["primary"]
+                            elif val >= 50:
+                                color = COLORS["warning"]
+                            else:
+                                color = COLORS["danger"]
+                            
+                            st.markdown(f'''
+                                <div class="metric-card" style="border-left: 3px solid {color};">
+                                    <div class="metric-label">{rc[:15]}</div>
+                                    <div class="metric-value" style="font-size: 1.5rem; color: {color};">{val:.0f}%</div>
                                 </div>
                             ''', unsafe_allow_html=True)
 
