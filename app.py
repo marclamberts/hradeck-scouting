@@ -562,6 +562,7 @@ div[data-testid="stExpander"] {{
 # UTILITY FUNCTIONS
 # =====================================================
 def safe_float(x):
+    """Convert any value to float, handling percentages and special cases"""
     if x is None:
         return np.nan
     if isinstance(x, (int, float, np.number)):
@@ -569,7 +570,9 @@ def safe_float(x):
     s = str(x).strip()
     if s == "" or s.lower() in {"nan", "none", "null", "na", "n/a", "-", "—"}:
         return np.nan
+    # Remove percentage sign (data has format like "75%")
     s = s.replace("%", "")
+    # Handle European number format
     if s.count(",") == 1 and s.count(".") == 0:
         s = s.replace(",", ".")
     if s.count(",") >= 1 and s.count(".") == 1:
@@ -643,21 +646,36 @@ def load_position_data(position_key: str) -> tuple[pd.DataFrame, dict]:
     df = pd.read_excel(fp)
     df.columns = [str(c).strip() for c in df.columns]
     
-    # Identify role columns (first columns after Match Share that are numeric)
+    # Identify role columns and metric columns (handle percentage strings)
     role_cols = []
     metric_cols = []
     
     for col in df.columns:
         if col in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, NAT_COL, SHARE_COL, ID_COL]:
             continue
-        # Role columns are typically the first batch before IMPECT
-        if any(prefix in col for prefix in cfg["role_prefix"]):
-            role_cols.append(col)
-        elif col not in ["IMPECT - BetterThan", "Offensive IMPECT - BetterThan", "Defensive IMPECT - BetterThan"]:
-            if "IMPECT" in col or pd.api.types.is_numeric_dtype(df[col]):
-                metric_cols.append(col)
+        if 'BetterThan' in col:
+            continue
+            
+        # IMPECT columns are always metrics
+        if "IMPECT" in col:
+            metric_cols.append(col)
+            continue
+        
+        # Check if column contains percentage strings or is numeric
+        if df[col].dtype == 'object':
+            # Check if it's a percentage column
+            sample = df[col].dropna().iloc[0] if len(df[col].dropna()) > 0 else None
+            if sample and isinstance(sample, str) and '%' in sample:
+                col_idx = df.columns.get_loc(col)
+                # Early columns matching role_prefix are roles
+                if col_idx < 20 and any(prefix in col for prefix in cfg.get("role_prefix", [])):
+                    role_cols.append(col)
+                else:
+                    metric_cols.append(col)
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            metric_cols.append(col)
     
-    # Coerce numeric columns
+    # Coerce all percentage and numeric columns to float
     all_numeric = role_cols + metric_cols + [AGE_COL, SHARE_COL]
     coerce_numeric(df, all_numeric)
     
@@ -672,9 +690,9 @@ def load_position_data(position_key: str) -> tuple[pd.DataFrame, dict]:
             df[m + " (pct)"] = percentile_rank(df[m])
     
     # Store configuration
-    cfg.get("role_cols", []) == role_cols
-    cfg.get("metric_cols", []) == metric_cols
-    cfg.get("all_metrics", []) == role_cols + metric_cols
+    cfg["role_cols"] = role_cols
+    cfg["metric_cols"] = metric_cols
+    cfg["all_metrics"] = role_cols + metric_cols
     
     return df, cfg
 
