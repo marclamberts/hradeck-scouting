@@ -9,7 +9,7 @@ import hashlib
 # =====================================================
 # PAGE CONFIG
 # =====================================================
-st.set_page_config(page_title="Scout Lab Pro", layout="wide", page_icon="⚽")
+st.set_page_config(page_title="FCHK DATA LAB", layout="wide", page_icon="⚽")
 
 # =====================================================
 # MODERN COLOR PALETTE
