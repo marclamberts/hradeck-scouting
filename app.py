@@ -167,7 +167,7 @@ def create_professional_excel_report(df, cfg, position_key):
         # Metadata sheet
         ws_meta = wb.create_sheet("Report Info")
         metadata = [
-            ["Report Title", f"Scout Lab Pro - {cfg.get('title', position_key)} Analysis"],
+            ["Report Title", f"FCHK Scout - {cfg.get('title', position_key)} Analysis"],
             ["Generated", dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
             ["Position", cfg.get("title", position_key)],
             ["Total Players", len(df)],
@@ -214,7 +214,7 @@ def create_ultimate_package(df, cfg, position_key):
             # Comprehensive metadata
             metadata = {
                 "export_info": {
-                    "title": f"Scout Lab Pro Ultimate - {cfg.get('title', position_key)}",
+                    "title": f"FCHK - {cfg.get('title', position_key)}",
                     "position": position_key,
                     "generated_at": dt.datetime.now().isoformat(),
                     "version": "Ultimate Edition v2.0",
