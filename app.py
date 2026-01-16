@@ -8,29 +8,27 @@ from pathlib import Path
 import hashlib
 import datetime as dt
 from typing import List, Dict, Tuple, Optional
-import io
-import base64
-import json
-import zipfile
-
-# For Excel exports
-try:
-    from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils.dataframe import dataframe_to_rows
-    EXCEL_AVAILABLE = True
-except ImportError:
-    EXCEL_AVAILABLE = False
 
 # =====================================================
 # PAGE CONFIG
 # =====================================================
 st.set_page_config(
-    page_title="Scout Lab Pro - Enhanced Edition",
+    page_title="Scout Lab Pro",
     layout="wide",
     page_icon="⚽",
     initial_sidebar_state="expanded"
 )
+
+# =====================================================
+# NAVIGATION STATE
+# =====================================================
+def ensure_navigation_state():
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "landing"
+    if "show_scout_app" not in st.session_state:
+        st.session_state.show_scout_app = False
+
+ensure_navigation_state()
 
 # =====================================================
 # ENHANCED COLOR PALETTE & DESIGN TOKENS
@@ -150,203 +148,325 @@ SHARE_COL = "Match Share"
 ID_COL = "Player-ID"
 
 # =====================================================
-# DOWNLOAD & EXPORT UTILITIES
+# LANDING PAGE
 # =====================================================
-
-def download_plotly_chart(fig, filename, format="png"):
-    """Convert Plotly chart to downloadable format"""
-    try:
-        if format.lower() == "png":
-            img_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
-            return img_bytes
-        elif format.lower() == "svg":
-            return fig.to_image(format="svg", width=1200, height=800)
-        elif format.lower() == "html":
-            html_str = fig.to_html(include_plotlyjs=True)
-            return html_str.encode('utf-8')
-        elif format.lower() == "pdf":
-            img_bytes = fig.to_image(format="pdf", width=1200, height=800)
-            return img_bytes
-    except Exception as e:
-        st.error(f"Error exporting chart: {e}")
-        return None
-
-def create_excel_report(df, cfg, position_key):
-    """Create comprehensive Excel report with multiple sheets"""
-    if not EXCEL_AVAILABLE:
-        # Fallback to CSV if openpyxl not available
-        return df.to_csv(index=False).encode('utf-8')
+def render_landing_page():
+    st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
     
-    try:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Player Data"
-        
-        # Style definitions
-        header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-        border = Border(left=Side(style='thin'), right=Side(style='thin'), 
-                       top=Side(style='thin'), bottom=Side(style='thin'))
-        center_align = Alignment(horizontal='center', vertical='center')
-        
-        # Main data sheet
-        for r in dataframe_to_rows(df, index=False, header=True):
-            ws.append(r)
-        
-        # Format headers
-        for cell in ws[1]:
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = center_align
-            cell.border = border
-        
-        # Auto-adjust column widths
-        for column in ws.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            ws.column_dimensions[column_letter].width = adjusted_width
-        
-        # Summary statistics sheet
-        ws_stats = wb.create_sheet("Statistics")
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        stats_data = []
-        
-        for col in numeric_cols[:10]:
-            col_data = df[col].dropna()
-            if len(col_data) > 0:
-                stats_data.append({
-                    'Metric': col,
-                    'Count': len(col_data),
-                    'Mean': round(col_data.mean(), 2),
-                    'Median': round(col_data.median(), 2),
-                    'Std Dev': round(col_data.std(), 2),
-                    'Min': round(col_data.min(), 2),
-                    'Max': round(col_data.max(), 2),
-                    '25th %ile': round(col_data.quantile(0.25), 2),
-                    '75th %ile': round(col_data.quantile(0.75), 2)
-                })
-        
-        if stats_data:
-            stats_df = pd.DataFrame(stats_data)
-            for r in dataframe_to_rows(stats_df, index=False, header=True):
-                ws_stats.append(r)
-            
-            for cell in ws_stats[1]:
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = center_align
-                cell.border = border
-        
-        # Team analysis sheet
-        ws_teams = wb.create_sheet("Team Analysis")
-        if TEAM_COL in df.columns and len(df) > 0:
-            team_stats = df.groupby(TEAM_COL).agg({
-                NAME_COL: 'count',
-                AGE_COL: 'mean',
-                SHARE_COL: 'mean'
-            }).round(2)
-            team_stats.columns = ['Player Count', 'Avg Age', 'Avg Match Share']
-            team_stats = team_stats.sort_values('Player Count', ascending=False)
-            
-            for r in dataframe_to_rows(team_stats, index=True, header=True):
-                ws_teams.append(r)
-            
-            for cell in ws_teams[1]:
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = center_align
-                cell.border = border
-        
-        # Add metadata sheet
-        ws_meta = wb.create_sheet("Report Info")
-        metadata = [
-            ["Report Generated", dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-            ["Position", cfg.get("title", position_key)],
-            ["Total Players", len(df)],
-            ["Data Source", cfg.get("file", "Unknown")],
-            ["Generated By", "Scout Lab Pro Enhanced"],
-            ["Export Format", "Excel Workbook (.xlsx)"],
-            ["Analysis Features", "Multi-sheet, Statistics, Team Analysis"]
-        ]
-        
-        for row in metadata:
-            ws_meta.append(row)
-        
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-        return output.getvalue()
-        
-    except Exception as e:
-        st.error(f"Error creating Excel report: {e}")
-        return df.to_csv(index=False).encode('utf-8')
-
-def create_download_package(df, cfg, position_key):
-    """Create a complete download package with multiple files"""
-    zip_buffer = io.BytesIO()
+    # Hero Section
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, var(--darker) 0%, var(--dark) 50%, var(--darker) 100%);
+        padding: 4rem 2rem;
+        text-align: center;
+        border-radius: var(--radius-lg);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        backdrop-filter: blur(20px);
+    ">
+        <div style="
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(0,217,255,0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255,107,157,0.1) 0%, transparent 50%);
+            animation: float 20s ease-in-out infinite;
+        "></div>
+        <div style="position: relative; z-index: 2;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">⚽</div>
+            <h1 style="
+                font-size: clamp(3rem, 6vw, 5rem);
+                font-weight: 900;
+                background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 1rem;
+                letter-spacing: -0.02em;
+            ">Scout Lab Pro</h1>
+            <p style="
+                font-size: 1.25rem;
+                color: var(--text-accent);
+                margin-bottom: 2rem;
+                max-width: 600px;
+                margin-left: auto;
+                margin-right: auto;
+                line-height: 1.6;
+            ">
+                Advanced Football Analytics Platform for Professional Scouting and Player Analysis
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    try:
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Add main Excel report
-            excel_data = create_excel_report(df, cfg, position_key)
-            zip_file.writestr(f"{position_key}_complete_report.xlsx", excel_data)
-            
-            # Add CSV export
-            csv_data = df.to_csv(index=False).encode('utf-8')
-            zip_file.writestr(f"{position_key}_player_data.csv", csv_data)
-            
-            # Add JSON summary
-            summary = {
-                "position": position_key,
-                "position_title": cfg.get("title", position_key),
-                "total_players": len(df),
-                "generated_at": dt.datetime.now().isoformat(),
-                "data_columns": df.columns.tolist(),
-                "export_info": {
-                    "format": "Scout Lab Pro Enhanced Package",
-                    "version": "2.0",
-                    "includes": ["Excel Report", "CSV Data", "JSON Summary", "Documentation"]
-                }
-            }
-            zip_file.writestr(f"{position_key}_summary.json", json.dumps(summary, indent=2))
-            
-            # Add comprehensive readme
-            readme_content = f"""
-Scout Lab Pro Enhanced - Data Export Package
-==========================================
-
-Position: {cfg.get('title', position_key)} ({position_key})
-Generated: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Total Players: {len(df)}
-Data Columns: {len(df.columns)}
-
-Package Contents:
-- {position_key}_complete_report.xlsx: Comprehensive Excel report
-- {position_key}_player_data.csv: Raw player data in CSV format  
-- {position_key}_summary.json: Statistical summary and metadata
-- README.txt: This documentation file
-
-Generated by Scout Lab Pro Enhanced Edition
-© 2024 - Professional Football Analytics Platform
-            """
-            zip_file.writestr("README.txt", readme_content.encode('utf-8'))
+    # Quick Stats
+    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+    
+    with stat_col1:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">{len(POSITION_CONFIG)}</div>
+                <div class="metric-label">Positions Covered</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with stat_col2:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem; color: {COLORS["success"]};">50+</div>
+                <div class="metric-label">Performance Metrics</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with stat_col3:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem; color: {COLORS["warning"]};">∞</div>
+                <div class="metric-label">Player Comparisons</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with stat_col4:
+        st.markdown(f'''
+            <div class="metric-card hover-glow">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem; color: {COLORS["secondary"]};">AI</div>
+                <div class="metric-label">Powered Analysis</div>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    # Features Section
+    st.markdown("## 🚀 Platform Features")
+    
+    feature_col1, feature_col2 = st.columns(2, gap="large")
+    
+    with feature_col1:
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["primary"]}40, {COLORS["secondary"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        🔍
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Advanced Player Search</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Powerful filtering system to discover players by position, age, performance metrics, 
+                    teams, competitions, and custom criteria. Find your next signing with precision.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
         
-        zip_buffer.seek(0)
-        return zip_buffer.getvalue()
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["success"]}40, {COLORS["primary"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        📊
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Performance Analytics</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Comprehensive statistical analysis with IMPECT scores, role suitability ratings, 
+                    strengths/weaknesses identification, and percentile rankings vs. peers.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with feature_col2:
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["warning"]}40, {COLORS["success"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        ⚖️
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Player Comparisons</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Side-by-side analysis of multiple players with interactive radar charts, 
+                    head-to-head statistics, and detailed performance breakdowns.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
         
-    except Exception as e:
-        st.error(f"Error creating download package: {e}")
-        return None
+        st.markdown(f'''
+            <div class="modern-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {COLORS["secondary"]}40, {COLORS["warning"]}40); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                        ⭐
+                    </div>
+                    <h3 style="margin: 0; color: var(--text);">Smart Shortlisting</h3>
+                </div>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Create and manage player shortlists with notes, tags, and export capabilities. 
+                    Never lose track of promising talent again.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    # Positions Grid
+    st.markdown("## ⚽ Available Positions")
+    
+    pos_cols = st.columns(5)
+    for idx, (pos_key, pos_config) in enumerate(POSITION_CONFIG.items()):
+        with pos_cols[idx % 5]:
+            st.markdown(f'''
+                <div style="
+                    padding: 1.5rem;
+                    background: var(--glass);
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-lg);
+                    text-align: center;
+                    transition: all var(--duration-normal) var(--easing);
+                    cursor: pointer;
+                    backdrop-filter: blur(20px);
+                " onmouseover="this.style.borderColor='{pos_config["color"]}'; this.style.transform='translateY(-4px)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0px)'">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">{pos_config["icon"]}</div>
+                    <div style="font-weight: 700; color: var(--text); margin-bottom: 0.25rem;">{pos_key}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">{pos_config["title"]}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+    
+    # CTA Section
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown(f'''
+            <div style="text-align: center; padding: 2rem;">
+                <h3 style="margin-bottom: 1.5rem; color: var(--text);">Ready to Start Scouting?</h3>
+                <p style="color: var(--text-muted); margin-bottom: 2rem; max-width: 400px; margin-left: auto; margin-right: auto;">
+                    Launch the full scouting platform and discover your next star player with advanced analytics and AI-powered insights.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        if st.button("🚀 Launch Scout Lab Pro", width="stretch", type="primary"):
+            st.session_state.current_page = "scout_app"
+            st.session_state.show_scout_app = True
+            st.rerun()
 
 # =====================================================
-# ENHANCED CSS STYLING
+# NAVIGATION
+# =====================================================
+def render_navigation():
+    """Render top navigation bar"""
+    st.markdown(f"""
+    <div style="
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 2rem;
+        background: var(--glass);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        margin-bottom: 2rem;
+        backdrop-filter: blur(20px);
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+    ">
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <div style="font-size: 1.5rem; font-weight: 900; background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                ⚽ Scout Lab Pro
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="padding: 0.5rem 1rem; background: rgba(0,217,255,0.2); border: 1px solid rgba(0,217,255,0.4); border-radius: 20px; color: #00D9FF; font-weight: 700; font-size: 0.8rem;">
+                v2.0 Enhanced
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Navigation buttons
+    nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
+    
+    with nav_col2:
+        nav_buttons = st.columns(3)
+        
+        with nav_buttons[0]:
+            if st.button("🏠 Home", width="stretch", type="secondary" if st.session_state.current_page != "landing" else "primary"):
+                st.session_state.current_page = "landing"
+                st.session_state.show_scout_app = False
+                st.rerun()
+        
+        with nav_buttons[1]:
+            if st.button("⚽ Scout Platform", width="stretch", type="secondary" if st.session_state.current_page != "scout_app" else "primary"):
+                st.session_state.current_page = "scout_app"
+                st.session_state.show_scout_app = True
+                st.rerun()
+        
+        with nav_buttons[2]:
+            if st.button("📖 About", width="stretch", type="secondary" if st.session_state.current_page != "about" else "primary"):
+                st.session_state.current_page = "about"
+                st.session_state.show_scout_app = False
+                st.rerun()
+
+# =====================================================
+# ABOUT PAGE
+# =====================================================
+def render_about_page():
+    st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
+    
+    st.markdown(f'''
+        <div class="modern-card" style="text-align: center; margin-bottom: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚽</div>
+            <h1 style="background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">About Scout Lab Pro</h1>
+            <p style="color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
+                Professional Football Analytics Platform for Modern Scouting
+            </p>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2, gap="large")
+    
+    with col1:
+        st.markdown('''
+            <div class="modern-card">
+                <h3>🎯 Mission</h3>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Scout Lab Pro revolutionizes football scouting by providing advanced analytics, 
+                    AI-powered insights, and comprehensive player analysis tools for professionals 
+                    in the beautiful game.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown('''
+            <div class="modern-card">
+                <h3>🔬 Technology</h3>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Built with cutting-edge web technologies including Streamlit, Plotly for 
+                    interactive visualizations, and advanced statistical analysis algorithms 
+                    for meaningful player insights.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('''
+            <div class="modern-card">
+                <h3>📊 Features</h3>
+                <ul style="color: var(--text-muted); line-height: 1.6;">
+                    <li>Advanced player search and filtering</li>
+                    <li>Comprehensive performance analytics</li>
+                    <li>Interactive player comparisons</li>
+                    <li>Role suitability analysis</li>
+                    <li>Smart shortlisting system</li>
+                    <li>Export and reporting tools</li>
+                </ul>
+            </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown('''
+            <div class="modern-card">
+                <h3>🎨 Design</h3>
+                <p style="color: var(--text-muted); line-height: 1.6;">
+                    Features a modern glass morphism design with smooth animations, 
+                    responsive layout, and position-specific color schemes for 
+                    an intuitive user experience.
+                </p>
+            </div>
+        ''', unsafe_allow_html=True)
 # =====================================================
 def generate_enhanced_css():
     return f"""
@@ -415,12 +535,6 @@ html, body {{ scroll-behavior: smooth; }}
     75% {{ transform: translate(-20px, -10px) rotate(0.5deg); }}
 }}
 
-.hover-glow:hover {{
-    transform: translateY(-6px);
-    box-shadow: 0 12px 40px rgba(0, 217, 255, 0.4);
-    border-color: var(--primary) !important;
-}}
-
 .block-container {{
     padding: 1.5rem 2rem !important;
     max-width: 1600px !important;
@@ -443,6 +557,104 @@ h1 {{
     -webkit-text-fill-color: transparent;
     background-clip: text;
     margin-bottom: 1rem;
+}}
+
+h3 {{ font-size: 1.35rem; margin-bottom: 0.5rem; }}
+h4 {{ font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-accent); }}
+
+section[data-testid="stSidebar"] {{
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-medium);
+}}
+
+section[data-testid="stSidebar"] .block-container {{
+    padding: 1rem !important;
+}}
+
+.header-bar {{
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-medium);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    transition: all var(--duration-normal) var(--easing);
+}}
+
+.header-bar:hover {{
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-glow);
+}}
+
+.header-left {{
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}}
+
+.brand {{
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 1.8rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
+}}
+
+.position-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, rgba(0,217,255,0.15) 0%, rgba(255,107,157,0.15) 100%);
+    border: 1px solid rgba(0,217,255,0.4);
+    padding: 0.5rem 1.25rem;
+    border-radius: var(--radius-full);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text);
+    transition: all var(--duration-normal) var(--easing);
+}}
+
+.position-badge:hover {{
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-glow);
+}}
+
+.stat-pill {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-full);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    transition: all var(--duration-normal) var(--easing);
+    backdrop-filter: blur(10px);
+}}
+
+.stat-pill:hover {{
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-glow);
+}}
+
+.stat-pill strong {{
+    color: var(--primary);
+    font-weight: 800;
 }}
 
 .modern-card {{
@@ -478,58 +690,6 @@ h1 {{
     opacity: 1;
 }}
 
-.metric-card {{
-    background: var(--glass);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 1rem;
-    text-align: center;
-    transition: all var(--duration-normal) var(--easing);
-    position: relative;
-    overflow: hidden;
-}}
-
-.metric-value {{
-    font-size: 2rem;
-    font-weight: 900;
-    font-family: 'JetBrains Mono', monospace;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0.5rem 0;
-    line-height: 1;
-}}
-
-.metric-label {{
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    font-weight: 700;
-}}
-
-.section-header {{
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: var(--text-muted);
-    font-weight: 900;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid var(--border);
-    position: relative;
-}}
-
-.section-header::after {{
-    content: '';
-    position: absolute;
-    bottom: -2px; left: 0;
-    width: 60px; height: 2px;
-    background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
-}}
-
 div.stButton > button {{
     background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
     color: var(--darker);
@@ -541,8 +701,6 @@ div.stButton > button {{
     letter-spacing: 0.01em;
     transition: all var(--duration-normal) var(--easing);
     box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3);
-    position: relative;
-    overflow: hidden;
 }}
 
 div.stButton > button:hover {{
@@ -561,6 +719,42 @@ button[kind="secondary"]:hover {{
     border-color: var(--primary) !important;
     background: var(--card-hover) !important;
     box-shadow: var(--shadow-glow) !important;
+}}
+
+div[data-baseweb="input"] > div,
+div[data-baseweb="select"] > div,
+div[data-baseweb="base-input"] {{
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-md) !important;
+    color: var(--text) !important;
+    transition: all var(--duration-normal) var(--easing) !important;
+}}
+
+div[data-baseweb="input"] > div:focus-within,
+div[data-baseweb="select"] > div:focus-within {{
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.2) !important;
+    transform: translateY(-1px);
+}}
+
+button[data-baseweb="tab"] {{
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    border-bottom: 3px solid transparent !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    padding: 0.75rem 1.5rem !important;
+    transition: all var(--duration-normal) var(--easing) !important;
+}}
+
+button[data-baseweb="tab"][aria-selected="true"] {{
+    color: var(--primary) !important;
+    border-bottom-color: var(--primary) !important;
+}}
+
+button[data-baseweb="tab"]:hover {{
+    color: var(--text) !important;
 }}
 
 div[data-testid="stDataFrame"] {{
@@ -583,11 +777,83 @@ div[data-testid="stDataFrame"] thead tr th {{
     padding: 1rem !important;
 }}
 
+div[data-testid="stDataFrame"] tbody tr {{
+    transition: all 0.15s var(--easing);
+}}
+
+div[data-testid="stDataFrame"] tbody tr:hover {{
+    background: var(--card-hover) !important;
+    transform: scale(1.005);
+}}
+
+.section-header {{
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    font-weight: 900;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    position: relative;
+}}
+
+.section-header::after {{
+    content: '';
+    position: absolute;
+    bottom: -2px; left: 0;
+    width: 60px; height: 2px;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+}}
+
+.metric-card {{
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    text-align: center;
+    transition: all var(--duration-normal) var(--easing);
+    position: relative;
+    overflow: hidden;
+}}
+
+.metric-card:hover {{
+    transform: translateY(-6px);
+    box-shadow: var(--shadow-glow);
+    border-color: var(--primary);
+}}
+
+.metric-value {{
+    font-size: 2rem;
+    font-weight: 900;
+    font-family: 'JetBrains Mono', monospace;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0.5rem 0;
+    line-height: 1;
+}}
+
+.metric-label {{
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 700;
+}}
+
 ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
 ::-webkit-scrollbar-track {{ background: var(--darker); border-radius: 4px; }}
 ::-webkit-scrollbar-thumb {{ 
     background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%); 
     border-radius: 4px; 
+}}
+
+@media (max-width: 768px) {{
+    .header-bar {{ flex-direction: column; align-items: flex-start; gap: 1rem; }}
+    .block-container {{ padding: 1rem !important; }}
 }}
 </style>
 """
@@ -601,6 +867,8 @@ def safe_float(x):
     s = str(x).strip()
     if s == "" or s.lower() in {"nan", "none", "null", "na", "n/a", "-", "—"}: return np.nan
     s = s.replace("%", "")
+    if s.count(",") == 1 and s.count(".") == 0: s = s.replace(",", ".")
+    if s.count(",") >= 1 and s.count(".") == 1: s = s.replace(",", "")
     try: return float(s)
     except: return np.nan
 
@@ -623,6 +891,11 @@ def percentile_rank(s: pd.Series) -> pd.Series:
     mask = s.notna()
     out.loc[mask] = s.loc[mask].rank(pct=True, method="average") * 100
     return out
+
+def make_rowid(row: pd.Series, position: str) -> str:
+    parts = [position, str(row.get(NAME_COL, "")), str(row.get(TEAM_COL, "")), str(row.get(COMP_COL, "")), str(row.name)]
+    raw = "||".join(parts)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
 
 def player_meta(row: pd.Series) -> str:
     team = str(row.get(TEAM_COL, "—"))
@@ -665,171 +938,148 @@ def load_position_data(position_key: str) -> tuple[pd.DataFrame, dict]:
     fp = Path(cfg["file"])
     
     if not fp.exists():
-        # Create sample data if files don't exist
-        return create_sample_data(position_key), cfg
+        raise FileNotFoundError(f"Missing {cfg['file']}")
     
-    try:
-        df = pd.read_excel(fp)
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        role_cols = []
-        metric_cols = []
-        
-        for col in df.columns:
-            if col in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, NAT_COL, SHARE_COL, ID_COL] or 'BetterThan' in col:
-                continue
-                
-            if "IMPECT" in col:
-                metric_cols.append(col)
-                continue
+    df = pd.read_excel(fp)
+    df.columns = [str(c).strip() for c in df.columns]
+    
+    role_cols = []
+    metric_cols = []
+    
+    for col in df.columns:
+        if col in [NAME_COL, TEAM_COL, COMP_COL, AGE_COL, NAT_COL, SHARE_COL, ID_COL] or 'BetterThan' in col:
+            continue
             
-            if df[col].dtype == 'object':
-                sample = df[col].dropna().iloc[0] if len(df[col].dropna()) > 0 else None
-                if sample and isinstance(sample, str) and '%' in sample:
-                    col_idx = df.columns.get_loc(col)
-                    if col_idx < 20 and any(prefix in col for prefix in cfg.get("role_prefix", [])):
-                        role_cols.append(col)
-                    else:
-                        metric_cols.append(col)
-            elif pd.api.types.is_numeric_dtype(df[col]):
-                metric_cols.append(col)
+        if "IMPECT" in col:
+            metric_cols.append(col)
+            continue
         
-        all_numeric = role_cols + metric_cols + [AGE_COL, SHARE_COL]
-        coerce_numeric(df, all_numeric)
-        
-        for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
-            if c in df.columns:
-                df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
-        
-        for m in metric_cols:
-            if m in df.columns and pd.api.types.is_numeric_dtype(df[m]):
-                df[m + " (pct)"] = percentile_rank(df[m])
-        
-        cfg["role_cols"] = role_cols
-        cfg["metric_cols"] = metric_cols
-        cfg["all_metrics"] = role_cols + metric_cols
-        
-        return df, cfg
-        
-    except Exception as e:
-        st.warning(f"Could not load {cfg['file']}: {e}. Using sample data.")
-        return create_sample_data(position_key), cfg
-
-def create_sample_data(position_key: str) -> pd.DataFrame:
-    """Create sample data for demonstration"""
-    np.random.seed(42)
+        if df[col].dtype == 'object':
+            sample = df[col].dropna().iloc[0] if len(df[col].dropna()) > 0 else None
+            if sample and isinstance(sample, str) and '%' in sample:
+                col_idx = df.columns.get_loc(col)
+                if col_idx < 20 and any(prefix in col for prefix in cfg.get("role_prefix", [])):
+                    role_cols.append(col)
+                else:
+                    metric_cols.append(col)
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            metric_cols.append(col)
     
-    # Sample player names
-    first_names = ["James", "Mohamed", "Lucas", "Diego", "Marco", "Kevin", "Paulo", "Andre", "Carlos", "Rafael", 
-                   "Roberto", "Alessandro", "Fernando", "Gabriel", "Antonio", "Miguel", "Jorge", "David", "Manuel", "Francisco"]
-    last_names = ["Silva", "Santos", "Rodriguez", "Martinez", "Garcia", "Lopez", "Gonzalez", "Perez", "Wilson", "Brown",
-                  "Smith", "Johnson", "Williams", "Jones", "Davis", "Miller", "Moore", "Taylor", "Anderson", "Thomas"]
+    all_numeric = role_cols + metric_cols + [AGE_COL, SHARE_COL]
+    coerce_numeric(df, all_numeric)
     
-    teams = ["Barcelona", "Real Madrid", "Manchester City", "Liverpool", "Bayern Munich", "PSG", "Juventus", "AC Milan",
-             "Chelsea", "Arsenal", "Tottenham", "Manchester United", "Atletico Madrid", "Inter Milan", "Napoli"]
+    for c in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
+        if c in df.columns:
+            df[c] = df[c].astype(str).replace({"nan": ""}).str.strip()
     
-    competitions = ["La Liga", "Premier League", "Bundesliga", "Serie A", "Ligue 1", "Champions League"]
+    for m in metric_cols:
+        if m in df.columns and pd.api.types.is_numeric_dtype(df[m]):
+            df[m + " (pct)"] = percentile_rank(df[m])
     
-    nationalities = ["Spain", "England", "Germany", "Italy", "France", "Brazil", "Argentina", "Portugal", "Netherlands", "Belgium"]
+    cfg["role_cols"] = role_cols
+    cfg["metric_cols"] = metric_cols
+    cfg["all_metrics"] = role_cols + metric_cols
     
-    n_players = 150
-    
-    data = {
-        NAME_COL: [f"{np.random.choice(first_names)} {np.random.choice(last_names)}" for _ in range(n_players)],
-        TEAM_COL: np.random.choice(teams, n_players),
-        COMP_COL: np.random.choice(competitions, n_players),
-        AGE_COL: np.random.normal(26, 4, n_players).clip(18, 35),
-        NAT_COL: np.random.choice(nationalities, n_players),
-        SHARE_COL: np.random.beta(2, 2, n_players) * 100,
-        "IMPECT": np.random.normal(50, 15, n_players).clip(0, 100),
-        "Offensive IMPECT": np.random.normal(45, 12, n_players).clip(0, 100),
-        "Defensive IMPECT": np.random.normal(48, 13, n_players).clip(0, 100),
-    }
-    
-    # Add position-specific role scores
-    cfg = POSITION_CONFIG[position_key]
-    for role in cfg.get("role_prefix", [])[:4]:  # Limit to first 4 roles
-        data[f"{role} Score"] = np.random.normal(60, 20, n_players).clip(0, 100)
-    
-    df = pd.DataFrame(data)
-    
-    # Add percentile columns
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    for col in numeric_cols:
-        if col not in [AGE_COL]:
-            df[f"{col} (pct)"] = percentile_rank(df[col])
-    
-    return df
+    return df, cfg
 
 # =====================================================
-# MAIN ENHANCED APPLICATION
+# FILTERS & STATE
+# =====================================================
+def default_filters_for(df: pd.DataFrame):
+    if AGE_COL in df.columns and len(df):
+        vals = df[AGE_COL].dropna()
+        if len(vals):
+            lo = int(max(15, np.floor(vals.min())))
+            hi = int(min(50, np.ceil(vals.max())))
+        else:
+            lo, hi = 15, 45
+    else:
+        lo, hi = 15, 45
+    return {"q": "", "min_share": 0.0, "competitions": [], "teams": [], "nats": [], "age_range": (lo, hi)}
+
+def apply_filters(df: pd.DataFrame, f: dict) -> pd.DataFrame:
+    out = df.copy()
+    
+    if SHARE_COL in out.columns:
+        out = out[out[SHARE_COL].fillna(0) >= float(f.get("min_share", 0.0))]
+    
+    if AGE_COL in out.columns and "age_range" in f:
+        lo, hi = f["age_range"]
+        out = out[(out[AGE_COL].fillna(lo) >= lo) & (out[AGE_COL].fillna(hi) <= hi)]
+    
+    if f.get("competitions") and COMP_COL in out.columns:
+        out = out[out[COMP_COL].isin(f["competitions"])]
+    
+    if f.get("teams") and TEAM_COL in out.columns:
+        out = out[out[TEAM_COL].isin(f["teams"])]
+    
+    if f.get("nats") and NAT_COL in out.columns:
+        out = out[out[NAT_COL].isin(f["nats"])]
+    
+    q = str(f.get("q", "")).strip().lower()
+    if q:
+        mask = pd.Series(False, index=out.index)
+        for col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
+            if col in out.columns:
+                mask = mask | out[col].astype(str).str.lower().str.contains(q, na=False)
+        out = out[mask]
+    
+    return out
+
+def strengths_weaknesses(cfg: dict, row: pd.Series, topn: int = 5):
+    pairs = []
+    for m in cfg.get("metric_cols", []):
+        if m in ["IMPECT - BetterThan", "Offensive IMPECT - BetterThan", "Defensive IMPECT - BetterThan"]:
+            continue
+        pct = safe_float(row.get(m + " (pct)", np.nan))
+        if not np.isnan(pct):
+            pairs.append((m, pct))
+    pairs.sort(key=lambda x: x[1], reverse=True)
+    top = pairs[:topn]
+    bottom = list(reversed(pairs[-topn:])) if len(pairs) >= topn else list(reversed(pairs))
+    return top, bottom
+
+def ensure_state():
+    for key in ["filters", "shortlist", "pinned", "selected_player", "compare_picks"]:
+        if key not in st.session_state:
+            st.session_state[key] = {}
+
+def shortlist_key(position_key: str, player_name: str) -> str:
+    return f"{position_key}||{player_name}"
+
+def add_to_shortlist(position_key: str, player_name: str):
+    k = shortlist_key(position_key, player_name)
+    if k not in st.session_state.shortlist:
+        st.session_state.shortlist[k] = {"tags": "", "notes": "", "added": dt.datetime.now()}
+
+def remove_from_shortlist(position_key: str, player_name: str):
+    k = shortlist_key(position_key, player_name)
+    if k in st.session_state.shortlist:
+        del st.session_state.shortlist[k]
+
+# =====================================================
+# MAIN APP WITH NAVIGATION
 # =====================================================
 def main():
-    st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
+    # Always render navigation
+    if st.session_state.current_page != "landing":
+        render_navigation()
     
-    # Initialize session state
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = "main"
-    
-    # Enhanced Header
-    st.markdown(f"""
-    <div style="
-        background: var(--glass);
-        backdrop-filter: blur(20px);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 2rem;
-        margin-bottom: 2rem;
-        text-align: center;
-        position: relative;
-        overflow: hidden;
-    ">
-        <div style="
-            position: absolute;
-            inset: 0;
-            background: 
-                radial-gradient(circle at 30% 30%, rgba(0,217,255,0.1) 0%, transparent 50%),
-                radial-gradient(circle at 70% 70%, rgba(255,107,157,0.1) 0%, transparent 50%);
-        "></div>
-        <div style="position: relative; z-index: 2;">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">⚽</div>
-            <h1 style="
-                font-size: 3rem;
-                font-weight: 900;
-                background: linear-gradient(135deg, {COLORS["primary"]} 0%, {COLORS["secondary"]} 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin-bottom: 1rem;
-            ">Scout Lab Pro Enhanced</h1>
-            <div style="
-                background: linear-gradient(135deg, {COLORS["success"]}40, {COLORS["warning"]}40);
-                border: 1px solid {COLORS["success"]}60;
-                border-radius: 50px;
-                padding: 0.5rem 1.5rem;
-                display: inline-block;
-                margin-bottom: 1rem;
-                font-weight: 800;
-                color: {COLORS["success"]};
-            ">
-                ✨ Complete Export & Analytics Suite ✨
-            </div>
-            <p style="
-                font-size: 1.2rem;
-                color: var(--text-accent);
-                margin: 0;
-                max-width: 600px;
-                margin-left: auto;
-                margin-right: auto;
-            ">
-                Advanced Football Analytics with Professional Export Capabilities
-            </p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Route to appropriate page
+    if st.session_state.current_page == "landing":
+        render_landing_page()
+    elif st.session_state.current_page == "about":
+        render_about_page()
+    elif st.session_state.current_page == "scout_app":
+        render_scout_app()
 
-    # Sidebar Controls
+def render_scout_app():
+    st.markdown(generate_enhanced_css(), unsafe_allow_html=True)
+    ensure_state()
+
+    # Enhanced Sidebar
     with st.sidebar:
-        st.markdown('<div class="section-header">🎯 Enhanced Scout Control</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">🎯 Scout Control Center</div>', unsafe_allow_html=True)
         
         position = st.selectbox(
             "🏟️ Position",
@@ -837,450 +1087,727 @@ def main():
             format_func=lambda x: f"{POSITION_CONFIG[x]['icon']} {POSITION_CONFIG[x]['title']}",
             index=0
         )
-        
-        st.markdown("---")
-        st.markdown("##### 📥 Quick Export Tools")
-        
-        # Export availability notice
-        if EXCEL_AVAILABLE:
-            st.success("✅ Full export capabilities available")
-        else:
-            st.warning("⚠️ Limited exports (Excel library not available)")
 
     # Load data
-    with st.spinner("🔄 Loading enhanced player database..."):
+    with st.spinner("🔄 Loading player database..."):
         try:
             df, cfg = load_position_data(position)
+        except FileNotFoundError as e:
+            st.error(f"📁 Data file not found: {e}")
+            st.info("💡 Please ensure the Excel files are in the same directory as this script")
+            st.stop()
         except Exception as e:
             st.error(f"❌ Error loading data: {e}")
             st.stop()
 
-    position_color = cfg.get("color", COLORS["primary"])
+    # Initialize state
+    if position not in st.session_state.filters:
+        st.session_state.filters[position] = default_filters_for(df)
+    if position not in st.session_state.pinned:
+        st.session_state.pinned[position] = None
+    if position not in st.session_state.selected_player:
+        st.session_state.selected_player[position] = None
+    if position not in st.session_state.compare_picks:
+        st.session_state.compare_picks[position] = []
 
-    # Enhanced Dashboard
-    st.markdown(f"## 📊 {cfg['title']} Analytics Dashboard")
-    
-    # Quick stats with enhanced styling
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f'''
-            <div class="metric-card hover-glow" style="border-left: 3px solid {COLORS["primary"]};">
-                <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">👥</div>
-                <div class="metric-value" style="color: {COLORS["primary"]};">{len(df)}</div>
-                <div class="metric-label">Total Players</div>
+    f = st.session_state.filters[position]
+    position_color = POSITION_CONFIG[position].get("color", COLORS["primary"])
+
+    # Enhanced Sidebar Filters
+    with st.sidebar:
+        st.markdown('<div class="modern-card" style="margin-top: 1rem;">', unsafe_allow_html=True)
+        st.markdown("##### 🔍 Search & Filters")
+        
+        f["q"] = st.text_input("🔍 Search", value=f.get("q", ""), placeholder="Player, team, competition...")
+        f["min_share"] = st.slider("📊 Min Match Share (%)", 0.0, 100.0, float(f.get("min_share", 0.0)), 5.0)
+        
+        if AGE_COL in df.columns and len(df):
+            vals = df[AGE_COL].dropna()
+            min_age = int(max(15, np.floor(vals.min()))) if len(vals) else 15
+            max_age = int(min(50, np.ceil(vals.max()))) if len(vals) else 45
+            lo, hi = f.get("age_range", (min_age, max_age))
+            f["age_range"] = st.slider("🎂 Age Range", min_age, max_age, (lo, hi), 1)
+        
+        if COMP_COL in df.columns:
+            comps_all = sorted([c for c in df[COMP_COL].dropna().unique().tolist() if str(c).strip() != ""])
+            f["competitions"] = st.multiselect("🏆 Competitions", comps_all, default=f.get("competitions", []))
+        
+        if TEAM_COL in df.columns:
+            teams_all = sorted([t for t in df[TEAM_COL].dropna().unique().tolist() if str(t).strip() != ""])
+            f["teams"] = st.multiselect("⚽ Teams", teams_all, default=f.get("teams", []))
+        
+        if NAT_COL in df.columns:
+            nats_all = sorted([n for n in df[NAT_COL].dropna().unique().tolist() if str(n).strip() != ""])
+            f["nats"] = st.multiselect("🌍 Nationalities", nats_all, default=f.get("nats", []))
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Reset", width="stretch"):
+                st.session_state.filters[position] = default_filters_for(df)
+                st.rerun()
+        with col2:
+            filter_count = sum([bool(f.get("q", "")), f.get("min_share", 0) > 0, bool(f.get("competitions", [])), bool(f.get("teams", [])), bool(f.get("nats", []))])
+            st.markdown(f'<div style="text-align: center; padding: 0.5rem; background: rgba(0,217,255,0.2); border: 1px solid rgba(0,217,255,0.4); border-radius: 50px; color: #00D9FF; font-weight: 700; font-size: 0.8rem;">{filter_count} filters</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Apply filters
+    df_f = apply_filters(df, f)
+    if not df_f.empty:
+        df_f = df_f.copy()
+        df_f["_rowid"] = df_f.apply(lambda r: make_rowid(r, position), axis=1)
+
+    # Set defaults
+    if st.session_state.pinned[position] is None and len(df_f) and NAME_COL in df_f.columns:
+        if "IMPECT" in df_f.columns:
+            st.session_state.pinned[position] = df_f.sort_values("IMPECT", ascending=False).iloc[0][NAME_COL]
+        else:
+            st.session_state.pinned[position] = df_f.iloc[0][NAME_COL]
+
+    if st.session_state.selected_player[position] is None and st.session_state.pinned[position] is not None:
+        st.session_state.selected_player[position] = st.session_state.pinned[position]
+
+    # Enhanced Header
+    shortlist_count = len(st.session_state.shortlist)
+    teams_n = df_f[TEAM_COL].nunique() if TEAM_COL in df_f.columns else 0
+    comps_n = df_f[COMP_COL].nunique() if COMP_COL in df_f.columns else 0
+
+    st.markdown(f"""
+    <div class="header-bar">
+        <div class="header-left">
+            <div class="brand">Scout Lab Pro</div>
+            <div class="position-badge" style="border-color: {position_color}40;">
+                {cfg["icon"]} {cfg["title"]}
             </div>
-        ''', unsafe_allow_html=True)
-    
-    with col2:
-        teams_count = df[TEAM_COL].nunique() if TEAM_COL in df.columns else 0
-        st.markdown(f'''
-            <div class="metric-card hover-glow" style="border-left: 3px solid {COLORS["success"]};">
-                <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">⚽</div>
-                <div class="metric-value" style="color: {COLORS["success"]};">{teams_count}</div>
-                <div class="metric-label">Teams</div>
+            <div class="stat-pill">
+                <span style="color: {COLORS["text_muted"]};">Players</span> 
+                <strong>{len(df_f):,}</strong>
             </div>
-        ''', unsafe_allow_html=True)
-    
-    with col3:
-        avg_age = df[AGE_COL].mean() if AGE_COL in df.columns else 0
-        st.markdown(f'''
-            <div class="metric-card hover-glow" style="border-left: 3px solid {COLORS["warning"]};">
-                <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">🎂</div>
-                <div class="metric-value" style="color: {COLORS["warning"]};">{avg_age:.1f}</div>
-                <div class="metric-label">Avg Age</div>
-            </div>
-        ''', unsafe_allow_html=True)
-    
-    with col4:
-        avg_impect = df["IMPECT"].mean() if "IMPECT" in df.columns else 0
-        st.markdown(f'''
-            <div class="metric-card hover-glow" style="border-left: 3px solid {position_color};">
-                <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">⚡</div>
-                <div class="metric-value" style="color: {position_color};">{avg_impect:.1f}</div>
-                <div class="metric-label">Avg IMPECT</div>
-            </div>
-        ''', unsafe_allow_html=True)
-
-    # Enhanced Tabs
-    tabs = st.tabs([
-        "🔍 Player Browser", 
-        "📊 Advanced Analytics", 
-        "📈 Market Insights", 
-        "📥 Export Center",
-        "🎯 Demo Features"
-    ])
-
-    with tabs[0]:
-        st.markdown("### 🔍 Enhanced Player Browser")
-        
-        # Advanced filtering
-        filter_col1, filter_col2, filter_col3 = st.columns(3)
-        
-        with filter_col1:
-            search_query = st.text_input("🔍 Search players", placeholder="Name, team, nationality...")
-        
-        with filter_col2:
-            if TEAM_COL in df.columns:
-                teams = ["All"] + sorted(df[TEAM_COL].unique().tolist())
-                selected_team = st.selectbox("⚽ Team", teams)
-            else:
-                selected_team = "All"
-        
-        with filter_col3:
-            age_range = st.slider("🎂 Age Range", 
-                                int(df[AGE_COL].min()) if AGE_COL in df.columns else 18, 
-                                int(df[AGE_COL].max()) if AGE_COL in df.columns else 35, 
-                                (20, 30))
-        
-        # Apply filters
-        filtered_df = df.copy()
-        
-        if search_query:
-            mask = df[NAME_COL].str.contains(search_query, case=False, na=False)
-            if TEAM_COL in df.columns:
-                mask |= df[TEAM_COL].str.contains(search_query, case=False, na=False)
-            if NAT_COL in df.columns:
-                mask |= df[NAT_COL].str.contains(search_query, case=False, na=False)
-            filtered_df = filtered_df[mask]
-        
-        if selected_team != "All" and TEAM_COL in df.columns:
-            filtered_df = filtered_df[filtered_df[TEAM_COL] == selected_team]
-        
-        if AGE_COL in df.columns:
-            filtered_df = filtered_df[
-                (filtered_df[AGE_COL] >= age_range[0]) & 
-                (filtered_df[AGE_COL] <= age_range[1])
-            ]
-        
-        st.markdown(f"**Found {len(filtered_df)} players matching your criteria**")
-        
-        # Enhanced data display
-        display_cols = [c for c in [NAME_COL, TEAM_COL, AGE_COL, "IMPECT"] if c in filtered_df.columns]
-        if display_cols:
-            st.dataframe(
-                filtered_df[display_cols].head(20), 
-                width="stretch", 
-                height=400,
-                use_container_width=True
-            )
-
-    with tabs[1]:
-        st.markdown("### 📊 Advanced Analytics Dashboard")
-        
-        if "IMPECT" in df.columns:
-            # Performance distribution with export options
-            analytics_col1, analytics_col2 = st.columns([3, 1])
-            
-            with analytics_col1:
-                fig = px.histogram(
-                    df, 
-                    x="IMPECT", 
-                    nbins=25,
-                    color_discrete_sequence=[position_color],
-                    title=f"IMPECT Score Distribution - {cfg['title']}"
-                )
-                
-                # Add statistical lines
-                mean_val = df["IMPECT"].mean()
-                median_val = df["IMPECT"].median()
-                
-                fig.add_vline(
-                    x=mean_val, 
-                    line_dash="dash", 
-                    line_color=COLORS["success"],
-                    annotation_text=f"Mean: {mean_val:.1f}"
-                )
-                
-                fig.add_vline(
-                    x=median_val, 
-                    line_dash="dot", 
-                    line_color=COLORS["warning"],
-                    annotation_text=f"Median: {median_val:.1f}"
-                )
-                
-                theme = create_enhanced_plotly_theme()
-                fig.update_layout(height=500, **theme['layout'])
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with analytics_col2:
-                st.markdown("**Chart Export Options**")
-                
-                if st.button("📊 PNG", key="analytics_png"):
-                    png_data = download_plotly_chart(fig, "analytics", "png")
-                    if png_data:
-                        st.download_button(
-                            "Download PNG",
-                            data=png_data,
-                            file_name=f"{position}_analytics.png",
-                            mime="image/png"
-                        )
-                
-                if st.button("🖼️ SVG", key="analytics_svg"):
-                    svg_data = download_plotly_chart(fig, "analytics", "svg")
-                    if svg_data:
-                        st.download_button(
-                            "Download SVG",
-                            data=svg_data,
-                            file_name=f"{position}_analytics.svg",
-                            mime="image/svg+xml"
-                        )
-                
-                if st.button("📄 HTML", key="analytics_html"):
-                    html_data = download_plotly_chart(fig, "analytics", "html")
-                    if html_data:
-                        st.download_button(
-                            "Download HTML",
-                            data=html_data,
-                            file_name=f"{position}_analytics.html",
-                            mime="text/html"
-                        )
-                
-                # Quick statistics
-                st.markdown("---")
-                st.markdown("**Quick Stats**")
-                st.metric("Mean IMPECT", f"{mean_val:.1f}")
-                st.metric("Median IMPECT", f"{median_val:.1f}")
-                st.metric("Std Deviation", f"{df['IMPECT'].std():.1f}")
-
-    with tabs[2]:
-        st.markdown("### 📈 Market Insights")
-        
-        if TEAM_COL in df.columns and len(df) > 0:
-            # Team analysis
-            team_stats = df.groupby(TEAM_COL).agg({
-                NAME_COL: 'count',
-                AGE_COL: 'mean',
-                "IMPECT": 'mean' if "IMPECT" in df.columns else AGE_COL
-            }).round(2)
-            
-            team_stats.columns = ['Player Count', 'Avg Age', 'Avg IMPECT' if "IMPECT" in df.columns else 'Avg Age 2']
-            team_stats = team_stats.sort_values('Player Count', ascending=False).head(10)
-            
-            # Team comparison chart
-            team_fig = px.bar(
-                x=team_stats.index,
-                y=team_stats['Player Count'],
-                color=team_stats['Player Count'],
-                color_continuous_scale="Viridis",
-                title="Top 10 Teams by Player Count"
-            )
-            
-            team_fig.update_layout(
-                height=400,
-                xaxis_title="Team",
-                yaxis_title="Number of Players",
-                **create_enhanced_plotly_theme()['layout']
-            )
-            
-            insight_col1, insight_col2 = st.columns([3, 1])
-            
-            with insight_col1:
-                st.plotly_chart(team_fig, use_container_width=True)
-            
-            with insight_col2:
-                st.markdown("**Export Team Analysis**")
-                if st.button("📊 Team Chart PNG"):
-                    team_png = download_plotly_chart(team_fig, "team_analysis", "png")
-                    if team_png:
-                        st.download_button(
-                            "Download Team Chart",
-                            data=team_png,
-                            file_name=f"{position}_team_analysis.png",
-                            mime="image/png"
-                        )
-                
-                team_csv = team_stats.to_csv().encode('utf-8')
-                st.download_button(
-                    "📄 Team Data CSV",
-                    data=team_csv,
-                    file_name=f"{position}_team_stats.csv",
-                    mime="text/csv"
-                )
-            
-            # Display team stats table
-            st.markdown("#### Team Statistics")
-            st.dataframe(team_stats, use_container_width=True)
-
-    with tabs[3]:
-        st.markdown("### 📥 Enhanced Export Center")
-        
-        export_col1, export_col2 = st.columns(2)
-        
-        with export_col1:
-            st.markdown("#### 📊 Data Exports")
-            
-            # Excel Report
-            if st.button("📊 Generate Excel Report", width="stretch"):
-                with st.spinner("Creating comprehensive Excel report..."):
-                    excel_data = create_excel_report(df, cfg, position)
-                    if excel_data:
-                        st.download_button(
-                            "📥 Download Excel Report",
-                            data=excel_data,
-                            file_name=f"{position}_comprehensive_report_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key="excel_download"
-                        )
-                        st.success("✅ Excel report generated successfully!")
-            
-            # CSV Export
-            if st.button("📄 Export CSV Data", width="stretch"):
-                csv_data = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    "📥 Download CSV Data",
-                    data=csv_data,
-                    file_name=f"{position}_data_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    key="csv_download"
-                )
-                st.success("✅ CSV data ready for download!")
-            
-            # JSON Export
-            if st.button("🔧 Export JSON Data", width="stretch"):
-                json_data = df.to_json(orient='records', indent=2).encode('utf-8')
-                st.download_button(
-                    "📥 Download JSON Data",
-                    data=json_data,
-                    file_name=f"{position}_data_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                    mime="application/json",
-                    key="json_download"
-                )
-                st.success("✅ JSON data ready for download!")
-        
-        with export_col2:
-            st.markdown("#### 📦 Complete Packages")
-            
-            # Complete Package
-            if st.button("📦 Generate Complete Package", width="stretch"):
-                with st.spinner("Creating complete analysis package..."):
-                    package_data = create_download_package(df, cfg, position)
-                    if package_data:
-                        st.download_button(
-                            "📥 Download Complete Package",
-                            data=package_data,
-                            file_name=f"{position}_complete_package_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.zip",
-                            mime="application/zip",
-                            key="package_download"
-                        )
-                        st.success("✅ Complete package generated!")
-            
-            # Export summary
-            st.markdown("---")
-            st.markdown("#### 📋 Export Summary")
-            st.info(f"""
-            **Available Exports:**
-            - 📊 Excel: Multi-sheet workbook with statistics
-            - 📄 CSV: Raw data for analysis
-            - 🔧 JSON: Structured data format
-            - 📦 ZIP: Complete package with documentation
-            
-            **Current Dataset:**
-            - 👥 {len(df)} players
-            - 📊 {len(df.columns)} data columns
-            - 🏟️ Position: {cfg['title']}
-            """)
-
-    with tabs[4]:
-        st.markdown("### 🎯 Demo Features & Capabilities")
-        
-        demo_col1, demo_col2 = st.columns(2)
-        
-        with demo_col1:
-            st.markdown('''
-                <div class="modern-card">
-                    <h4>✨ Enhanced Features</h4>
-                    <ul style="color: var(--text-muted); line-height: 1.8;">
-                        <li><strong>📥 Complete Export Suite:</strong> Multi-format exports (Excel, CSV, JSON, ZIP)</li>
-                        <li><strong>📊 Advanced Analytics:</strong> Interactive charts with statistical overlays</li>
-                        <li><strong>🎯 Smart Filtering:</strong> Multi-criteria search and filtering</li>
-                        <li><strong>📈 Market Insights:</strong> Team analysis and performance trends</li>
-                        <li><strong>🎨 Professional Design:</strong> Modern UI with glass morphism</li>
-                    </ul>
-                </div>
-            ''', unsafe_allow_html=True)
-        
-        with demo_col2:
-            st.markdown('''
-                <div class="modern-card">
-                    <h4>🔧 Technical Capabilities</h4>
-                    <ul style="color: var(--text-muted); line-height: 1.8;">
-                        <li><strong>📊 Chart Exports:</strong> PNG, SVG, HTML, PDF formats</li>
-                        <li><strong>📈 Interactive Plots:</strong> Plotly with custom themes</li>
-                        <li><strong>🏗️ Excel Reports:</strong> Multi-sheet with professional formatting</li>
-                        <li><strong>📦 Package Creation:</strong> ZIP archives with documentation</li>
-                        <li><strong>🚀 Performance:</strong> Optimized data processing and caching</li>
-                    </ul>
-                </div>
-            ''', unsafe_allow_html=True)
-        
-        # Sample data notice
-        if len(df) == 150:  # Sample data
-            st.info("""
-            🔬 **Demo Mode Active**: This demonstration uses generated sample data to showcase the platform's capabilities.
-            
-            In a production environment, you would:
-            - Load real player data from Excel files
-            - Have access to comprehensive statistics and metrics
-            - Generate reports based on actual scouting data
-            - Export real analysis for decision-making
-            """)
-        
-        # Feature showcase
-        st.markdown("#### 🎬 Feature Showcase")
-        
-        showcase_col1, showcase_col2, showcase_col3 = st.columns(3)
-        
-        with showcase_col1:
-            if st.button("🎯 Test Advanced Filter"):
-                st.success("✅ Advanced filtering system operational!")
-                st.balloons()
-        
-        with showcase_col2:
-            if st.button("📊 Generate Sample Chart"):
-                sample_fig = px.scatter(
-                    df, 
-                    x=AGE_COL, 
-                    y="IMPECT" if "IMPECT" in df.columns else AGE_COL,
-                    color=TEAM_COL if TEAM_COL in df.columns else None,
-                    title="Sample Scatter Plot"
-                )
-                sample_fig.update_layout(**create_enhanced_plotly_theme()['layout'])
-                st.plotly_chart(sample_fig, use_container_width=True)
-        
-        with showcase_col3:
-            if st.button("📥 Test Export System"):
-                sample_csv = df.head(10).to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    "📥 Download Sample",
-                    data=sample_csv,
-                    file_name="scout_lab_pro_sample.csv",
-                    mime="text/csv"
-                )
-                st.success("✅ Export system operational!")
-
-    # Enhanced Footer
-    st.markdown("---")
-    st.markdown(f'''
-        <div style="
-            background: var(--glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 1.5rem;
-            text-align: center;
-            margin-top: 2rem;
-        ">
-            <div style="font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 0.5rem;">
-                ⚽ Scout Lab Pro Enhanced Edition
-            </div>
-            <div style="color: var(--text-muted); font-size: 0.9rem;">
-                Professional Football Analytics Platform with Complete Export Capabilities
-                <br>
-                Generated: {dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Version 2.0 Enhanced
+            <div class="stat-pill">
+                <span style="color: {COLORS["text_muted"]};">Teams</span> 
+                <strong>{teams_n}</strong>
             </div>
         </div>
-    ''', unsafe_allow_html=True)
+        <div style="display:flex;gap:1rem;align-items:center;">
+            <div class="stat-pill" style="background: linear-gradient(135deg, {COLORS["warning"]}20 0%, {COLORS["success"]}20 100%); border-color: {COLORS["warning"]}60;">
+                ⭐ Shortlist <strong>{shortlist_count}</strong>
+            </div>
+            <div style="padding: 0.5rem; background: rgba(0,217,255,0.2); border: 1px solid rgba(0,217,255,0.4); border-radius: 50px; color: #00D9FF; font-weight: 700; font-size: 0.8rem;">
+                🕐 {dt.datetime.now().strftime("%H:%M")}
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Tabs
+    tabs = st.tabs(["🔍 Scout Browser", "👤 Player Profile", "⚖️ Head-to-Head", "🏆 Rankings", "📊 Analytics", "⭐ Shortlist"])
+
+    # =====================================================
+    # TAB 1: SCOUT BROWSER
+    # =====================================================
+    with tabs[0]:
+        if df_f.empty:
+            st.markdown('''
+                <div class="modern-card" style="text-align: center; padding: 3rem;">
+                    <h3 style="color: var(--text-muted);">🔍 No Players Found</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 2rem;">
+                        Try adjusting your filters in the sidebar to discover more players.
+                    </p>
+                </div>
+            ''', unsafe_allow_html=True)
+        else:
+            sort_options = ["IMPECT"] + cfg.get("role_cols", []) if "IMPECT" in df_f.columns else cfg.get("role_cols", [])
+            sort_options = [c for c in sort_options if c in df_f.columns]
+            
+            if not sort_options and cfg.get("metric_cols", []):
+                sort_options = [c for c in cfg.get("metric_cols", []) if c in df_f.columns][:5]
+            
+            if not sort_options:
+                numeric_cols = df_f.select_dtypes(include=[np.number]).columns.tolist()
+                sort_options = numeric_cols[:1] if numeric_cols else [NAME_COL]
+            
+            col_sort, col_view = st.columns([2, 1])
+            
+            with col_sort:
+                sort_col = st.selectbox("📊 Sort by Metric", options=sort_options, index=0)
+            
+            with col_view:
+                view_count = st.selectbox("👁️ Show Results", options=[10, 20, 30, 50], index=2)
+            
+            left_col, right_col = st.columns([1.4, 0.6], gap="large")
+            
+            with left_col:
+                st.markdown('<div class="section-header">🔍 Player Discovery</div>', unsafe_allow_html=True)
+                
+                results = df_f.sort_values(sort_col, ascending=False).head(view_count).copy()
+                
+                for rank, (_, r) in enumerate(results.iterrows(), 1):
+                    name = str(r.get(NAME_COL, "—"))
+                    rid = str(r.get("_rowid", r.name))
+                    in_sl = shortlist_key(position, name) in st.session_state.shortlist
+                    score_val = safe_fmt(r.get(sort_col, np.nan), 1)
+                    
+                    st.markdown(f'''
+                        <div style="background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem; transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.borderColor='{COLORS["primary"]}'" onmouseout="this.style.borderColor='var(--border)'">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                                        <div style="width: 2rem; height: 2rem; background: {position_color}; color: var(--darker); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.8rem;">#{rank}</div>
+                                        <div style="font-weight: 800; font-size: 1.1rem; color: var(--text);">{name}</div>
+                                    </div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem; margin-left: 3rem;">{player_meta(r)}</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <div style="color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase;">{sort_col[:15]}</div>
+                                    <div style="font-family: 'JetBrains Mono', monospace; font-weight: 900; font-size: 1.5rem; color: {position_color};">{score_val}</div>
+                                </div>
+                            </div>
+                        </div>
+                    ''', unsafe_allow_html=True)
+                    
+                    action_col1, action_col2, action_col3 = st.columns([1, 1, 2])
+                    with action_col1:
+                        if st.button("👁️ View", key=f"view_{position}_{rid}", width="stretch"):
+                            st.session_state.pinned[position] = name
+                            st.session_state.selected_player[position] = name
+                            st.rerun()
+                    
+                    with action_col2:
+                        if st.button("⭐" if not in_sl else "✓", key=f"sl_{position}_{rid}", width="stretch", type="secondary"):
+                            if not in_sl:
+                                add_to_shortlist(position, name)
+                            else:
+                                remove_from_shortlist(position, name)
+                            st.rerun()
+                    
+                    with action_col3:
+                        if st.button("➕ Compare", key=f"cmp_{position}_{rid}", width="stretch", type="secondary"):
+                            picks = st.session_state.compare_picks[position]
+                            if name not in picks:
+                                picks.append(name)
+                                st.session_state.compare_picks[position] = picks[:6]
+                            st.rerun()
+            
+            with right_col:
+                st.markdown('<div style="position: sticky; top: 140px;">', unsafe_allow_html=True)
+                st.markdown('<div class="section-header">📌 Featured Player</div>', unsafe_allow_html=True)
+                
+                pinned = st.session_state.pinned.get(position)
+                
+                if not pinned:
+                    st.markdown('''
+                        <div class="modern-card" style="text-align: center;">
+                            <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">👆</div>
+                            <h4 style="color: var(--text-muted); margin-bottom: 0.5rem;">No Player Selected</h4>
+                            <p style="color: var(--text-muted); font-size: 0.9rem;">
+                                Click "View" on any player to see detailed insights here
+                            </p>
+                        </div>
+                    ''', unsafe_allow_html=True)
+                else:
+                    p = df_f[df_f[NAME_COL] == pinned].head(1)
+                    if p.empty:
+                        st.warning("📍 Pinned player not in current filter results")
+                    else:
+                        row = p.iloc[0]
+                        
+                        st.markdown(f'''
+                            <div class="modern-card">
+                                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                                    <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, {position_color}40, {COLORS["primary"]}40); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                        {cfg["icon"]}
+                                    </div>
+                                    <div>
+                                        <h3 style="margin: 0; color: var(--text);">{pinned}</h3>
+                                        <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">{player_meta(row)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+                        
+                        if "IMPECT" in row:
+                            impect_val = safe_fmt(row.get("IMPECT", np.nan), 1)
+                            st.markdown(f'''
+                                <div class="metric-card">
+                                    <div class="metric-label">IMPECT Score</div>
+                                    <div class="metric-value">{impect_val}</div>
+                                </div>
+                            ''', unsafe_allow_html=True)
+                        
+                        st.markdown("#### ⬆️ Key Strengths")
+                        top, _ = strengths_weaknesses(cfg, row, topn=3)
+                        for m, pct in top:
+                            st.markdown(f'''
+                                <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--glass); border-radius: var(--radius-md); margin-bottom: 0.5rem; border-left: 3px solid {COLORS["success"]};">
+                                    <div style="width: 8px; height: 8px; border-radius: 50%; background: {COLORS["success"]}; flex-shrink: 0;"></div>
+                                    <div>
+                                        <div style="font-weight: 700; font-size: 0.9rem; color: var(--text);">{m[:30]}</div>
+                                        <div style="color: var(--text-muted); font-size: 0.75rem;">{pct:.0f}th percentile</div>
+                                    </div>
+                                </div>
+                            ''', unsafe_allow_html=True)
+                        
+                        ac1, ac2 = st.columns(2)
+                        in_sl = shortlist_key(position, pinned) in st.session_state.shortlist
+                        with ac1:
+                            if st.button("⭐ Shortlist" if not in_sl else "✓ Shortlisted", key="sl_pin", width="stretch"):
+                                if not in_sl:
+                                    add_to_shortlist(position, pinned)
+                                else:
+                                    remove_from_shortlist(position, pinned)
+                                st.rerun()
+                        with ac2:
+                            if st.button("➕ Compare", key="cmp_pin", width="stretch", type="secondary"):
+                                picks = st.session_state.compare_picks[position]
+                                if pinned not in picks:
+                                    picks.append(pinned)
+                                    st.session_state.compare_picks[position] = picks[:6]
+                                st.rerun()
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    # =====================================================
+    # TAB 2: PLAYER PROFILE
+    # =====================================================
+    with tabs[1]:
+        if df_f.empty or NAME_COL not in df_f.columns:
+            st.warning("⚠️ No players available with current filters.")
+        else:
+            players = sorted(df_f[NAME_COL].dropna().unique().tolist())
+            default_player = st.session_state.selected_player.get(position) or st.session_state.pinned.get(position) or (players[0] if players else None)
+            if default_player not in players and players:
+                default_player = players[0]
+            
+            player = st.selectbox("🎯 Select Player", players, index=players.index(default_player) if default_player in players else 0)
+            st.session_state.selected_player[position] = player
+            
+            p = df_f[df_f[NAME_COL] == player].head(1)
+            row = p.iloc[0]
+            
+            st.markdown(f'''
+                <div class="modern-card" style="margin-bottom: 2rem;">
+                    <div style="display: flex; align-items: center; gap: 2rem;">
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, {position_color}60, {COLORS["primary"]}60); display: flex; align-items: center; justify-content: center; font-size: 2rem;">
+                            {cfg["icon"]}
+                        </div>
+                        <div>
+                            <h1 style="margin: 0; font-size: 2.5rem; background: linear-gradient(135deg, {COLORS["primary"]} 0%, {position_color} 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{player}</h1>
+                            <p style="margin: 0.5rem 0 0 0; color: var(--text-accent); font-size: 1.1rem;">{player_meta(row)}</p>
+                        </div>
+                    </div>
+                </div>
+            ''', unsafe_allow_html=True)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                age_val = safe_int_fmt(row.get(AGE_COL, np.nan))
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Age</div><div class="metric-value">{age_val}</div></div>', unsafe_allow_html=True)
+            
+            with col2:
+                share_val = safe_fmt(row.get(SHARE_COL, np.nan), 1)
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Match Share</div><div class="metric-value">{share_val}%</div></div>', unsafe_allow_html=True)
+            
+            with col3:
+                impect_val = safe_fmt(row.get("IMPECT", np.nan), 2)
+                st.markdown(f'<div class="metric-card"><div class="metric-label">IMPECT</div><div class="metric-value">{impect_val}</div></div>', unsafe_allow_html=True)
+            
+            with col4:
+                in_sl = shortlist_key(position, player) in st.session_state.shortlist
+                if st.button("⭐ Shortlist" if not in_sl else "✓ Shortlisted", width="stretch"):
+                    if not in_sl:
+                        add_to_shortlist(position, player)
+                    else:
+                        remove_from_shortlist(position, player)
+                    st.rerun()
+            
+            # Enhanced Strengths & Weaknesses Analysis
+            st.markdown("---")
+            top, bottom = strengths_weaknesses(cfg, row, topn=8)
+            
+            str_col, weak_col = st.columns(2, gap="large")
+            
+            with str_col:
+                st.markdown("#### ⬆️ Standout Strengths")
+                if not top:
+                    st.info("No strength metrics available with current data")
+                else:
+                    for i, (m, pct) in enumerate(top):
+                        # Color based on percentile
+                        if pct >= 90:
+                            color = COLORS["success"]
+                            icon = "🔥"
+                            level = "Elite"
+                        elif pct >= 75:
+                            color = COLORS["primary"] 
+                            icon = "⭐"
+                            level = "Strong"
+                        else:
+                            color = COLORS["warning"]
+                            icon = "↑"
+                            level = "Above Avg"
+                            
+                        st.markdown(f'''
+                            <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--glass); border-radius: var(--radius-md); margin-bottom: 0.75rem; border-left: 4px solid {color}; backdrop-filter: blur(10px); transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0px)'">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 1.2rem;">{icon}</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 700; font-size: 1rem; color: var(--text); margin-bottom: 0.25rem;">{m}</div>
+                                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                            <div style="color: {color}; font-weight: 800; font-size: 0.9rem; font-family: 'JetBrains Mono', monospace;">{pct:.0f}th percentile</div>
+                                            <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.2rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">
+                                                {level}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+            
+            with weak_col:
+                st.markdown("#### ⬇️ Development Areas")
+                if not bottom:
+                    st.info("No development area metrics available with current data")
+                else:
+                    for i, (m, pct) in enumerate(bottom):
+                        # Color based on how low the percentile is
+                        if pct <= 25:
+                            color = COLORS["danger"]
+                            icon = "⚠️"
+                            level = "Weak"
+                        elif pct <= 50:
+                            color = COLORS["secondary"]
+                            icon = "↓"
+                            level = "Below Avg"
+                        else:
+                            color = COLORS["warning"]
+                            icon = "≈"
+                            level = "Average"
+                            
+                        st.markdown(f'''
+                            <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--glass); border-radius: var(--radius-md); margin-bottom: 0.75rem; border-left: 4px solid {color}; backdrop-filter: blur(10px); transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0px)'">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 1.2rem;">{icon}</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 700; font-size: 1rem; color: var(--text); margin-bottom: 0.25rem;">{m}</div>
+                                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                            <div style="color: {color}; font-weight: 800; font-size: 0.9rem; font-family: 'JetBrains Mono', monospace;">{pct:.0f}th percentile</div>
+                                            <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.2rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">
+                                                {level}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+            
+            # Role Analysis if available
+            if cfg.get("role_cols", []):
+                st.markdown("---")
+                
+                # Role scores section with radar chart
+                radar_col, data_col = st.columns([1.3, 0.7], gap="large")
+                
+                with radar_col:
+                    st.markdown("#### 🎯 Role Suitability Radar")
+                    
+                    # Create radar chart
+                    role_values = []
+                    role_labels = []
+                    for rc in cfg.get("role_cols", []):
+                        val = safe_float(row.get(rc, np.nan))
+                        if not np.isnan(val):
+                            role_values.append(val)
+                            role_labels.append(rc.replace(" Score", "")[:20])
+                    
+                    if role_values:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(
+                            r=role_values,
+                            theta=role_labels,
+                            fill='toself',
+                            name=player,
+                            line=dict(color=position_color, width=3),
+                            fillcolor=f"rgba({int(position_color[1:3], 16)}, {int(position_color[3:5], 16)}, {int(position_color[5:7], 16)}, 0.25)",
+                            marker=dict(size=8, color=position_color)
+                        ))
+                        
+                        fig.update_layout(
+                            polar=dict(
+                                radialaxis=dict(
+                                    range=[0, 100],
+                                    gridcolor=COLORS["border"],
+                                    showticklabels=True,
+                                    tickfont=dict(size=10, color=COLORS["text_muted"]),
+                                    tickmode='linear',
+                                    tick0=0,
+                                    dtick=20
+                                ),
+                                angularaxis=dict(
+                                    gridcolor=COLORS["border"],
+                                    tickfont=dict(size=11, color=COLORS["text"]),
+                                    linecolor=COLORS["border"]
+                                ),
+                                bgcolor="rgba(0,0,0,0)"
+                            ),
+                            height=400,
+                            margin=dict(l=80, r=80, t=50, b=50),
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            font=dict(color=COLORS["text"], size=11, family='Plus Jakarta Sans, system-ui, sans-serif'),
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No role data available for radar chart")
+                
+                with data_col:
+                    st.markdown("#### 📊 Role Scores")
+                    for rc in cfg.get("role_cols", []):
+                        val = safe_float(row.get(rc, np.nan))
+                        if not np.isnan(val):
+                            # Determine fit level and color
+                            if val >= 80:
+                                fit_level = "Excellent"
+                                color = COLORS["success"]
+                            elif val >= 65:
+                                fit_level = "Good"
+                                color = COLORS["primary"]
+                            elif val >= 50:
+                                fit_level = "Average"
+                                color = COLORS["warning"]
+                            else:
+                                fit_level = "Poor"
+                                color = COLORS["danger"]
+                                
+                            st.markdown(f'''
+                                <div style="margin-bottom: 1rem; padding: 1rem; background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-md); backdrop-filter: blur(10px); transition: all var(--duration-normal) var(--easing);" onmouseover="this.style.borderColor='{color}'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0px)'">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                        <span style="font-weight: 700; font-size: 0.9rem; color: var(--text);">{rc[:25]}</span>
+                                        <div style="background: {color}20; color: {color}; border: 1px solid {color}40; padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 700;">
+                                            {fit_level}
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <div style="flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">
+                                            <div style="width: {val}%; height: 100%; background: linear-gradient(90deg, {color} 0%, {color}80 100%); transition: width 0.5s ease;"></div>
+                                        </div>
+                                        <div style="font-weight: 900; color: {color}; font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; min-width: 3rem;">
+                                            {val:.0f}%
+                                        </div>
+                                    </div>
+                                </div>
+                            ''', unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Role comparison grid
+                st.markdown("#### 🔄 Quick Role Comparison")
+                role_comparison_cols = st.columns(min(4, len(cfg.get("role_cols", []))))
+                for idx, rc in enumerate(cfg.get("role_cols", [])[:4]):
+                    with role_comparison_cols[idx % 4]:
+                        val = safe_float(row.get(rc, np.nan))
+                        if not np.isnan(val):
+                            if val >= 80:
+                                color = COLORS["success"]
+                            elif val >= 65:
+                                color = COLORS["primary"]
+                            elif val >= 50:
+                                color = COLORS["warning"]
+                            else:
+                                color = COLORS["danger"]
+                            
+                            st.markdown(f'''
+                                <div class="metric-card" style="border-left: 3px solid {color};">
+                                    <div class="metric-label">{rc[:15]}</div>
+                                    <div class="metric-value" style="font-size: 1.5rem; color: {color};">{val:.0f}%</div>
+                                </div>
+                            ''', unsafe_allow_html=True)
+
+    # =====================================================
+    # TAB 3: HEAD-TO-HEAD
+    # =====================================================
+    with tabs[2]:
+        if df_f.empty:
+            st.warning("⚠️ No players available.")
+        else:
+            players = sorted(df_f[NAME_COL].dropna().unique().tolist())
+            picks = [p for p in st.session_state.compare_picks.get(position, []) if p in players]
+            default = picks[:] if len(picks) else (players[:3] if len(players) >= 3 else players[:])
+            
+            chosen = st.multiselect("🎯 Select Players to Compare", players, default=default)
+            st.session_state.compare_picks[position] = chosen
+            
+            if len(chosen) < 2:
+                st.info("📊 Select at least 2 players to generate comparison charts")
+            else:
+                comp_df = df_f[df_f[NAME_COL].isin(chosen)].copy()
+                quick_cols = [c for c in [NAME_COL, TEAM_COL, AGE_COL, SHARE_COL] + cfg.get("key_metrics", []) if c in comp_df.columns]
+                st.dataframe(comp_df[quick_cols], width="stretch")
+
+    # =====================================================
+    # TAB 4: RANKINGS
+    # =====================================================
+    with tabs[3]:
+        if df_f.empty:
+            st.info("📊 No players available for ranking")
+        else:
+            all_sortable = ["IMPECT"] + cfg.get("role_cols", []) + cfg.get("metric_cols", [])
+            all_sortable = [c for c in all_sortable if c in df_f.columns and "BetterThan" not in c]
+            
+            if all_sortable:
+                metric = st.selectbox("📊 Ranking Metric", all_sortable)
+                n = st.slider("Top N Players", 10, min(50, len(df_f)), 20)
+                
+                out = df_f.sort_values(metric, ascending=False).head(n)[[NAME_COL, TEAM_COL, metric]].copy()
+                out.insert(0, "Rank", range(1, len(out) + 1))
+                
+                st.dataframe(out, width="stretch")
+
+    # =====================================================
+    # TAB 5: ANALYTICS
+    # =====================================================
+    with tabs[4]:
+        if df_f.empty:
+            st.info("📊 No data available for analysis")
+        else:
+            numeric_cols = [c for c in df_f.select_dtypes(include=[np.number]).columns.tolist() if "BetterThan" not in c]
+            
+            if numeric_cols:
+                metric = st.selectbox("📊 Metric to Analyze", numeric_cols)
+                
+                col1, col2, col3, col4 = st.columns(4)
+                metric_values = df_f[metric].dropna()
+                
+                with col1:
+                    st.markdown(f'<div class="metric-card"><div class="metric-label">Mean</div><div class="metric-value" style="font-size: 1.5rem;">{safe_fmt(metric_values.mean(), 2)}</div></div>', unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f'<div class="metric-card"><div class="metric-label">Median</div><div class="metric-value" style="font-size: 1.5rem;">{safe_fmt(metric_values.median(), 2)}</div></div>', unsafe_allow_html=True)
+                
+                with col3:
+                    st.markdown(f'<div class="metric-card"><div class="metric-label">Max</div><div class="metric-value" style="font-size: 1.5rem;">{safe_fmt(metric_values.max(), 2)}</div></div>', unsafe_allow_html=True)
+                
+                with col4:
+                    st.markdown(f'<div class="metric-card"><div class="metric-label">Std Dev</div><div class="metric-value" style="font-size: 1.5rem;">{safe_fmt(metric_values.std(), 2)}</div></div>', unsafe_allow_html=True)
+                
+                fig = px.histogram(df_f, x=metric, nbins=25, color_discrete_sequence=[COLORS["primary"]])
+                theme = create_enhanced_plotly_theme()
+                fig.update_layout(height=400, showlegend=False, **theme['layout'])
+                st.plotly_chart(fig, use_container_width=True)
+
+    # =====================================================
+    # TAB 6: SHORTLIST
+    # =====================================================
+    with tabs[5]:
+        items = []
+        for k, meta in st.session_state.shortlist.items():
+            pos, name = k.split("||", 1)
+            items.append({
+                "Position": pos,
+                "Player": name,
+                "Tags": meta.get("tags", ""),
+                "Notes": meta.get("notes", ""),
+                "Added": meta.get("added", dt.datetime.now()).strftime("%Y-%m-%d %H:%M") if isinstance(meta.get("added"), dt.datetime) else "Unknown"
+            })
+        
+        if not items:
+            st.markdown('''
+                <div class="modern-card" style="text-align: center; padding: 4rem;">
+                    <div style="font-size: 4rem; margin-bottom: 1.5rem; opacity: 0.5;">⭐</div>
+                    <h2 style="color: var(--text-muted); margin-bottom: 1rem;">Your Shortlist is Empty</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 2rem; max-width: 400px; margin-left: auto; margin-right: auto;">
+                        Start building your player shortlist by adding players from the Scout Browser or Player Profile tabs.
+                    </p>
+                    <div style="padding: 0.75rem 1.5rem; background: rgba(0,217,255,0.2); border: 1px solid rgba(0,217,255,0.4); border-radius: 50px; color: #00D9FF; font-weight: 700;">
+                        🔍 Browse players to get started
+                    </div>
+                </div>
+            ''', unsafe_allow_html=True)
+        else:
+            st.markdown(f"### ⭐ Your Shortlist ({len(items)} players)")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Total Players</div><div class="metric-value">{len(items)}</div></div>', unsafe_allow_html=True)
+            
+            with col2:
+                positions = set(item["Position"] for item in items)
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Positions</div><div class="metric-value">{len(positions)}</div></div>', unsafe_allow_html=True)
+            
+            with col3:
+                tagged = len([item for item in items if item["Tags"].strip()])
+                st.markdown(f'<div class="metric-card"><div class="metric-label">With Tags</div><div class="metric-value">{tagged}</div></div>', unsafe_allow_html=True)
+            
+            with col4:
+                with_notes = len([item for item in items if item["Notes"].strip()])
+                st.markdown(f'<div class="metric-card"><div class="metric-label">With Notes</div><div class="metric-value">{with_notes}</div></div>', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            sl_df = pd.DataFrame(items)
+            edited = st.data_editor(
+                sl_df,
+                width="stretch",
+                height=400,
+                num_rows="dynamic",
+                column_config={
+                    "Position": st.column_config.SelectboxColumn("Position", width="small", options=list(POSITION_CONFIG.keys())),
+                    "Player": st.column_config.TextColumn("Player", width="medium"),
+                    "Tags": st.column_config.TextColumn("Tags", width="medium"),
+                    "Notes": st.column_config.TextColumn("Notes", width="large"),
+                    "Added": st.column_config.TextColumn("Added", width="small")
+                },
+                key="shortlist_editor"
+            )
+            
+            new_shortlist = {}
+            for _, r in edited.iterrows():
+                pos = str(r.get("Position", "")).strip()
+                name = str(r.get("Player", "")).strip()
+                if not pos or not name:
+                    continue
+                
+                existing_key = shortlist_key(pos, name)
+                existing_meta = st.session_state.shortlist.get(existing_key, {})
+                
+                new_shortlist[existing_key] = {
+                    "tags": str(r.get("Tags", "") or ""),
+                    "notes": str(r.get("Notes", "") or ""),
+                    "added": existing_meta.get("added", dt.datetime.now())
+                }
+            
+            st.session_state.shortlist = new_shortlist
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            
+            with col1:
+                csv_data = pd.DataFrame(items).to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "📥 Export CSV",
+                    data=csv_data,
+                    file_name=f"shortlist_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    width="stretch"
+                )
+            
+            with col2:
+                if st.button("🗑️ Clear All", width="stretch", type="secondary"):
+                    st.session_state.shortlist = {}
+                    st.rerun()
+            
+            with col3:
+                if items:
+                    pos_counts = {}
+                    for item in items:
+                        pos = item["Position"]
+                        pos_counts[pos] = pos_counts.get(pos, 0) + 1
+                    
+                    breakdown = " • ".join([f"{POSITION_CONFIG[pos]['icon']} {pos}: {count}" for pos, count in pos_counts.items()])
+                    st.markdown(f'<div style="padding: 0.5rem 1rem; background: rgba(255,107,157,0.2); border: 1px solid rgba(255,107,157,0.4); border-radius: 50px; color: #FF6B9D; font-weight: 700; font-size: 0.8rem; text-align: center;">{breakdown}</div>', unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()
