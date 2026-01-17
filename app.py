@@ -8,12 +8,10 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from pathlib import Path
 from scipy.stats import zscore
 import datetime as dt
 import warnings
-import io
 
 warnings.filterwarnings('ignore')
 
@@ -28,68 +26,78 @@ st.set_page_config(
 )
 
 # =====================================================
-# POSITION CONFIGURATIONS
+# POSITION CONFIGURATIONS (Based on actual Excel files)
 # =====================================================
 POSITION_CONFIG = {
     "GK": {
         "file": "Goalkeepers.xlsx",
         "title": "Goalkeepers",
         "icon": "🧤",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "Diagonal pass", "Prevented Goals Percent (based on post-shot xG)"],
+        "role_cols": ['Ball Playing GK', 'Box Defender', 'Shot Stopper', 'Sweeper Keeper'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'Diagonal pass', 'Chipped/Lofted ball', 'Goal kick', 'Free kick'],
     },
     "CB": {
         "file": "Central_Defenders.xlsx",
         "title": "Central Defenders",
         "icon": "🛡️",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "Diagonal pass", "Ground duel", "Defensive Header", "Interception"],
+        "role_cols": ['Aerially Dominant CB', 'Aggressive CB', 'Ball Playing CB', 'Strategic CB'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'Diagonal pass', 'Ground duel', 'Defensive Header', 'Interception'],
     },
     "LB": {
         "file": "Left_Back.xlsx",
         "title": "Left Backs",
         "icon": "⬅️",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "High Cross", "Low Cross"],
+        "role_cols": ['Classic Back 4 LB', 'Creative LB', 'Left Wing-Back'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'High Cross', 'Low Cross', 'Ground duel', 'Interception'],
     },
     "RB": {
         "file": "Right_Back.xlsx",
         "title": "Right Backs",
         "icon": "➡️",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "High Cross", "Low Cross"],
+        "role_cols": ['Classic Back 4 RB', 'Creative RB', 'Right Wing-Back'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'High Cross', 'Low Cross', 'Ground duel', 'Interception'],
     },
     "DM": {
         "file": "Defensive_Midfielder.xlsx",
         "title": "Defensive Midfielders",
         "icon": "⚓",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "Diagonal pass", "Ground duel", "Interception"],
+        "role_cols": ['Anchorman', 'Ball Winning Midfielder', 'Box-to-Box Midfielder', 'Central Creator', 'Deep Lying Playmaker'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'Diagonal pass', 'Dribble', 'Interception', 'Loose ball regain'],
     },
     "CM": {
         "file": "Central_Midfielder.xlsx",
         "title": "Central Midfielders",
         "icon": "⭐",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "Diagonal pass", "Availability Between the Lines"],
+        "role_cols": ['Anchorman', 'Ball Winning Midfielder', 'Box-to-Box Midfielder', 'Central Creator', 'Deep Lying Playmaker'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'Diagonal pass', 'Dribble', 'Availability Between the Lines', 'Mid range shot'],
     },
     "AM": {
         "file": "Attacking_Midfielder.xlsx",
         "title": "Attacking Midfielders",
         "icon": "🎯",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low pass", "Dribble", "Availability Between the Lines"],
+        "role_cols": ['Central Creator', 'Deep Lying Striker'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low pass', 'Dribble', 'Availability Between the Lines', 'Mid range shot', 'Availability in the Box'],
     },
     "LW": {
         "file": "Left_Winger.xlsx",
         "title": "Left Wingers",
         "icon": "⚡",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low Cross", "Dribble", "Availability in the Box"],
+        "role_cols": ['Central Creator', 'Classic Left Winger', 'Deep Running Left Winger', 'Defensive Left Winger', 'Left Wing-Back'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low Cross', 'Dribble', 'Availability in the Box', 'Close range shot', 'Header shot'],
     },
     "RW": {
         "file": "Right_Wing.xlsx",
         "title": "Right Wingers",
         "icon": "⚡",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Low Cross", "Dribble", "Availability in the Box"],
+        "role_cols": ['Central Creator', 'Classic Right Winger', 'Deep Running Right Winger', 'Defensive Right Winger', 'Right Wing-Back'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Low Cross', 'Dribble', 'Availability in the Box', 'Close range shot', 'Header shot'],
     },
     "ST": {
         "file": "Strikers.xlsx",
         "title": "Strikers",
         "icon": "⚽",
-        "key_metrics": ["IMPECT", "Offensive IMPECT", "Defensive IMPECT", "Availability in the Box", "Close range shot", "Header shot"],
+        "role_cols": ['Complete Forward', 'Deep Lying Striker', 'Deep Running Striker', 'Poacher', 'Pressing Striker', 'Second Striker', 'Target Man'],
+        "key_metrics": ['IMPECT', 'Offensive IMPECT', 'Defensive IMPECT', 'Dribble', 'Availability in the Box', 'Close range shot', 'Header shot', 'Hold-Up play'],
     }
 }
 
@@ -376,16 +384,6 @@ def percentile_rank(s):
         out.loc[mask] = s.loc[mask].rank(pct=True, method="average") * 100
     return out
 
-def get_percentile_color(pct):
-    if pct >= 80:
-        return "#10b981"  # green
-    elif pct >= 60:
-        return "#3b82f6"  # blue
-    elif pct >= 40:
-        return "#f59e0b"  # orange
-    else:
-        return "#ef4444"  # red
-
 # =====================================================
 # DATA LOADING
 # =====================================================
@@ -412,12 +410,12 @@ def load_data(position_key):
     df = pd.read_excel(fp)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Get numeric columns
+    # Get all numeric columns (excluding BetterThan and standard info columns)
     numeric_cols = []
     for col in df.columns:
-        if col in [NAME_COL, TEAM_COL, COMP_COL, NAT_COL, "Player-ID"]:
+        if col in ['Player-ID', NAME_COL, TEAM_COL, COMP_COL, NAT_COL]:
             continue
-        if "BetterThan" in col:
+        if 'BetterThan' in col:
             continue
         numeric_cols.append(col)
 
@@ -431,7 +429,7 @@ def load_data(position_key):
         if c in df.columns:
             df[c] = df[c].astype(str).str.replace("nan", "").str.strip()
 
-    # Percentiles
+    # Percentiles for all numeric columns
     for m in numeric_cols:
         if m in df.columns:
             df[m + " (pct)"] = percentile_rank(df[m])
@@ -448,8 +446,6 @@ def init_state():
         st.session_state.selected_player = None
     if "position" not in st.session_state:
         st.session_state.position = "ST"
-    if "filters" not in st.session_state:
-        st.session_state.filters = {}
 
 init_state()
 
@@ -583,12 +579,6 @@ def render_player_card(row, cfg):
     nat = str(row.get(NAT_COL, "—"))
     share = safe_fmt(row.get(SHARE_COL, 0), 1)
     
-    impect = safe_float(row.get("IMPECT", 0))
-    impect_str = safe_fmt(impect, 2)
-    
-    off_impect = safe_fmt(row.get("Offensive IMPECT", 0), 2)
-    def_impect = safe_fmt(row.get("Defensive IMPECT", 0), 2)
-    
     # Create container for this player
     with st.container():
         # Player info section
@@ -599,23 +589,26 @@ def render_player_card(row, cfg):
             st.markdown(f"🏟️ {team} • 🏆 {comp} • 🌍 {nat} • 👤 {age} years • ⏱️ {share}% share")
         
         with col2:
-            st.metric("IMPECT", impect_str)
+            impect_val = safe_fmt(row.get("IMPECT", 0), 2)
+            st.metric("IMPECT", impect_val)
         
-        # Metrics grid
+        # Metrics grid - show key metrics only (not roles)
         metric_cols = st.columns(3)
         
-        for idx, metric in enumerate(cfg.get("key_metrics", [])[:6]):
-            if metric in row and metric + " (pct)" in row:
+        display_count = 0
+        for metric in cfg.get("key_metrics", []):
+            if metric in row and metric + " (pct)" in row and display_count < 6:
                 val = safe_fmt(row.get(metric, 0), 1)
                 pct = safe_float(row.get(metric + " (pct)", 0))
                 
-                col_idx = idx % 3
+                col_idx = display_count % 3
                 with metric_cols[col_idx]:
                     st.metric(
-                        label=metric[:20],
+                        label=metric[:25],
                         value=val,
                         delta=f"{pct:.0f}th %ile"
                     )
+                display_count += 1
         
         # View button
         if st.button("👁️ View Player Dashboard", key=f"view_{name.replace(' ', '_').replace('.', '_')}", use_container_width=True):
@@ -704,8 +697,8 @@ def render_dashboard_view(df, cfg, all_metrics):
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.markdown('<div class="chart-title">Performance Metrics (Percentiles)</div>', unsafe_allow_html=True)
         
-        # Radar chart
-        metrics = cfg.get("key_metrics", all_metrics[:8])
+        # Radar chart - use key metrics only (not roles)
+        metrics = cfg.get("key_metrics", [])
         values = []
         labels = []
         
@@ -738,7 +731,7 @@ def render_dashboard_view(df, cfg, all_metrics):
                 font=dict(color='#f8fafc', size=11),
                 showlegend=False,
                 margin=dict(t=20, b=20, l=40, r=40)
-            )
+            ))
             
             st.plotly_chart(fig, use_container_width=True)
         
@@ -788,24 +781,19 @@ def render_dashboard_view(df, cfg, all_metrics):
         
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # Role metrics (if available)
-    role_cols = []
-    for col in df.columns:
-        if any(x in col for x in ["Score", "GK", "CB", "FB", "Midfielder", "Winger", "Forward", "Striker"]):
-            if col not in ["IMPECT", "Offensive IMPECT", "Defensive IMPECT"] and "BetterThan" not in col:
-                role_cols.append(col)
-    
+    # Role suitability (separate section)
+    role_cols = cfg.get("role_cols", [])
     if role_cols:
         st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         st.markdown('<div class="chart-title">Role Suitability</div>', unsafe_allow_html=True)
         
         role_data = []
-        for rc in role_cols[:7]:
+        for rc in role_cols:
             if rc in row:
                 val = safe_float(row.get(rc, 0))
                 if not np.isnan(val):
                     role_data.append({
-                        "Role": rc.replace("Score", "").strip()[:30],
+                        "Role": rc[:40],
                         "Score": val
                     })
         
@@ -827,7 +815,7 @@ def render_dashboard_view(df, cfg, all_metrics):
             ))
             
             fig.update_layout(
-                height=350,
+                height=max(300, len(role_data) * 40),
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 font=dict(color='#f8fafc'),
@@ -844,8 +832,12 @@ def render_dashboard_view(df, cfg, all_metrics):
     st.markdown('<div class="chart-container">', unsafe_allow_html=True)
     st.markdown('<div class="chart-title">Complete Statistics</div>', unsafe_allow_html=True)
     
+    # Separate metrics from roles
     all_stats = []
     for col in all_metrics:
+        # Skip role columns in the stats table
+        if col in role_cols:
+            continue
         if col in row and col + " (pct)" in row:
             val = safe_float(row.get(col, 0))
             pct = safe_float(row.get(col + " (pct)", 0))
