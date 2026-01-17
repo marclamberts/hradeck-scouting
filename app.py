@@ -46,7 +46,7 @@ POSITION_CONFIG = {
         }
     },
     "CB": {
-        "file": "Central_Defenders.xlsx",
+        "file": "Central Defenders.xlsx",
         "title": "Central Defenders",
         "icon": "🛡️",
         "role_cols": ['Aerially Dominant CB', 'Aggressive CB', 'Ball Playing CB', 'Strategic CB'],
@@ -58,7 +58,7 @@ POSITION_CONFIG = {
         }
     },
     "LB": {
-        "file": "Left_Back.xlsx",
+        "file": "Left Back.xlsx",
         "title": "Left Backs",
         "icon": "⬅️",
         "role_cols": ['Classic Back 4 LB', 'Creative LB', 'Left Wing-Back'],
@@ -71,7 +71,7 @@ POSITION_CONFIG = {
         }
     },
     "RB": {
-        "file": "Right_Back.xlsx",
+        "file": "Right Back.xlsx",
         "title": "Right Backs",
         "icon": "➡️",
         "role_cols": ['Classic Back 4 RB', 'Creative RB', 'Right Wing-Back'],
@@ -84,7 +84,7 @@ POSITION_CONFIG = {
         }
     },
     "DM": {
-        "file": "Defensive_Midfielder.xlsx",
+        "file": "Defensive Midfielder.xlsx",
         "title": "Defensive Midfielders",
         "icon": "⚓",
         "role_cols": ['Anchorman', 'Ball Winning Midfielder', 'Box-to-Box Midfielder', 'Central Creator', 'Deep Lying Playmaker'],
@@ -96,7 +96,7 @@ POSITION_CONFIG = {
         }
     },
     "CM": {
-        "file": "Central_Midfielder.xlsx",
+        "file": "Central Midfielder.xlsx",
         "title": "Central Midfielders",
         "icon": "⭐",
         "role_cols": ['Anchorman', 'Ball Winning Midfielder', 'Box-to-Box Midfielder', 'Central Creator', 'Deep Lying Playmaker'],
@@ -108,7 +108,7 @@ POSITION_CONFIG = {
         }
     },
     "AM": {
-        "file": "Attacking_Midfielder.xlsx",
+        "file": "Attacking Midfielder.xlsx",
         "title": "Attacking Midfielders",
         "icon": "🎯",
         "role_cols": ['Central Creator', 'Deep Lying Striker'],
@@ -121,7 +121,7 @@ POSITION_CONFIG = {
         }
     },
     "LW": {
-        "file": "Left_Winger.xlsx",
+        "file": "Left Winger.xlsx",
         "title": "Left Wingers",
         "icon": "⚡",
         "role_cols": ['Central Creator', 'Classic Left Winger', 'Deep Running Left Winger', 'Defensive Left Winger', 'Left Wing-Back'],
@@ -134,7 +134,7 @@ POSITION_CONFIG = {
         }
     },
     "RW": {
-        "file": "Right_Wing.xlsx",
+        "file": "Right Wing.xlsx",
         "title": "Right Wingers",
         "icon": "⚡",
         "role_cols": ['Central Creator', 'Classic Right Winger', 'Deep Running Right Winger', 'Defensive Right Winger', 'Right Wing-Back'],
