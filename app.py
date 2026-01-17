@@ -731,7 +731,7 @@ def render_dashboard_view(df, cfg, all_metrics):
                 font=dict(color='#f8fafc', size=11),
                 showlegend=False,
                 margin=dict(t=20, b=20, l=40, r=40)
-            ))
+            )
             
             st.plotly_chart(fig, use_container_width=True)
         
