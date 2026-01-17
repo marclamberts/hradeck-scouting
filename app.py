@@ -184,15 +184,13 @@ st.markdown("""
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 1.25rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
         transition: all 0.2s ease;
-        cursor: pointer;
     }
     
     .player-card:hover {
         border-color: var(--primary);
         background: var(--bg-hover);
-        transform: translateX(4px);
     }
     
     .player-header {
@@ -333,14 +331,17 @@ st.markdown("""
         color: white;
         border: none;
         border-radius: 8px;
-        padding: 0.5rem 1.5rem;
-        font-weight: 600;
+        padding: 0.65rem 1.5rem;
+        font-weight: 700;
         transition: all 0.2s ease;
+        width: 100%;
+        margin-bottom: 1rem;
     }
     
     .stButton > button:hover {
         background: var(--primary-dark);
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
     }
     
     /* Download button */
@@ -699,7 +700,7 @@ def render_player_card(row, cfg):
             """
     
     card_html = f"""
-    <div class="player-card" onclick="document.getElementById('view_{name.replace(' ', '_')}').click()">
+    <div class="player-card">
         <div class="player-header">
             <div>
                 <div class="player-name">{name}</div>
@@ -721,8 +722,8 @@ def render_player_card(row, cfg):
     
     st.markdown(card_html, unsafe_allow_html=True)
     
-    # Hidden button for click handler
-    if st.button("View", key=f"view_{name}", label_visibility="hidden"):
+    # View button below card
+    if st.button("👁️ View Player Dashboard", key=f"view_{name.replace(' ', '_').replace('.', '_')}", use_container_width=True):
         st.session_state.selected_player = name
         st.session_state.view = "dashboard"
         st.rerun()
