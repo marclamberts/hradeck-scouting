@@ -131,6 +131,40 @@ st.markdown("""
         color: var(--text-primary);
     }
     
+    /* Container styling */
+    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Metric styling */
+    [data-testid="stMetric"] {
+        background: var(--bg-dark);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    [data-testid="stMetricValue"] {
+        color: var(--text-primary);
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        font-size: 0.875rem;
+    }
+    
     /* Top navigation bar */
     .top-nav {
         background: var(--bg-card);
@@ -160,104 +194,6 @@ st.markdown("""
         padding: 0.5rem 1rem;
         border-radius: 8px;
         border: 1px solid var(--border);
-    }
-    
-    /* Search section */
-    .search-section {
-        background: var(--bg-card);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        border: 1px solid var(--border);
-    }
-    
-    .filter-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
-    }
-    
-    /* Player card */
-    .player-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.25rem;
-        margin-bottom: 0.5rem;
-        transition: all 0.2s ease;
-    }
-    
-    .player-card:hover {
-        border-color: var(--primary);
-        background: var(--bg-hover);
-    }
-    
-    .player-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: start;
-        margin-bottom: 0.75rem;
-    }
-    
-    .player-name {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin-bottom: 0.25rem;
-    }
-    
-    .player-info {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-    }
-    
-    .player-info span {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-    
-    .impect-badge {
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-weight: 700;
-        font-size: 1.5rem;
-        min-width: 80px;
-        text-align: center;
-    }
-    
-    .metric-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 0.75rem;
-        margin-top: 1rem;
-    }
-    
-    .metric-item {
-        background: var(--bg-dark);
-        padding: 0.75rem;
-        border-radius: 8px;
-        border: 1px solid var(--border);
-    }
-    
-    .metric-label {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 0.25rem;
-    }
-    
-    .metric-value {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--text-primary);
     }
     
     /* Dashboard */
@@ -344,29 +280,20 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
     }
     
-    /* Download button */
-    .download-button {
-        background: var(--success);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.75rem 2rem;
-        font-weight: 700;
-        font-size: 1rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
+    button[kind="primary"] {
+        background: var(--primary) !important;
     }
     
-    .download-button:hover {
-        background: #059669;
-        transform: translateY(-2px);
+    button[kind="secondary"] {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border) !important;
     }
     
     /* Input fields */
     .stTextInput > div > div > input,
     .stSelectbox > div > div > div,
     .stMultiselect > div > div > div {
-        background: var(--bg-dark);
+        background: var(--bg-card);
         border: 1px solid var(--border);
         color: var(--text-primary);
         border-radius: 8px;
@@ -374,23 +301,7 @@ st.markdown("""
     
     /* Slider */
     .stSlider > div > div > div {
-        background: var(--bg-dark);
-    }
-    
-    /* Progress bar for percentiles */
-    .percentile-bar {
-        width: 100%;
-        height: 8px;
-        background: var(--bg-dark);
-        border-radius: 4px;
-        overflow: hidden;
-        margin-top: 0.5rem;
-    }
-    
-    .percentile-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--danger), var(--warning), var(--success));
-        transition: width 0.3s ease;
+        background: var(--bg-card);
     }
     
     /* Results header */
@@ -409,22 +320,6 @@ st.markdown("""
         color: var(--text-primary);
     }
     
-    /* Back button */
-    .back-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: var(--text-secondary);
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        margin-bottom: 1rem;
-    }
-    
-    .back-button:hover {
-        color: var(--primary);
-    }
-    
     /* Empty state */
     .empty-state {
         text-align: center;
@@ -436,6 +331,19 @@ st.markdown("""
         font-size: 4rem;
         margin-bottom: 1rem;
         opacity: 0.5;
+    }
+    
+    /* Markdown headers in containers */
+    h3 {
+        color: var(--text-primary);
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Horizontal rule */
+    hr {
+        border-color: var(--border);
+        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -681,52 +589,41 @@ def render_player_card(row, cfg):
     off_impect = safe_fmt(row.get("Offensive IMPECT", 0), 2)
     def_impect = safe_fmt(row.get("Defensive IMPECT", 0), 2)
     
-    # Get key metrics
-    metrics_html = ""
-    for metric in cfg.get("key_metrics", [])[:6]:
-        if metric in row and metric + " (pct)" in row:
-            val = safe_fmt(row.get(metric, 0), 1)
-            pct = safe_float(row.get(metric + " (pct)", 0))
-            color = get_percentile_color(pct)
-            
-            metrics_html += f"""
-            <div class="metric-item">
-                <div class="metric-label">{metric[:20]}</div>
-                <div class="metric-value">{val}</div>
-                <div class="percentile-bar">
-                    <div class="percentile-fill" style="width: {pct}%; background: {color};"></div>
-                </div>
-            </div>
-            """
-    
-    card_html = f"""
-    <div class="player-card">
-        <div class="player-header">
-            <div>
-                <div class="player-name">{name}</div>
-                <div class="player-info">
-                    <span>🏟️ {team}</span>
-                    <span>🏆 {comp}</span>
-                    <span>🌍 {nat}</span>
-                    <span>👤 {age} years</span>
-                    <span>⏱️ {share}% share</span>
-                </div>
-            </div>
-            <div class="impect-badge">{impect_str}</div>
-        </div>
-        <div class="metric-grid">
-            {metrics_html}
-        </div>
-    </div>
-    """
-    
-    st.markdown(card_html, unsafe_allow_html=True)
-    
-    # View button below card
-    if st.button("👁️ View Player Dashboard", key=f"view_{name.replace(' ', '_').replace('.', '_')}", use_container_width=True):
-        st.session_state.selected_player = name
-        st.session_state.view = "dashboard"
-        st.rerun()
+    # Create container for this player
+    with st.container():
+        # Player info section
+        col1, col2 = st.columns([4, 1])
+        
+        with col1:
+            st.markdown(f"### {name}")
+            st.markdown(f"🏟️ {team} • 🏆 {comp} • 🌍 {nat} • 👤 {age} years • ⏱️ {share}% share")
+        
+        with col2:
+            st.metric("IMPECT", impect_str)
+        
+        # Metrics grid
+        metric_cols = st.columns(3)
+        
+        for idx, metric in enumerate(cfg.get("key_metrics", [])[:6]):
+            if metric in row and metric + " (pct)" in row:
+                val = safe_fmt(row.get(metric, 0), 1)
+                pct = safe_float(row.get(metric + " (pct)", 0))
+                
+                col_idx = idx % 3
+                with metric_cols[col_idx]:
+                    st.metric(
+                        label=metric[:20],
+                        value=val,
+                        delta=f"{pct:.0f}th %ile"
+                    )
+        
+        # View button
+        if st.button("👁️ View Player Dashboard", key=f"view_{name.replace(' ', '_').replace('.', '_')}", use_container_width=True):
+            st.session_state.selected_player = name
+            st.session_state.view = "dashboard"
+            st.rerun()
+        
+        st.markdown("---")
 
 # =====================================================
 # DASHBOARD VIEW
