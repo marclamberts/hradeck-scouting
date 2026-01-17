@@ -411,10 +411,22 @@ def pro_table(df: pd.DataFrame, pct_cols: list = None, height: int = 600):
 @st.cache_data(show_spinner=False)
 def load_and_prepare(position_key: str) -> tuple:
     cfg = POSITION_CONFIG[position_key]
-    fp = Path("/mnt/user-data/uploads") / cfg["file"]
     
-    if not fp.exists():
-        st.error(f"❌ File not found: `{cfg['file']}`")
+    # Try multiple locations for the file
+    possible_paths = [
+        Path(cfg["file"]),  # Current directory (for local use)
+        Path("/mnt/user-data/uploads") / cfg["file"],  # Cloud environment
+        Path("uploads") / cfg["file"],  # uploads subfolder
+    ]
+    
+    fp = None
+    for path in possible_paths:
+        if path.exists():
+            fp = path
+            break
+    
+    if fp is None:
+        st.error(f"❌ File not found: `{cfg['file']}`\n\nPlease place the file in the same directory as this script.")
         st.stop()
 
     try:
