@@ -209,6 +209,67 @@ h1, h2, h3 {{ letter-spacing: -0.03em; margin-top: 0.5rem; }}
   margin-bottom: 1rem;
 }}
 
+.hero {{
+  background: linear-gradient(135deg, rgba(11,11,11,0.9) 0%, rgba(14,17,23,0.9) 100%);
+  border: 1px solid rgba(244,196,48,0.2);
+  border-radius: 24px;
+  padding: 4rem 2rem;
+  text-align: center;
+  margin-bottom: 3rem;
+}}
+
+.hero h1 {{
+  font-size: 4rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, {COLORS["yellow"]} 0%, {COLORS["emerald"]} 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}}
+
+.feature-grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}}
+
+.feature-card {{
+  background: rgba(11,11,11,0.7);
+  border: 1px solid rgba(244,196,48,0.15);
+  border-radius: 16px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}}
+
+.feature-card:hover {{
+  border-color: rgba(244,196,48,0.4);
+  transform: translateY(-5px);
+}}
+
+.position-grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}}
+
+.position-card {{
+  background: rgba(11,11,11,0.6);
+  border: 1px solid rgba(244,196,48,0.12);
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}}
+
+.position-card:hover {{
+  border-color: rgba(244,196,48,0.5);
+  background: rgba(244,196,48,0.1);
+}}
+
 .headerbar {{
   background: linear-gradient(135deg, rgba(11,11,11,0.85) 0%, rgba(14,17,23,0.85) 100%);
   border: 1px solid rgba(244,196,48,0.16);
@@ -300,6 +361,26 @@ div[data-testid="stDataFrame"] thead tr th {{
   color: {COLORS["grey"]};
   font-weight: 700;
 }}
+
+.stat-box {{
+  background: rgba(244,196,48,0.08);
+  border: 1px solid rgba(244,196,48,0.25);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+}}
+
+.stat-number {{
+  font-size: 3rem;
+  font-weight: 950;
+  color: {COLORS["yellow"]};
+}}
+
+.stat-label {{
+  font-size: 1rem;
+  color: {COLORS["grey"]};
+  margin-top: 0.5rem;
+}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -373,7 +454,15 @@ def similar_players(df_f: pd.DataFrame, player_name: str, feature_cols: list, to
     if not cols:
         return pd.DataFrame()
 
-    X = np.column_stack([zscore(df_f[c], nan_policy='omit').fillna(0) for c in cols])
+    # Fixed: Convert zscore output to Series properly
+    X_list = []
+    for c in cols:
+        col_data = df_f[c].values
+        z_scores = zscore(col_data, nan_policy='omit')
+        z_scores = np.nan_to_num(z_scores, nan=0.0)
+        X_list.append(z_scores)
+    
+    X = np.column_stack(X_list)
     sim = cosine_similarity_matrix(X)
 
     idx = df_f.index[df_f[NAME_COL] == player_name][0]
@@ -403,7 +492,7 @@ def pro_table(df: pd.DataFrame, pct_cols: list = None, height: int = 600):
         if pd.api.types.is_numeric_dtype(df[c]):
             col_config[c] = st.column_config.NumberColumn(label=c, format="%.2f")
 
-    st.dataframe(df, use_container_width=True, height=height, column_config=col_config, hide_index=True)
+    st.dataframe(df, width="stretch", height=height, column_config=col_config, hide_index=True)
 
 # =====================================================
 # DATA LOADING
@@ -474,6 +563,10 @@ def ensure_state():
         st.session_state.pinned = {}
     if "compare_picks" not in st.session_state:
         st.session_state.compare_picks = {}
+    if "page" not in st.session_state:
+        st.session_state.page = "landing"
+    if "selected_position" not in st.session_state:
+        st.session_state.selected_position = None
 
 def shortlist_key(position_key: str, player_name: str) -> str:
     return f"{position_key}||{player_name}"
@@ -728,16 +821,160 @@ def create_heatmap(df: pd.DataFrame, metrics: list, n_players: int = 20):
     return fig
 
 # =====================================================
+# LANDING PAGE
+# =====================================================
+def render_landing_page():
+    st.markdown(
+        """
+        <div class="hero">
+            <div style="font-size:5rem;margin-bottom:1rem;">⚽</div>
+            <h1>Scout Lab Pro</h1>
+            <p style="font-size:1.5rem;color:#9AA0A6;margin-bottom:2rem;">
+                Ultimate Football Analytics Platform
+            </p>
+            <p style="font-size:1.1rem;color:#F7F7F7;max-width:700px;margin:0 auto;">
+                Professional scouting tool with 10,000+ players across 10 positions. 
+                Advanced visualizations, role analysis, and AI-powered player comparisons.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Key stats
+    st.markdown("### 📊 Database Overview")
+    stat_cols = st.columns(4)
+    
+    stats = [
+        ("10,000+", "Players", "👥"),
+        ("10", "Positions", "⚽"),
+        ("100+", "Metrics", "📈"),
+        ("50+", "Leagues", "🏆"),
+    ]
+    
+    for i, (number, label, icon) in enumerate(stats):
+        with stat_cols[i]:
+            st.markdown(
+                f'''
+                <div class="stat-box">
+                    <div style="font-size:2rem;margin-bottom:0.5rem;">{icon}</div>
+                    <div class="stat-number">{number}</div>
+                    <div class="stat-label">{label}</div>
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
+
+    st.markdown("---")
+
+    # Features
+    st.markdown("### ✨ Key Features")
+    
+    st.markdown(
+        """
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div style="font-size:3rem;margin-bottom:1rem;">🔍</div>
+                <h3>Advanced Search</h3>
+                <p style="color:#9AA0A6;">Filter by age, team, competition, match share, and more</p>
+            </div>
+            <div class="feature-card">
+                <div style="font-size:3rem;margin-bottom:1rem;">📊</div>
+                <h3>Interactive Viz</h3>
+                <p style="color:#9AA0A6;">Radar charts, heatmaps, scatter plots, and distributions</p>
+            </div>
+            <div class="feature-card">
+                <div style="font-size:3rem;margin-bottom:1rem;">⚖️</div>
+                <h3>Player Compare</h3>
+                <p style="color:#9AA0A6;">Side-by-side comparison with up to 6 players</p>
+            </div>
+            <div class="feature-card">
+                <div style="font-size:3rem;margin-bottom:1rem;">🤖</div>
+                <h3>AI Similarity</h3>
+                <p style="color:#9AA0A6;">Find similar players using cosine similarity</p>
+            </div>
+            <div class="feature-card">
+                <div style="font-size:3rem;margin-bottom:1rem;">🎯</div>
+                <h3>Role Analysis</h3>
+                <p style="color:#9AA0A6;">Position-specific role suitability scores</p>
+            </div>
+            <div class="feature-card">
+                <div style="font-size:3rem;margin-bottom:1rem;">⭐</div>
+                <h3>Shortlisting</h3>
+                <p style="color:#9AA0A6;">Save targets with tags, notes, and export</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("---")
+
+    # Positions
+    st.markdown("### ⚽ Select Position to Begin")
+    
+    positions_html = '<div class="position-grid">'
+    for key, cfg in POSITION_CONFIG.items():
+        positions_html += f'''
+        <div class="position-card">
+            <div style="font-size:3rem;margin-bottom:0.5rem;">{cfg["icon"]}</div>
+            <div style="font-size:1.1rem;font-weight:900;margin-bottom:0.5rem;">{cfg["title"]}</div>
+        </div>
+        '''
+    positions_html += '</div>'
+    
+    st.markdown(positions_html, unsafe_allow_html=True)
+
+    # Position selector
+    st.markdown("---")
+    position_options = {k: f"{v['icon']} {v['title']}" for k, v in POSITION_CONFIG.items()}
+    selected = st.selectbox("Choose Position", list(position_options.keys()), format_func=lambda x: position_options[x])
+    
+    if st.button("🚀 Launch Scout Lab", type="primary", key="launch_btn"):
+        st.session_state.page = "app"
+        st.session_state.selected_position = selected
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style="text-align:center;padding:2rem;color:#9AA0A6;">
+            <p style="font-size:0.9rem;">Built with Streamlit & Plotly | Data-driven Football Analytics</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# =====================================================
 # MAIN APP
 # =====================================================
 ensure_state()
 
+# Page routing
+if st.session_state.page == "landing":
+    render_landing_page()
+    st.stop()
+
+# If we're here, we're in the app
+if st.session_state.selected_position is None:
+    st.session_state.selected_position = "GK"
+
 # Sidebar
 st.sidebar.markdown("### ⚙️ Scout Control Panel")
 
+# Back to landing button
+if st.sidebar.button("← Back to Home", key="back_home"):
+    st.session_state.page = "landing"
+    st.rerun()
+
 # Position selector with icons
 position_options = {k: f"{v['icon']} {v['title']}" for k, v in POSITION_CONFIG.items()}
-position = st.sidebar.selectbox("Select Position", list(position_options.keys()), format_func=lambda x: position_options[x])
+position = st.sidebar.selectbox(
+    "Select Position",
+    list(position_options.keys()),
+    index=list(POSITION_CONFIG.keys()).index(st.session_state.selected_position),
+    format_func=lambda x: position_options[x]
+)
 
 # Load data
 with st.spinner("Loading player database..."):
@@ -865,14 +1102,13 @@ with tabs[0]:
             with rc3:
                 b1, b2 = st.columns(2)
                 with b1:
-                    if st.button("View", key=f"view_{position}_{name}_{idx}", use_container_width=True):
+                    if st.button("View", key=f"view_{position}_{name}_{idx}", width="stretch"):
                         st.session_state.selected_player = name
-                        st.session_state.active_tab = 1
                         st.rerun()
                 
                 with b2:
                     star = "✓" if in_sl else "★"
-                    if st.button(star, key=f"sl_{position}_{name}_{idx}", use_container_width=True):
+                    if st.button(star, key=f"sl_{position}_{name}_{idx}", width="stretch"):
                         if in_sl:
                             remove_from_shortlist(position, name)
                         else:
@@ -989,7 +1225,7 @@ with tabs[1]:
                 st.markdown("### Radar Chart")
                 radar_metrics = cfg.get("key_metrics", all_metrics[:8])
                 radar_fig = create_radar_chart(df_f, [player], radar_metrics)
-                st.plotly_chart(radar_fig, use_container_width=True)
+                st.plotly_chart(radar_fig, width="stretch")
 
             st.markdown("---")
 
@@ -1049,7 +1285,7 @@ with tabs[2]:
             if role_cols:
                 role_fig = create_role_comparison_chart(comp_df, chosen, role_cols)
                 if role_fig:
-                    st.plotly_chart(role_fig, use_container_width=True)
+                    st.plotly_chart(role_fig, width="stretch")
 
             st.markdown("---")
 
@@ -1057,14 +1293,14 @@ with tabs[2]:
             st.markdown("### Performance Radar")
             radar_metrics = cfg.get("key_metrics", all_metrics[:8])
             radar_fig = create_radar_chart(comp_df, chosen, radar_metrics, "Player Comparison")
-            st.plotly_chart(radar_fig, use_container_width=True)
+            st.plotly_chart(radar_fig, width="stretch")
 
             st.markdown("---")
 
             # Detailed table
             st.markdown("### Detailed Stats")
             show_cols = [c for c in [NAME_COL, TEAM_COL, AGE_COL, "IMPECT", "Offensive IMPECT", "Defensive IMPECT"] + role_cols if c in comp_df.columns]
-            st.dataframe(comp_df[show_cols].sort_values("IMPECT", ascending=False), use_container_width=True, height=400)
+            st.dataframe(comp_df[show_cols].sort_values("IMPECT", ascending=False), width="stretch", height=400)
 
 # =====================================================
 # TAB 4: LEADERBOARDS
@@ -1117,7 +1353,7 @@ with tabs[3]:
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color=COLORS["white"])
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 # =====================================================
 # TAB 5: ANALYTICS
@@ -1167,7 +1403,7 @@ with tabs[4]:
             with dc1:
                 st.markdown("#### Distribution")
                 dist_fig = create_distribution_plot(df_f, metric)
-                st.plotly_chart(dist_fig, use_container_width=True)
+                st.plotly_chart(dist_fig, width="stretch")
             
             with dc2:
                 st.markdown("#### Box Plot")
@@ -1178,7 +1414,7 @@ with tabs[4]:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["white"])
                 )
-                st.plotly_chart(box_fig, use_container_width=True)
+                st.plotly_chart(box_fig, width="stretch")
 
             st.markdown("---")
 
@@ -1204,7 +1440,7 @@ with tabs[4]:
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COLORS["white"])
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
 # =====================================================
 # TAB 6: ADVANCED VISUALIZATIONS
@@ -1244,7 +1480,7 @@ with tabs[5]:
                     y_metric,
                     None if color_metric == "None" else color_metric
                 )
-                st.plotly_chart(scatter_fig, use_container_width=True)
+                st.plotly_chart(scatter_fig, width="stretch")
 
         elif viz_type == "Performance Heatmap":
             st.markdown("### Performance Heatmap")
@@ -1259,7 +1495,7 @@ with tabs[5]:
             if selected_metrics:
                 heatmap_fig = create_heatmap(df_f, selected_metrics, n_players)
                 if heatmap_fig:
-                    st.plotly_chart(heatmap_fig, use_container_width=True)
+                    st.plotly_chart(heatmap_fig, width="stretch")
 
         elif viz_type == "Correlation Analysis":
             st.markdown("### Correlation Analysis")
@@ -1293,7 +1529,7 @@ with tabs[5]:
                     xaxis=dict(tickangle=-45)
                 )
                 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
 # =====================================================
 # TAB 7: SHORTLIST
@@ -1354,7 +1590,7 @@ with tabs[6]:
         sl_df = pd.DataFrame(items)
         edited = st.data_editor(
             sl_df,
-            use_container_width=True,
+            width="stretch",
             height=500,
             num_rows="dynamic",
             column_config={
@@ -1387,13 +1623,13 @@ with tabs[6]:
         
         with slec1:
             csv_data = edited.to_csv(index=False).encode("utf-8")
-            st.download_button("📄 CSV", csv_data, f"shortlist_{dt.datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+            st.download_button("📄 CSV", csv_data, f"shortlist_{dt.datetime.now().strftime('%Y%m%d')}.csv", "text/csv", width="stretch")
         
         with slec2:
             json_data = edited.to_json(orient="records", indent=2).encode("utf-8")
-            st.download_button("🔧 JSON", json_data, f"shortlist_{dt.datetime.now().strftime('%Y%m%d')}.json", "application/json", use_container_width=True)
+            st.download_button("🔧 JSON", json_data, f"shortlist_{dt.datetime.now().strftime('%Y%m%d')}.json", "application/json", width="stretch")
         
         with slec3:
-            if st.button("🗑️ Clear", use_container_width=True, type="primary"):
+            if st.button("🗑️ Clear", width="stretch", type="primary"):
                 st.session_state.shortlist = {}
                 st.rerun()
