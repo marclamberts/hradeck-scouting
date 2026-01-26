@@ -246,6 +246,122 @@ st.markdown("""
         color: var(--text-primary);
     }
     
+    /* Landing page styles */
+    .landing-hero {
+        background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
+        padding: 4rem 2rem;
+        border-radius: 16px;
+        text-align: center;
+        margin-bottom: 3rem;
+        box-shadow: 0 20px 60px rgba(37, 99, 235, 0.3);
+    }
+    
+    .landing-title {
+        font-size: 4rem;
+        font-weight: 900;
+        color: white;
+        margin-bottom: 1rem;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+    
+    .landing-subtitle {
+        font-size: 1.5rem;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 2rem;
+        font-weight: 400;
+    }
+    
+    .landing-tagline {
+        font-size: 1.1rem;
+        color: rgba(255, 255, 255, 0.8);
+        max-width: 800px;
+        margin: 0 auto 2rem auto;
+        line-height: 1.6;
+    }
+    
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        margin: 3rem 0;
+    }
+    
+    .feature-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--primary);
+        box-shadow: 0 10px 30px rgba(37, 99, 235, 0.2);
+    }
+    
+    .feature-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .feature-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.75rem;
+    }
+    
+    .feature-desc {
+        font-size: 0.95rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+    
+    .position-card {
+        background: var(--bg-card);
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        height: 100%;
+    }
+    
+    .position-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3);
+    }
+    
+    .position-icon {
+        font-size: 3.5rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+    
+    .position-name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .position-count {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    .stats-showcase {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 2rem;
+        margin: 2rem 0;
+    }
+    
     /* Dashboard */
     .dashboard-header {
         background: linear-gradient(135deg, var(--primary), var(--primary-dark));
@@ -542,7 +658,7 @@ def load_data(position_key):
 # =====================================================
 def init_state():
     if "view" not in st.session_state:
-        st.session_state.view = "search"
+        st.session_state.view = "landing"
     if "selected_player" not in st.session_state:
         st.session_state.selected_player = None
     if "position" not in st.session_state:
@@ -555,16 +671,155 @@ init_state()
 # =====================================================
 # NAVIGATION
 # =====================================================
-def render_nav():
-    cfg = POSITION_CONFIG[st.session_state.position]
-    
-    st.markdown(f"""
-    <div class="top-nav">
-        <div class="nav-brand">⚽ Scout Lab Pro</div>
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <span style="font-size: 1.5rem;">{cfg['icon']}</span>
-            <span style="font-weight: 600; font-size: 1.1rem;">{cfg['title']}</span>
+def render_nav(show_back=False):
+    if show_back:
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("← Home", use_container_width=True):
+                st.session_state.view = "landing"
+                st.session_state.selected_player = None
+                st.rerun()
+        with col2:
+            cfg = POSITION_CONFIG.get(st.session_state.position, {})
+            st.markdown(f"""
+            <div class="top-nav">
+                <div class="nav-brand">⚽ Scout Lab Pro</div>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-size: 1.5rem;">{cfg.get('icon', '⚽')}</span>
+                    <span style="font-weight: 600; font-size: 1.1rem;">{cfg.get('title', 'Scouting')}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div class="top-nav">
+            <div class="nav-brand">⚽ Scout Lab Pro</div>
+            <div style="font-weight: 600; font-size: 1.1rem;">Professional Football Analytics</div>
         </div>
+        """, unsafe_allow_html=True)
+
+# =====================================================
+# LANDING PAGE VIEW
+# =====================================================
+def render_landing_view():
+    """Landing page with position selection and features"""
+    
+    # Hero section
+    st.markdown("""
+    <div class="landing-hero">
+        <div class="landing-title">⚽ Scout Lab Pro</div>
+        <div class="landing-subtitle">Advanced Football Analytics Platform</div>
+        <div class="landing-tagline">
+            Comprehensive player scouting with IMPECT data, detailed performance metrics, 
+            role suitability analysis, and professional visualization tools across 10 positions.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Features section
+    st.markdown("## 🎯 Platform Features")
+    
+    st.markdown("""
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">IMPECT Analytics</div>
+            <div class="feature-desc">Industry-leading performance metrics with offensive and defensive breakdowns</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎭</div>
+            <div class="feature-title">Role Suitability</div>
+            <div class="feature-desc">Analyze player fit for multiple tactical roles with detailed scoring</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📈</div>
+            <div class="feature-title">Performance Trends</div>
+            <div class="feature-desc">Distribution analysis and percentile rankings across all metrics</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚖️</div>
+            <div class="feature-title">Player Comparison</div>
+            <div class="feature-desc">Side-by-side comparison of up to 6 players with radar visualizations</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔍</div>
+            <div class="feature-title">Advanced Filters</div>
+            <div class="feature-desc">Multi-parameter search by age, competition, team, nationality, and metrics</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📝</div>
+            <div class="feature-title">Scouting Reports</div>
+            <div class="feature-desc">Automated report generation with strengths and development areas</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Position selection
+    st.markdown("---")
+    st.markdown("## 🎯 Select Position to Begin Scouting")
+    st.markdown("### Choose a position to access player database and analytics")
+    
+    # Group positions
+    position_groups = {
+        "Goalkeepers": ["GK"],
+        "Defenders": ["CB", "LB", "RB"],
+        "Midfielders": ["DM", "CM", "AM"],
+        "Forwards": ["LW", "RW", "ST"]
+    }
+    
+    for group_name, positions in position_groups.items():
+        st.markdown(f"### {group_name}")
+        cols = st.columns(len(positions))
+        
+        for idx, pos_key in enumerate(positions):
+            cfg = POSITION_CONFIG[pos_key]
+            with cols[idx]:
+                # Create button with card styling
+                if st.button(
+                    f"{cfg['icon']}\n\n**{cfg['title']}**\n\nView Database",
+                    key=f"landing_pos_{pos_key}",
+                    use_container_width=True,
+                    help=f"Scout {cfg['title'].lower()}"
+                ):
+                    st.session_state.position = pos_key
+                    st.session_state.view = "search"
+                    st.rerun()
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Statistics showcase
+    st.markdown("---")
+    st.markdown("## 📊 Database Coverage")
+    
+    st.markdown("""
+    <div class="stats-showcase">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
+            <div>
+                <div class="stat-value">10</div>
+                <div class="stat-label">Positions Covered</div>
+            </div>
+            <div>
+                <div class="stat-value">100+</div>
+                <div class="stat-label">Metrics per Position</div>
+            </div>
+            <div>
+                <div class="stat-value">Multiple</div>
+                <div class="stat-label">Role Profiles</div>
+            </div>
+            <div>
+                <div class="stat-value">Global</div>
+                <div class="stat-label">Competition Coverage</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: var(--text-secondary); padding: 2rem 0;">
+        <p style="margin-bottom: 0.5rem;">Built with advanced analytics and IMPECT data</p>
+        <p style="font-size: 0.875rem;">Professional football scouting and analysis platform</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1346,17 +1601,21 @@ def render_report_tab(row, cfg, all_metrics):
 # MAIN APP
 # =====================================================
 def main():
-    render_nav()
-    
-    # Load data
-    with st.spinner("Loading data..."):
-        df, cfg, all_metrics = load_data(st.session_state.position)
-    
-    # Route to view
-    if st.session_state.view == "search":
-        render_search_view(df, cfg, all_metrics)
-    elif st.session_state.view == "dashboard":
-        render_dashboard_view(df, cfg, all_metrics)
+    # Route to views
+    if st.session_state.view == "landing":
+        render_nav(show_back=False)
+        render_landing_view()
+    else:
+        render_nav(show_back=True)
+        
+        # Load data
+        with st.spinner("Loading data..."):
+            df, cfg, all_metrics = load_data(st.session_state.position)
+        
+        if st.session_state.view == "search":
+            render_search_view(df, cfg, all_metrics)
+        elif st.session_state.view == "dashboard":
+            render_dashboard_view(df, cfg, all_metrics)
 
 if __name__ == "__main__":
     main()
