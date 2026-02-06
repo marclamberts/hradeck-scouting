@@ -786,7 +786,7 @@ def load_impect_iteration_wide(username: str, password: str, iteration_id: int, 
         )
         .reset_index()
     )
-wide.columns.name = None
+    wide.columns.name = None
 
     wide.columns.name = None
 
