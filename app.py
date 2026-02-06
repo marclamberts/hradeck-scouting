@@ -1,9 +1,10 @@
-# app.py — IMPECT Live (simple one-page)
-# =====================================
+# app.py — IMPECT Live (friendly one-page) + Radars
+# ================================================
 # ✅ One page
-# ✅ Load IMPECT API (iteration) into memory
-# ✅ Show data tables (players wide, KPI lookup, optional filters)
-# ✅ Fixes duplicate KPI rows (groupby + pivot_table)
+# ✅ Load IMPECT API iteration (no CSV)
+# ✅ User-friendly filters + player picker
+# ✅ Radar charts (percentile-based) + KPI table
+# ✅ Handles duplicate KPI rows safely (groupby + pivot_table)
 #
 # SECRETS (recommended):
 # .streamlit/secrets.toml
@@ -19,12 +20,13 @@ import requests
 import pandas as pd
 import numpy as np
 import streamlit as st
+import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # -------------------------
 # Streamlit config
 # -------------------------
-st.set_page_config(page_title="IMPECT Live Loader", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="IMPECT Live Scouting", page_icon="⚽", layout="wide")
 
 # -------------------------
 # IMPECT API config
@@ -39,7 +41,7 @@ BACKOFF_CAP = 30.0
 
 
 # -------------------------
-# Helpers
+# API helpers
 # -------------------------
 def unwrap_data(obj):
     return obj["data"] if isinstance(obj, dict) and "data" in obj else obj
@@ -111,26 +113,28 @@ def extract_long_rows(iteration_id: int, squad_id: int, squad_name: str, items: 
 
         for kv in (item.get("kpis") or []):
             out.append(
-                {
-                    "iterationId": iteration_id,
-                    "squadId": squad_id,
-                    "squadName": squad_name,
-                    "playerId": player_id,
-                    "matches": matches,
-                    "kpiId": kv.get("kpiId"),
-                    "value_raw": kv.get("value"),
-                }
+                dict(
+                    iterationId=iteration_id,
+                    squadId=squad_id,
+                    squadName=squad_name,
+                    playerId=player_id,
+                    matches=matches,
+                    kpiId=kv.get("kpiId"),
+                    value_raw=kv.get("value"),
+                )
             )
     return out
 
 
 def parse_decimal_comma(series: pd.Series) -> pd.Series:
-    # Handles "27,513527" -> 27.513527
     s = series.astype("string").str.replace(" ", "", regex=False)
     s = s.str.replace(",", ".", regex=False)
     return pd.to_numeric(s, errors="coerce")
 
 
+# -------------------------
+# Load iteration (cached)
+# -------------------------
 @st.cache_data(show_spinner=False, ttl=60 * 30)
 def load_impect_iteration(
     username: str,
@@ -140,22 +144,14 @@ def load_impect_iteration(
     max_workers: int = 3,
     base_sleep: float = 0.2,
 ):
-    """
-    Returns:
-      wide_df: 1 row per (iteration,squad,player,matches) with KPI columns
-      players_df: player master data
-      squads_df: squad list
-      kpi_lookup: KPI definitions
-      long_df: long-format KPI rows (optional debugging)
-    """
     session = requests.Session()
     token = get_access_token(session, username, password)
 
-    # KPI defs (rename KPI ids -> human labels + (id))
+    # KPI defs (id → label)
     kpi_defs = fetch_kpi_defs(session, token, language)
     kpi_df = pd.json_normalize(kpi_defs if isinstance(kpi_defs, list) else [])
-
     label_col = "details.label" if "details.label" in kpi_df.columns else "name"
+
     kpi_lookup = (
         kpi_df.rename(columns={"id": "kpiId", label_col: "kpiLabel", "name": "kpiTechnicalName"})[
             ["kpiId", "kpiLabel", "kpiTechnicalName"]
@@ -188,7 +184,7 @@ def load_impect_iteration(
     squads_df = pd.DataFrame([{"squadId": s.get("id"), "squadName": s.get("name")} for s in (squads or [])])
     squads_df["squadId"] = pd.to_numeric(squads_df["squadId"], errors="coerce")
 
-    # Player KPIs (per squad, threaded)
+    # KPIs per squad (threaded)
     squads_list = squads_df.dropna(subset=["squadId"]).to_dict("records")
     long_rows = []
 
@@ -211,15 +207,14 @@ def load_impect_iteration(
     if long_df.empty:
         raise RuntimeError("No KPI rows returned from IMPECT API.")
 
-    # Types + parse value
+    # Types + parse values
     long_df["playerId"] = pd.to_numeric(long_df["playerId"], errors="coerce")
     long_df["kpiId"] = pd.to_numeric(long_df["kpiId"], errors="coerce")
     long_df["matches"] = pd.to_numeric(long_df["matches"], errors="coerce").fillna(0)
     long_df["value"] = parse_decimal_comma(long_df["value_raw"])
-
     long_df = long_df.dropna(subset=["playerId", "kpiId"])
 
-    # ✅ Fix duplicates BEFORE pivot
+    # ✅ Fix duplicates before pivot
     key_cols = ["iterationId", "squadId", "squadName", "playerId", "matches", "kpiId"]
     long_df = long_df.groupby(key_cols, as_index=False)["value"].mean()
 
@@ -234,164 +229,283 @@ def load_impect_iteration(
     )
     wide_df.columns.name = None
 
-    # Rename KPI numeric columns into human labels (Label (id))
+    # Rename KPI columns after pivot
     wide_df = wide_df.rename(columns={k: v for k, v in rename_map.items() if k in wide_df.columns})
 
     # Join player identity
     wide_df = wide_df.merge(players_df, how="left", on="playerId")
 
-    return wide_df, players_df, squads_df, kpi_lookup, long_df
+    # Add a friendly display name
+    for c in ["commonname", "firstname", "lastname"]:
+        if c not in wide_df.columns:
+            wide_df[c] = ""
+    wide_df["displayName"] = wide_df["commonname"].fillna("").astype(str).str.strip()
+    fallback = (wide_df["firstname"].fillna("").astype(str).str.strip() + " " + wide_df["lastname"].fillna("").astype(str).str.strip()).str.strip()
+    wide_df["displayName"] = np.where(wide_df["displayName"] == "", fallback, wide_df["displayName"])
+    wide_df["displayName"] = wide_df["displayName"].fillna("").astype(str)
+
+    return wide_df, players_df, squads_df, kpi_lookup
 
 
-def safe_contains(s: pd.Series, q: str) -> pd.Series:
-    q = (q or "").strip().lower()
-    if not q:
-        return pd.Series([True] * len(s), index=s.index)
-    return s.astype(str).str.lower().str.contains(q, na=False)
+# -------------------------
+# Radar helpers
+# -------------------------
+def compute_percentile(series: pd.Series, value: float, invert: bool = False) -> float:
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if s.empty or pd.isna(value):
+        return np.nan
+    rank = (s < value).sum() + 0.5 * (s == value).sum()
+    pct = rank / len(s) * 100
+    return 100 - pct if invert else pct
+
+
+def guess_invert(colname: str) -> bool:
+    # heuristics: "lower is better"
+    s = (colname or "").lower()
+    bad = ["loss", "lost", "conced", "error", "own goal", "foul", "yellow", "red", "unsuccess", "unsuccessful", "turnover"]
+    return any(k in s for k in bad)
+
+
+def build_radar(player_row: pd.Series, pool_df: pd.DataFrame, kpi_cols: list[str]):
+    labels = []
+    pcts = []
+    raw = []
+
+    for c in kpi_cols:
+        v = pd.to_numeric(player_row.get(c, np.nan), errors="coerce")
+        inv = guess_invert(c)
+        pct = compute_percentile(pool_df[c], v, invert=inv)
+        labels.append(c[:26] + ("…" if len(c) > 26 else ""))
+        pcts.append(0 if pd.isna(pct) else float(pct))
+        raw.append(v)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatterpolar(
+            r=pcts,
+            theta=labels,
+            fill="toself",
+            name="Percentile",
+        )
+    )
+    fig.update_layout(
+        polar=dict(radialaxis=dict(range=[0, 100], showgrid=True)),
+        showlegend=False,
+        height=520,
+        margin=dict(t=30, b=20, l=40, r=40),
+    )
+
+    table = pd.DataFrame(
+        {
+            "KPI": kpi_cols,
+            "Value": raw,
+            "Percentile": pcts,
+        }
+    ).sort_values("Percentile", ascending=False)
+
+    return fig, table
 
 
 # -------------------------
 # UI
 # -------------------------
-st.title("⚽ IMPECT Live Loader (API → Tables)")
-st.caption("One-page app: load an iteration from IMPECT API, then explore tables.")
+st.title("⚽ IMPECT Live Scouting")
+st.caption("Load an iteration from IMPECT API, pick a player, and generate radar charts + tables.")
 
-with st.expander("🔐 Connection", expanded=True):
-    # Prefer secrets; allow overrides for debugging
+# Top controls
+with st.container():
+    c1, c2, c3, c4, c5 = st.columns([2.2, 2.2, 1.1, 1.2, 1.3])
+
     default_user = st.secrets.get("IMPECT_USERNAME", "")
     default_pass = st.secrets.get("IMPECT_PASSWORD", "")
 
-    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
     with c1:
         username = st.text_input("Username", value=default_user, placeholder="IMPECT username/email")
     with c2:
         password = st.text_input("Password", value=default_pass, type="password", placeholder="IMPECT password")
     with c3:
-        iteration_id = st.number_input("Iteration ID", min_value=1, value=1421, step=1)
+        iteration_id = st.number_input("Iteration", min_value=1, value=1421, step=1)
     with c4:
-        language = st.selectbox("Language", ["en", "nl", "de", "fr"], index=0)
-
-    c5, c6, c7 = st.columns([1, 1, 2])
+        language = st.selectbox("KPI lang", ["en", "nl", "de", "fr"], index=0)
     with c5:
-        max_workers = st.slider("Workers", 1, 6, 3)
-    with c6:
-        base_sleep = st.slider("Throttle", 0.0, 1.0, 0.2, 0.05)
-    with c7:
-        st.write("")
+        load_btn = st.button("🚀 Load iteration", width="stretch")
 
-    load_btn = st.button("🚀 Load from IMPECT API", width="stretch")
+st.divider()
 
+# Advanced throttling
+with st.expander("⚙️ Advanced (throttle / 429 control)", expanded=False):
+    max_workers = st.slider("Workers", 1, 6, 3)
+    base_sleep = st.slider("Throttle", 0.0, 1.0, 0.2, 0.05)
+    clear = st.button("Clear cached load", width="stretch")
+    if clear:
+        load_impect_iteration.clear()
+        for k in ["wide_df", "players_df", "squads_df", "kpi_lookup"]:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.success("Cleared cached data.")
+
+# Load
 if load_btn:
     if not username or not password:
         st.error("Please provide username & password (or set them in secrets.toml).")
     else:
         try:
             with st.spinner("Loading IMPECT iteration..."):
-                wide_df, players_df, squads_df, kpi_lookup, long_df = load_impect_iteration(
+                wide_df, players_df, squads_df, kpi_lookup = load_impect_iteration(
                     username=username,
                     password=password,
                     iteration_id=int(iteration_id),
                     language=language,
-                    max_workers=int(max_workers),
-                    base_sleep=float(base_sleep),
+                    max_workers=int(max_workers) if "max_workers" in locals() else 3,
+                    base_sleep=float(base_sleep) if "base_sleep" in locals() else 0.2,
                 )
             st.session_state["wide_df"] = wide_df
             st.session_state["players_df"] = players_df
             st.session_state["squads_df"] = squads_df
             st.session_state["kpi_lookup"] = kpi_lookup
-            st.session_state["long_df"] = long_df
-            st.success(f"Loaded ✅  wide: {wide_df.shape[0]} rows × {wide_df.shape[1]} cols")
+            st.success(f"Loaded ✅  {wide_df.shape[0]:,} rows × {wide_df.shape[1]:,} columns")
         except Exception as e:
             st.error(f"IMPECT load failed: {e}")
 
-# If loaded, show tables
 if "wide_df" not in st.session_state:
-    st.info("Load an iteration to view tables.")
+    st.info("Load an iteration to start.")
     st.stop()
 
 wide_df: pd.DataFrame = st.session_state["wide_df"]
-players_df: pd.DataFrame = st.session_state["players_df"]
-squads_df: pd.DataFrame = st.session_state["squads_df"]
 kpi_lookup: pd.DataFrame = st.session_state["kpi_lookup"]
-long_df: pd.DataFrame = st.session_state["long_df"]
 
-# Summary cards
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("Wide rows", f"{wide_df.shape[0]:,}")
-with c2:
-    st.metric("Wide columns", f"{wide_df.shape[1]:,}")
-with c3:
-    st.metric("Players", f"{players_df.shape[0]:,}")
-with c4:
-    st.metric("KPI defs", f"{kpi_lookup.shape[0]:,}")
+# Summary
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Rows (player+squad+matches)", f"{wide_df.shape[0]:,}")
+m2.metric("Columns", f"{wide_df.shape[1]:,}")
+m3.metric("Players (unique)", f"{wide_df['playerId'].nunique():,}" if "playerId" in wide_df.columns else "—")
+m4.metric("Squads (unique)", f"{wide_df['squadId'].nunique():,}" if "squadId" in wide_df.columns else "—")
 
 st.divider()
 
-# Filters
-with st.expander("🔎 Filters (optional)", expanded=True):
-    q_name = st.text_input("Search player name (commonname/firstname/lastname)", "")
-    squad_filter = st.multiselect(
-        "Squad",
-        options=sorted([s for s in wide_df.get("squadName", pd.Series(dtype=str)).dropna().unique().tolist()]),
-        default=[],
-    )
+# Friendly filters + player picker
+left, right = st.columns([1.1, 2.2])
+
+with left:
+    st.subheader("🔎 Find player")
+
+    q = st.text_input("Search", placeholder="Type name…")
+
+    squads = sorted([s for s in wide_df.get("squadName", pd.Series(dtype=str)).dropna().unique().tolist()])
+    squad_sel = st.multiselect("Squad", squads, default=[])
+
     min_matches = st.number_input("Min matches", min_value=0, value=0, step=1)
 
-filtered = wide_df.copy()
+    # Filter dataset for selection pool
+    pool = wide_df.copy()
 
-# Name search
-name_cols = [c for c in ["commonname", "firstname", "lastname"] if c in filtered.columns]
-if q_name and name_cols:
-    mask = pd.Series(False, index=filtered.index)
-    for c in name_cols:
-        mask |= safe_contains(filtered[c], q_name)
-    filtered = filtered[mask]
+    if q:
+        pool = pool[pool["displayName"].astype(str).str.lower().str.contains(q.strip().lower(), na=False)]
 
-# Squad filter
-if squad_filter and "squadName" in filtered.columns:
-    filtered = filtered[filtered["squadName"].isin(squad_filter)]
+    if squad_sel and "squadName" in pool.columns:
+        pool = pool[pool["squadName"].isin(squad_sel)]
 
-# Matches filter
-if "matches" in filtered.columns:
-    filtered = filtered[pd.to_numeric(filtered["matches"], errors="coerce").fillna(0) >= float(min_matches)]
+    if "matches" in pool.columns:
+        pool = pool[pd.to_numeric(pool["matches"], errors="coerce").fillna(0) >= float(min_matches)]
 
-st.caption(f"Showing {filtered.shape[0]:,} rows after filters.")
+    st.caption(f"Matches: {pool.shape[0]:,} rows")
 
-# Tabs with tables
-tab1, tab2, tab3, tab4 = st.tabs(["📦 Wide KPI Table", "🧑 Players", "🏟️ Squads", "🧾 KPI Definitions"])
+    # Player selection list (from filtered pool)
+    if pool.empty:
+        st.warning("No players match your filters.")
+        st.stop()
+
+    # Build selection options as "Name • Squad (matches)"
+    tmp = pool.copy()
+    tmp["__opt__"] = (
+        tmp["displayName"].astype(str)
+        + "  •  "
+        + tmp.get("squadName", pd.Series([""] * len(tmp))).astype(str)
+        + "  •  matches="
+        + tmp.get("matches", pd.Series([0] * len(tmp))).astype(str)
+    )
+
+    # Prefer highest matches rows first for each player
+    tmp = tmp.sort_values(["displayName", "matches"], ascending=[True, False])
+
+    opt = st.selectbox("Select player row", options=tmp["__opt__"].tolist(), index=0)
+    player_row = tmp[tmp["__opt__"] == opt].iloc[0]
+
+    st.markdown("#### Player info")
+    info_cols = ["displayName", "squadName", "positions", "matches", "playerId"]
+    show_cols = [c for c in info_cols if c in tmp.columns]
+    st.dataframe(pd.DataFrame([player_row[show_cols].to_dict()]), width="stretch")
+
+with right:
+    st.subheader("📊 Radar + KPI table")
+
+    meta_cols = {
+        "iterationId",
+        "squadId",
+        "squadName",
+        "playerId",
+        "matches",
+        "commonname",
+        "firstname",
+        "lastname",
+        "displayName",
+        "positions",
+    }
+    numeric_cols = [c for c in wide_df.columns if c not in meta_cols and pd.api.types.is_numeric_dtype(wide_df[c])]
+
+    # Default pick: take first 12 numeric columns (you can customize by keyword in future)
+    default = numeric_cols[:10] if len(numeric_cols) >= 10 else numeric_cols[:]
+
+    st.caption("Choose KPIs (6–12 recommended). Percentiles are computed vs the current filtered pool on the left.")
+    chosen_kpis = st.multiselect("KPIs for radar", options=numeric_cols, default=default)
+
+    if len(chosen_kpis) < 3:
+        st.info("Pick at least 3 KPIs to render a radar.")
+    else:
+        # Radar pool = filtered pool from left (for benchmarking)
+        radar_pool = pool
+        # Ensure all chosen columns exist in pool
+        missing = [c for c in chosen_kpis if c not in radar_pool.columns]
+        if missing:
+            st.error(f"Some KPIs are missing in the pool: {missing[:5]}")
+        else:
+            fig, table = build_radar(player_row, radar_pool, chosen_kpis)
+            st.plotly_chart(fig, width="stretch")
+            st.dataframe(table, width="stretch", height=450)
+
+            csv = table.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Download this radar KPI table (CSV)",
+                data=csv,
+                file_name=f"radar_{player_row.get('displayName','player')}.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+
+st.divider()
+
+# Data tables (friendly tabs)
+tab1, tab2, tab3 = st.tabs(["📦 Wide table (filtered)", "📦 Wide table (full)", "🧾 KPI definitions"])
 
 with tab1:
-    st.subheader("Wide KPI Table (1 row per squad+player+matches)")
-    st.dataframe(filtered, width="stretch", height=600)
-
-    # Quick download (optional)
-    csv = filtered.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download filtered wide CSV", data=csv, file_name="impect_wide_filtered.csv", mime="text/csv", width="stretch")
+    st.subheader("Wide KPI table (filtered)")
+    st.dataframe(pool, width="stretch", height=650)
 
 with tab2:
-    st.subheader("Players (from /iterations/{id}/players)")
-    st.dataframe(players_df, width="stretch", height=600)
+    st.subheader("Wide KPI table (full)")
+    st.dataframe(wide_df, width="stretch", height=650)
 
 with tab3:
-    st.subheader("Squads (from /iterations/{id}/squads)")
-    st.dataframe(squads_df, width="stretch", height=400)
-
-with tab4:
-    st.subheader("KPI Definitions (from /kpis)")
-    st.dataframe(kpi_lookup, width="stretch", height=600)
-
-    # Quick KPI search
-    q_kpi = st.text_input("Search KPI label/technical name", "")
-    if q_kpi:
-        k = kpi_lookup.copy()
-        cols = [c for c in ["kpiLabel", "kpiTechnicalName"] if c in k.columns]
-        if cols:
-            m = pd.Series(False, index=k.index)
-            for c in cols:
-                m |= safe_contains(k[c], q_kpi)
-            st.dataframe(k[m], width="stretch", height=400)
-
-with st.expander("🛠️ Debug (long format rows)", expanded=False):
-    st.caption("Long-format KPI rows (after de-dup aggregation happens before pivot).")
-    st.dataframe(long_df.head(5000), width="stretch", height=500)
+    st.subheader("KPI definitions")
+    st.dataframe(kpi_lookup, width="stretch", height=650)
+    qk = st.text_input("Search KPI", "")
+    if qk:
+        kk = kpi_lookup.copy()
+        for c in ["kpiLabel", "kpiTechnicalName"]:
+            if c not in kk.columns:
+                kk[c] = ""
+        mask = (
+            kk["kpiLabel"].astype(str).str.lower().str.contains(qk.lower(), na=False)
+            | kk["kpiTechnicalName"].astype(str).str.lower().str.contains(qk.lower(), na=False)
+        )
+        st.dataframe(kk[mask], width="stretch", height=450)
