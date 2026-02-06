@@ -769,14 +769,25 @@ def load_impect_iteration_wide(username: str, password: str, iteration_id: int, 
 
     long_df = long_df.dropna(subset=["playerId", "kpiId"])
 
+    # ✅ CRITICAL FIX:
+    # Aggregate duplicates so each index+kpiId is unique before pivoting.
+    key_cols = ["iterationId", "squadId", "squadName", "playerId", "matches", "kpiId"]
+    long_df = (
+        long_df.groupby(key_cols, as_index=False)["value"]
+        .mean()   # or .first() if you prefer
+    )
+    
     wide = (
-        long_df.pivot(
+        long_df.pivot_table(
             index=["iterationId", "squadId", "squadName", "playerId", "matches"],
             columns="kpiId",
             values="value",
+            aggfunc="mean",
         )
         .reset_index()
     )
+wide.columns.name = None
+
     wide.columns.name = None
 
     wide = wide.rename(columns={k: v for k, v in rename_map.items() if k in wide.columns})
