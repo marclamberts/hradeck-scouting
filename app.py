@@ -24,7 +24,7 @@ from pathlib import Path
 st.set_page_config(page_title="IMPECT Stats", page_icon="📊", layout="wide")
 
 # Default templates directory (change to your actual path)
-DEFAULT_TEMPLATES_DIR = "/Users/user/Documents/GitHub//hradeck-scouting/"
+DEFAULT_TEMPLATES_DIR = "/data"
 
 # Position templates available
 POSITION_TEMPLATES = {
