@@ -1,9 +1,12 @@
 """
-IMPECT Stats Table — Multi-League (Top League Buttons + Sidebar Filters ONLY)
-============================================================================
-✅ League switch buttons on top (from ./data filenames)
-✅ ALL filters live in the LEFT sidebar (no filters in main content)
-✅ Dark theme + table styling + pct/z + subtle bars
+IMPECT Stats Table — Multi-League (Top League Buttons + Sidebar Filters that ALWAYS show)
+=======================================================================================
+Fixes your issue:
+✅ Sidebar can "disappear" on some layouts/screens → we add a TOP "🎛 Filters" button.
+✅ That button toggles filters reliably (even if Streamlit hides the default arrow).
+✅ Filters are ONLY in the left sidebar (no filter widgets in main page).
+✅ League buttons on top (files in ./data, filename = league name)
+✅ Dark StatsBomb-esque palette, table styling, pct/z + subtle distribution bars
 ✅ Positions abbreviated
 
 Folder:
@@ -29,7 +32,7 @@ st.set_page_config(
     page_title="IMPECT Stats | Multi-League",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded",  # start open
 )
 
 DATA_DIR = "data"
@@ -309,7 +312,7 @@ def z_cell_style(val):
 
 
 # ─────────────────────────────────────────────
-# Global CSS (sidebar filters styled + table)
+# Global CSS (sidebar + main + table)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -375,7 +378,7 @@ section[data-testid="stSidebar"] [data-baseweb="tag"] {{
   color: {TEXT_LIGHT} !important;
 }}
 
-/* Pills/buttons */
+/* Buttons */
 div.stButton > button {{
   border-radius: 12px !important;
   border: 1px solid {TABLE_BORDER} !important;
@@ -384,13 +387,8 @@ div.stButton > button {{
   font-weight: 900 !important;
   padding: .5rem .85rem !important;
 }}
-div.stButton > button:hover {{
-  border-color: {ACCENT_LINE} !important;
-}}
-div.stButton > button:focus {{
-  border-color: {ACCENT_LINE} !important;
-  box-shadow: 0 0 0 3px rgba(245,197,24,.12) !important;
-}}
+div.stButton > button:hover {{ border-color: {ACCENT_LINE} !important; }}
+div.stButton > button:focus {{ border-color: {ACCENT_LINE} !important; box-shadow: 0 0 0 3px rgba(245,197,24,.12) !important; }}
 
 /* Cards/badges */
 .card {{
@@ -423,7 +421,6 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
   border: 1px solid {TABLE_BORDER};
   background: {BG};
 }}
-
 table.dataframe {{
   width: 100% !important;
   table-layout: fixed;
@@ -431,7 +428,6 @@ table.dataframe {{
   border-spacing: 0 !important;
   background: transparent !important;
 }}
-
 table.dataframe thead th {{
   position: sticky;
   top: 0;
@@ -447,11 +443,9 @@ table.dataframe thead th {{
   text-align: left;
 }}
 table.dataframe thead th:last-child {{ border-right: none !important; }}
-
 table.dataframe tbody tr {{ background: {BG} !important; }}
 table.dataframe tbody tr:nth-child(even) {{ background: {TABLE_ROW_ALT} !important; }}
 table.dataframe tbody tr:hover {{ background: {GRID_COLOR} !important; }}
-
 table.dataframe tbody td {{
   background-color: transparent !important;
   color: {TEXT_LIGHT} !important;
@@ -466,20 +460,16 @@ table.dataframe tbody td {{
   text-overflow: ellipsis;
 }}
 table.dataframe tbody td:last-child {{ border-right: none !important; }}
-
-/* Column sizing */
 table.dataframe thead th:nth-child(1),
-table.dataframe tbody td:nth-child(1) {{ width: 60px; }}   /* Rank */
+table.dataframe tbody td:nth-child(1) {{ width: 60px; }}
 table.dataframe thead th:nth-child(2),
-table.dataframe tbody td:nth-child(2) {{ width: 190px; text-align:left; font-weight: 900; }} /* Player */
+table.dataframe tbody td:nth-child(2) {{ width: 190px; text-align:left; font-weight: 900; }}
 table.dataframe thead th:nth-child(3),
-table.dataframe tbody td:nth-child(3) {{ width: 170px; text-align:left; color:{TEXT_DIM} !important; font-weight: 750; }} /* Squad */
+table.dataframe tbody td:nth-child(3) {{ width: 170px; text-align:left; color:{TEXT_DIM} !important; font-weight: 750; }}
 table.dataframe thead th:nth-child(4),
-table.dataframe tbody td:nth-child(4) {{ width: 160px; text-align:left; font-weight: 850; }} /* Positions */
+table.dataframe tbody td:nth-child(4) {{ width: 160px; text-align:left; font-weight: 850; }}
 table.dataframe thead th:nth-child(n+5),
 table.dataframe tbody td:nth-child(n+5) {{ width: 115px; }}
-
-/* Sticky first 4 columns */
 table.dataframe thead th:nth-child(1),
 table.dataframe tbody td:nth-child(1) {{ position: sticky; left: 0; z-index: 9; background: inherit !important; }}
 table.dataframe thead th:nth-child(2),
@@ -488,7 +478,6 @@ table.dataframe thead th:nth-child(3),
 table.dataframe tbody td:nth-child(3) {{ position: sticky; left: 250px; z-index: 9; background: inherit !important; }}
 table.dataframe thead th:nth-child(4),
 table.dataframe tbody td:nth-child(4) {{ position: sticky; left: 420px; z-index: 9; background: inherit !important; }}
-
 table.dataframe tbody td:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.25); }}
 table.dataframe thead th:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.35); }}
 </style>
@@ -505,7 +494,7 @@ st.markdown(
   <div>
     <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Multi-League</span></div>
     <h1 style="margin:.45rem 0 0 0; font-size: 1.9rem;">Player Stats Explorer</h1>
-    <div class="small-muted">League buttons on top • Filters left • per 90 • percentiles + z-scores • subtle bars • positions abbreviated</div>
+    <div class="small-muted">Use <b style="color:{ACCENT_LINE}">🎛 Filters</b> to open/close the left menu (works even when Streamlit hides the arrow)</div>
   </div>
   <div class="badge"><span class="dim">Leagues</span> {len(league_names)}</div>
 </div>
@@ -514,7 +503,18 @@ st.markdown(
 )
 
 # ─────────────────────────────────────────────
-# League buttons on top
+# Filter toggle (reliable sidebar control)
+# ─────────────────────────────────────────────
+if "show_filters" not in st.session_state:
+    st.session_state.show_filters = True
+
+ft_col, _ = st.columns([1.4, 8.6])
+with ft_col:
+    if st.button("🎛 Filters", use_container_width=True, key="filters_toggle_btn"):
+        st.session_state.show_filters = not st.session_state.show_filters
+
+# ─────────────────────────────────────────────
+# League buttons (top)
 # ─────────────────────────────────────────────
 if "league_selected" not in st.session_state:
     st.session_state["league_selected"] = league_names[0]
@@ -547,81 +547,86 @@ except Exception as e:
     st.stop()
 
 # ─────────────────────────────────────────────
-# Sidebar — ALL FILTERS ONLY HERE
+# Sidebar — filters (ONLY show when toggled on)
 # ─────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 🎛 Filters")
-    st.markdown(
-        f"<div class='small-muted'>League: <b style='color:{ACCENT_LINE}'>{league_name}</b></div>",
-        unsafe_allow_html=True,
-    )
-    st.divider()
+if st.session_state.show_filters:
+    with st.sidebar:
+        st.markdown("## 🎛 Filters")
+        st.markdown(
+            f"<div class='small-muted'>League: <b style='color:{ACCENT_LINE}'>{league_name}</b></div>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
 
-    name_filter = st.text_input("Player search", placeholder="Type player name…", key=f"name_{league_name}")
+        name_filter = st.text_input("Player search", placeholder="Type player name…", key=f"name_{league_name}")
+        st.divider()
 
-    st.divider()
+        squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
+        squad = st.selectbox("Squad", squads, key=f"squad_{league_name}")
+        st.divider()
 
-    squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
-    squad = st.selectbox("Squad", squads, key=f"squad_{league_name}")
+        pos_group = st.selectbox(
+            "Position group",
+            ["All Positions", "Defenders", "Midfielders", "Forwards"],
+            key=f"posgrp_{league_name}",
+        )
+        st.divider()
 
-    st.divider()
+        categories = {
+            "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
+            "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
+            "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
+            "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
+            "📈 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
+        }
+        selected_cat = st.selectbox("Stat category", list(categories.keys()), key=f"cat_{league_name}")
+        keywords = categories[selected_cat]
+        st.divider()
 
-    pos_group = st.selectbox(
-        "Position group",
-        ["All Positions", "Defenders", "Midfielders", "Forwards"],
-        key=f"posgrp_{league_name}",
-    )
+        display_mode = st.selectbox("Display mode", ["Percentiles", "Raw values", "Both"], index=0, key=f"display_{league_name}")
+        metric_mode = st.selectbox("Metric mode", ["Percentile", "Z-score"], index=0, key=f"metric_{league_name}")
+        show_bars = st.toggle("Show distribution bars", value=True, key=f"bars_{league_name}")
+        show_rank = st.toggle("Show rank", value=True, key=f"rank_{league_name}")
+        st.divider()
 
-    st.divider()
+        matching = [k for k in kpis if any(kw in k for kw in keywords)]
+        if not matching:
+            matching = kpis[:]
+        stats_options = matching[:40] if len(matching) > 40 else matching
 
-    categories = {
-        "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
-        "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
-        "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
-        "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
-        "📈 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
-    }
-    selected_cat = st.selectbox("Stat category", list(categories.keys()), key=f"cat_{league_name}")
-    keywords = categories[selected_cat]
+        selected_stats = st.multiselect(
+            "Select stats",
+            options=stats_options,
+            default=stats_options[:8] if len(stats_options) >= 8 else stats_options,
+            key=f"stats_{league_name}",
+        )
 
-    st.divider()
+        if not selected_stats:
+            st.warning("Select at least one stat.")
+            st.stop()
+else:
+    # If filters are hidden, provide safe defaults so the app still runs
+    name_filter = ""
+    squad = "All Squads"
+    pos_group = "All Positions"
+    display_mode = "Percentiles"
+    metric_mode = "Percentile"
+    show_bars = True
+    show_rank = True
+    selected_stats = kpis[:8] if len(kpis) >= 8 else kpis[:]
 
-    display_mode = st.selectbox("Display mode", ["Percentiles", "Raw values", "Both"], index=0, key=f"display_{league_name}")
-    metric_mode = st.selectbox("Metric mode", ["Percentile", "Z-score"], index=0, key=f"metric_{league_name}")
-    show_bars = st.toggle("Show distribution bars", value=True, key=f"bars_{league_name}")
-    show_rank = st.toggle("Show rank", value=True, key=f"rank_{league_name}")
-
-    st.divider()
-
-    matching = [k for k in kpis if any(kw in k for kw in keywords)]
-    if not matching:
-        matching = kpis[:]
-    stats_options = matching[:40] if len(matching) > 40 else matching
-
-    selected_stats = st.multiselect(
-        "Select stats",
-        options=stats_options,
-        default=stats_options[:8] if len(stats_options) >= 8 else stats_options,
-        key=f"stats_{league_name}",
-    )
-
-    st.divider()
-
-    # Optional: export buttons in sidebar (purely optional, remove if you want exports only bottom)
-    show_exports_sidebar = st.toggle("Show export buttons", value=False, key=f"exports_sidebar_{league_name}")
-
-    if not selected_stats:
-        st.warning("Select at least one stat.")
-        st.stop()
 
 # ─────────────────────────────────────────────
 # Apply filters
 # ─────────────────────────────────────────────
 df_filtered = df.copy()
+
 if name_filter:
     df_filtered = df_filtered[df_filtered["displayName"].str.contains(name_filter, case=False, na=False)]
+
 if squad != "All Squads":
     df_filtered = df_filtered[df_filtered["squadName"] == squad]
+
 if pos_group != "All Positions":
     pos_map = {
         "Defenders": ["DEFENDER", "BACK"],
@@ -633,6 +638,7 @@ if pos_group != "All Positions":
     for t in tokens:
         mask |= df_filtered["positions"].str.contains(t, case=False, na=False)
     df_filtered = df_filtered[mask]
+
 
 # ─────────────────────────────────────────────
 # Build display dataframe
@@ -700,6 +706,7 @@ if sort_col:
 if show_rank and sort_col:
     df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
 
+
 # ─────────────────────────────────────────────
 # Style + render
 # ─────────────────────────────────────────────
@@ -718,7 +725,10 @@ for c in df_display.columns:
 styled = styled.format(fmt, na_rep="-")
 
 if "Rank" in df_display.columns:
-    styled = styled.applymap(lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;", subset=["Rank"])
+    styled = styled.applymap(
+        lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;",
+        subset=["Rank"],
+    )
 
 if show_bars:
     for c in df_display.columns:
@@ -727,7 +737,7 @@ if show_bars:
         if c.endswith("(Z)"):
             styled = styled.applymap(z_cell_style, subset=[c])
 
-# Main view (NO filters here)
+# Main view
 st.markdown(
     f"""
 <div style="margin-top: .9rem; margin-bottom: .5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
@@ -740,24 +750,26 @@ st.markdown(
 
 st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
 
-# Exports: optionally in sidebar, otherwise bottom (default bottom)
+# Export (bottom)
 csv = df_display.to_csv(index=False).encode("utf-8")
 buffer = BytesIO()
 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
     df_display.to_excel(writer, index=False)
 
-if show_exports_sidebar:
-    with st.sidebar:
-        st.markdown("## 💾 Export")
-        st.download_button("⬇ CSV", csv, f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
-        st.download_button("⬇ Excel", buffer.getvalue(), f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-else:
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'><h3 style='margin:0 0 .35rem 0;'>Export</h3><div class='small-muted'>Exports the current view (filters + columns shown).</div></div>", unsafe_allow_html=True)
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.download_button("⬇ CSV", csv, f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
-    with c2:
-        st.download_button("⬇ Excel", buffer.getvalue(), f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='card'><h3 style='margin:0 0 .35rem 0;'>Export</h3>"
+    "<div class='small-muted'>Exports the current view (filters + columns shown).</div></div>",
+    unsafe_allow_html=True,
+)
+c1, c2 = st.columns([1, 1])
+with c1:
+    st.download_button("⬇ CSV", csv, f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+with c2:
+    st.download_button(
+        "⬇ Excel",
+        buffer.getvalue(),
+        f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
