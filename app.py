@@ -1,13 +1,18 @@
 """
 IMPECT Stats Table — StatsBomb Edition (Full, Consistent, Readable)
 ===================================================================
-- Dark StatsBomb-esque palette (your exact colors) applied everywhere
+IMPORTANT: Uses HTML table rendering (Styler.to_html) so your dark theme,
+fonts, and distribution bars actually apply. st.dataframe() will ignore a
+lot of CSS/styling in newer Streamlit versions.
+
+Features
+- StatsBomb-esque palette (your exact colors) everywhere (sidebar + table)
 - Filters: player search, squad, position group, category, stat selection
 - Display mode: Percentiles / Raw values / Both
 - Metric mode: Percentile / Z-score (for the metric columns)
 - Distribution bars: Pct fill + Z diverging with center line
-- Per-90 assumed (no per-90 toggle)
-- Table font + colors forced consistently (no random dark text)
+- Assumes all stats are already per 90
+- Scrollable table container (sticky header)
 """
 
 import pandas as pd
@@ -28,23 +33,23 @@ st.set_page_config(
 DATA_FILE = "Keuken Kampioen Divisie.xlsx"
 
 # ─────────────────────────────────────────────
-# COLOUR PALETTE (StatsBomb-esque) — USER PROVIDED
+# COLOUR PALETTE (StatsBomb-esque)
 # ─────────────────────────────────────────────
 BG = "#1A1A1A"
 RADAR_BG = "#222222"
 GRID_COLOR = "#333333"
-PLAYER_COL = "#F5C518"      # Gold for player / accents
+PLAYER_COL = "#F5C518"      # Gold for accents
 LEAGUE_COL = "#5A5A5A"      # Grey for baseline
 TEXT_LIGHT = "#E0E0E0"
 TEXT_DIM = "#888888"
 TABLE_ROW_ALT = "#2A2A2A"
 TABLE_BORDER = "#3A3A3A"
-PCT_HIGH = "#4CAF50"        # Green for high percentile
-PCT_MID = "#F5C518"         # Yellow for mid
-PCT_LOW = "#E53935"         # Red for low
+PCT_HIGH = "#4CAF50"        # Green
+PCT_MID = "#F5C518"         # Yellow
+PCT_LOW = "#E53935"         # Red
 ACCENT_LINE = "#F5C518"
 
-# Metrics where lower is better (auto-invert in pct + z)
+# Metrics where lower is better
 INVERTED = ["foul", "lost", "unsuccessful", "failed", "off target", "red", "yellow"]
 
 
@@ -58,6 +63,7 @@ def clamp(v: float, lo: float, hi: float) -> float:
 
 
 def clean_stat_name(stat: str) -> str:
+    # Remove " (ID)" suffixes if present
     return stat.split(" (")[0] if " (" in stat else stat
 
 
@@ -76,11 +82,9 @@ def load_data(file_path: str) -> pd.DataFrame:
         "lastChangeTimestamp", "competition_name", "competition_type", "competition_gender"
     ]
 
-    # Merge only non-base KPI cols from xG
     xg_kpis = [c for c in xg.columns if c not in base and c != "playerId"]
     merged = standard.merge(xg[["playerId"] + xg_kpis], on="playerId", how="left")
 
-    # Display name
     cn = merged.get("commonname", "").fillna("").astype(str).str.strip()
     fallback = (
         merged.get("firstname", "").fillna("").astype(str).str.strip()
@@ -112,9 +116,6 @@ def calc_percentiles(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
 
 
 def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
-    """
-    Z-score per KPI, after flipping inverted metrics so higher is always better.
-    """
     for col in kpis:
         x = pd.to_numeric(df[col], errors="coerce")
         if is_inverted(col):
@@ -126,14 +127,9 @@ def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────
-# Cell styles (bars) — table-friendly (doesn't break row bg/font)
+# Cell styles (bars) — table-friendly
 # ─────────────────────────────────────────────
 def pct_cell_style(val):
-    """
-    Percentiles:
-    - fill bar 0→100
-    - color band: green high / yellow mid / red low
-    """
     if pd.isna(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
@@ -158,12 +154,6 @@ def pct_cell_style(val):
 
 
 def z_cell_style(val):
-    """
-    Z-scores:
-    - diverging bar around 0 (center line)
-    - green positive, red negative
-    - clamp to [-3, 3]
-    """
     if pd.isna(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
@@ -212,20 +202,17 @@ def z_cell_style(val):
 
 
 # ─────────────────────────────────────────────
-# Global CSS (forces table font + colors; matches sidebar + app)
+# Global CSS (applies to HTML table + controls)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
 <style>
-/* App background */
 html, body, [data-testid="stAppViewContainer"] {{
   background: {BG} !important;
   color: {TEXT_LIGHT} !important;
 }}
-/* Remove Streamlit chrome */
 #MainMenu, footer, header, .stDeployButton {{ visibility: hidden !important; display:none !important; }}
 
-/* Layout */
 .block-container {{
   max-width: 1500px !important;
   padding-top: 1.1rem !important;
@@ -241,7 +228,7 @@ section[data-testid="stSidebar"] * {{
   color: {TEXT_LIGHT} !important;
 }}
 
-/* Typography */
+/* Font everywhere */
 html, body, [class*="css"], .stMarkdown, .stText, .stCaption {{
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial !important;
 }}
@@ -270,7 +257,7 @@ section[data-testid="stSidebar"] [data-baseweb="tag"] {{
   color: {TEXT_LIGHT} !important;
 }}
 
-/* Cards / badges */
+/* Card / badge */
 .card {{
   background: {RADAR_BG};
   border: 1px solid {TABLE_BORDER};
@@ -293,84 +280,9 @@ section[data-testid="stSidebar"] [data-baseweb="tag"] {{
   color: {TEXT_DIM};
   font-weight: 700;
 }}
-.small-muted {{
-  color: {TEXT_DIM} !important;
-}}
+.small-muted {{ color: {TEXT_DIM} !important; }}
 
-/* Dividers */
 hr {{ border-color: {TABLE_BORDER} !important; }}
-
-/* ─────────────────────────────
-   TABLE: force StatsBomb font + colors
-   ───────────────────────────── */
-.stDataFrame, .stDataFrame * {{
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial !important;
-}}
-/* Wrapper */
-.stDataFrame {{
-  background: {BG} !important;
-  border: 1px solid {TABLE_BORDER} !important;
-  border-radius: 14px !important;
-  overflow: hidden !important;
-}}
-/* Table & cells */
-.stDataFrame .dataframe,
-.stDataFrame .dataframe th,
-.stDataFrame .dataframe td {{
-  color: {TEXT_LIGHT} !important;
-}}
-/* Header */
-.stDataFrame .dataframe thead th {{
-  background: {RADAR_BG} !important;
-  color: {TEXT_LIGHT} !important;
-  border-bottom: 1px solid {TABLE_BORDER} !important;
-  border-right: 1px solid {TABLE_BORDER} !important;
-  font-size: 11px !important;
-  letter-spacing: .08em !important;
-  text-transform: uppercase !important;
-  padding: 12px 12px !important;
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 2 !important;
-}}
-.stDataFrame .dataframe thead th:last-child {{
-  border-right: none !important;
-}}
-/* Rows */
-.stDataFrame .dataframe tbody tr {{
-  background: {BG} !important;
-}}
-.stDataFrame .dataframe tbody tr:nth-child(even) {{
-  background: {TABLE_ROW_ALT} !important;
-}}
-.stDataFrame .dataframe tbody tr:hover {{
-  background: {GRID_COLOR} !important;
-}}
-/* Body cells */
-.stDataFrame .dataframe tbody td {{
-  background: transparent !important; /* inherit row bg; allow bars via background-image */
-  border-bottom: 1px solid {TABLE_BORDER} !important;
-  border-right: 1px solid {TABLE_BORDER} !important;
-  font-size: 13px !important;
-  padding: 10px 12px !important;
-  text-align: center !important;
-  font-variant-numeric: tabular-nums !important;
-}}
-.stDataFrame .dataframe tbody td:last-child {{
-  border-right: none !important;
-}}
-/* Left columns */
-.stDataFrame .dataframe tbody td:nth-child(1) {{
-  text-align: left !important;
-  font-weight: 900 !important;
-  color: {TEXT_LIGHT} !important;
-}}
-.stDataFrame .dataframe tbody td:nth-child(2),
-.stDataFrame .dataframe tbody td:nth-child(3) {{
-  text-align: left !important;
-  font-weight: 750 !important;
-  color: {TEXT_DIM} !important;
-}}
 
 /* Download buttons */
 .stDownloadButton button {{
@@ -381,8 +293,90 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
   border-radius: 12px !important;
   padding: 10px 14px !important;
 }}
-.stDownloadButton button:hover {{
-  filter: brightness(0.95) !important;
+.stDownloadButton button:hover {{ filter: brightness(0.95) !important; }}
+
+/* ─────────────────────────────
+   HTML TABLE STYLES (pandas Styler to_html)
+   ───────────────────────────── */
+.table-wrap {{
+  max-height: 720px;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid {TABLE_BORDER};
+  background: {BG};
+}}
+
+/* Make sure the table uses full width and keeps styling */
+table.dataframe {{
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  background: transparent !important;
+}}
+
+/* Header */
+table.dataframe thead th {{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: {RADAR_BG} !important;
+  color: {TEXT_LIGHT} !important;
+  border-bottom: 1px solid {TABLE_BORDER} !important;
+  border-right: 1px solid {TABLE_BORDER} !important;
+  font-size: 11px !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  padding: 12px 12px !important;
+  text-align: left;
+}}
+table.dataframe thead th:last-child {{
+  border-right: none !important;
+}}
+
+/* Rows */
+table.dataframe tbody tr {{
+  background: {BG} !important;
+}}
+table.dataframe tbody tr:nth-child(even) {{
+  background: {TABLE_ROW_ALT} !important;
+}}
+table.dataframe tbody tr:hover {{
+  background: {GRID_COLOR} !important;
+}}
+
+/* Cells */
+table.dataframe tbody td {{
+  background-color: transparent !important;
+  color: {TEXT_LIGHT} !important;
+  border-bottom: 1px solid {TABLE_BORDER} !important;
+  border-right: 1px solid {TABLE_BORDER} !important;
+  font-size: 13px !important;
+  padding: 10px 12px !important;
+  text-align: center;
+  font-variant-numeric: tabular-nums !important;
+}}
+table.dataframe tbody td:last-child {{
+  border-right: none !important;
+}}
+
+/* Left columns */
+table.dataframe tbody td:nth-child(1) {{
+  text-align: left !important;
+  font-weight: 900 !important;
+}}
+table.dataframe tbody td:nth-child(2),
+table.dataframe tbody td:nth-child(3) {{
+  text-align: left !important;
+  font-weight: 750 !important;
+  color: {TEXT_DIM} !important;
+}}
+
+/* Optional: keep long position strings readable */
+table.dataframe tbody td:nth-child(3) {{
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }}
 </style>
 """,
@@ -422,7 +416,7 @@ except Exception as e:
 # Sidebar filters
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🎛️ Filters")
+    st.markdown("## Filters")
 
     name_filter = st.text_input("Player search", placeholder="Type player name…")
 
@@ -461,7 +455,6 @@ with st.sidebar:
     if not matching:
         matching = kpis[:]
 
-    # Keep list manageable; multiselect itself supports search
     stats_options = matching[:40] if len(matching) > 40 else matching
 
     selected_stats = st.multiselect(
@@ -544,7 +537,7 @@ else:  # Both
 cols = [c for c in cols if c in df_filtered.columns]
 df_display = df_filtered[cols].copy()
 
-# Rename columns
+# Rename columns to nice labels (avoid duplicates)
 rename_map = {}
 seen = set()
 for col in df_display.columns:
@@ -552,11 +545,9 @@ for col in df_display.columns:
         continue
 
     if col.endswith("_pct"):
-        base = clean_stat_name(col[:-4])
-        nice = f"{base} {metric_label}"
+        nice = f"{clean_stat_name(col[:-4])} {metric_label}"
     elif col.endswith("_z"):
-        base = clean_stat_name(col[:-2])
-        nice = f"{base} {metric_label}"
+        nice = f"{clean_stat_name(col[:-2])} {metric_label}"
     else:
         nice = clean_stat_name(col)
 
@@ -570,7 +561,7 @@ for col in df_display.columns:
 
 df_display = df_display.rename(columns=rename_map)
 
-# Sort by first metric column if present, else first stat column
+# Sort: first metric column if present, else first stat column
 sort_col = None
 for c in df_display.columns:
     if c.endswith(metric_label):
@@ -582,7 +573,7 @@ if sort_col is None and len(df_display.columns) > len(base_cols):
 if sort_col:
     df_display = df_display.sort_values(sort_col, ascending=False, na_position="last")
 
-# Rank
+# Rank column
 if show_rank and sort_col:
     df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
 
@@ -591,7 +582,7 @@ if show_rank and sort_col:
 # ─────────────────────────────────────────────
 styled = df_display.style
 
-# Format
+# Format numbers
 fmt = {}
 for c in df_display.columns:
     if c in ["Rank"] + base_cols:
@@ -611,7 +602,7 @@ if "Rank" in df_display.columns:
         subset=["Rank"],
     )
 
-# Metric styles
+# Apply metric styles
 for c in df_display.columns:
     if c.endswith("(PCT)"):
         if show_bars:
@@ -634,7 +625,7 @@ for c in df_display.columns:
             )
 
 # ─────────────────────────────────────────────
-# Render
+# Render (HTML so styles apply correctly)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -646,7 +637,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.dataframe(styled, use_container_width=True, height=700, hide_index=True)
+html_table = styled.to_html()
+st.markdown(f'<div class="table-wrap">{html_table}</div>', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # Export
