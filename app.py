@@ -1,10 +1,9 @@
 """
-IMPECT Stats Table — Multi-League with TOP BUTTONS + PROPER DARK FILTERS
-========================================================================
-What you asked:
-✅ League switch buttons on top (filename = league name from ./data)
-✅ Filters in the LEFT SIDEBAR with matching StatsBomb-esque colors
-✅ Table matches theme, sticky cols, subtle pct/z bars
+IMPECT Stats Table — Multi-League (Top League Buttons + Sidebar Filters ONLY)
+============================================================================
+✅ League switch buttons on top (from ./data filenames)
+✅ ALL filters live in the LEFT sidebar (no filters in main content)
+✅ Dark theme + table styling + pct/z + subtle bars
 ✅ Positions abbreviated
 
 Folder:
@@ -41,15 +40,15 @@ DATA_DIR = "data"
 BG = "#1A1A1A"
 RADAR_BG = "#222222"
 GRID_COLOR = "#333333"
-PLAYER_COL = "#F5C518"      # Gold
-LEAGUE_COL = "#5A5A5A"      # Grey baseline
+PLAYER_COL = "#F5C518"
+LEAGUE_COL = "#5A5A5A"
 TEXT_LIGHT = "#E0E0E0"
 TEXT_DIM = "#888888"
 TABLE_ROW_ALT = "#2A2A2A"
 TABLE_BORDER = "#3A3A3A"
-PCT_HIGH = "#4CAF50"        # Green
-PCT_MID = "#F5C518"         # Yellow
-PCT_LOW = "#E53935"         # Red
+PCT_HIGH = "#4CAF50"
+PCT_MID = "#F5C518"
+PCT_LOW = "#E53935"
 ACCENT_LINE = "#F5C518"
 
 INVERTED = ["foul", "lost", "unsuccessful", "failed", "off target", "red", "yellow"]
@@ -204,6 +203,7 @@ def load_data(file_path: str) -> pd.DataFrame:
         + merged.get("lastname", "").fillna("").astype(str).str.strip()
     ).str.strip()
     merged["displayName"] = np.where(cn == "", fallback, cn)
+
     merged["posAbbr"] = merged.get("positions", "").apply(abbreviate_positions) if "positions" in merged.columns else ""
     return merged
 
@@ -267,6 +267,7 @@ def z_cell_style(val):
     col = PCT_HIGH if z >= 0 else PCT_LOW
     weight = 900 if abs(z) >= 1.25 else 850
     glow = "rgba(76,175,80,.10)" if z >= 0 else "rgba(229,57,53,.10)"
+
     center = f"""
       linear-gradient(to right,
         transparent 49.6%,
@@ -274,6 +275,7 @@ def z_cell_style(val):
         {LEAGUE_COL} 50.4%,
         transparent 50.4%)
     """
+
     if pos >= mid:
         bar = f"""
         linear-gradient(to right,
@@ -294,7 +296,9 @@ def z_cell_style(val):
           transparent {mid:.1f}%,
           transparent 100%)
         """
+
     track = "linear-gradient(to right, rgba(255,255,255,.06) 0%, rgba(255,255,255,.06) 100%)"
+
     return f"""
       background-color: transparent;
       background-image: {center}, {track}, {bar};
@@ -305,7 +309,7 @@ def z_cell_style(val):
 
 
 # ─────────────────────────────────────────────
-# Global CSS — SIDEBAR CONTROLS PROPERLY DARK
+# Global CSS (sidebar filters styled + table)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -326,28 +330,17 @@ html, body, [class*="css"], .stMarkdown, .stText, .stCaption {{
   padding-bottom: 2.0rem !important;
 }}
 
-/* SIDEBAR panel */
+/* SIDEBAR */
 section[data-testid="stSidebar"] {{
   background: {RADAR_BG} !important;
   border-right: 1px solid {TABLE_BORDER} !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h1,
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3,
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h4,
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h5 {{
-  color: {TEXT_LIGHT} !important;
-}}
-
-/* Make all widget labels consistent */
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] .stCaption,
 section[data-testid="stSidebar"] p {{
   color: {TEXT_DIM} !important;
   font-weight: 650 !important;
 }}
-
-/* Inputs (text/select) */
 section[data-testid="stSidebar"] input,
 section[data-testid="stSidebar"] textarea {{
   background: {BG} !important;
@@ -360,8 +353,6 @@ section[data-testid="stSidebar"] textarea:focus {{
   border-color: {ACCENT_LINE} !important;
   box-shadow: 0 0 0 3px rgba(245,197,24,.18) !important;
 }}
-
-/* Baseweb Select (Selectbox + Multiselect) */
 section[data-testid="stSidebar"] [data-baseweb="select"] > div {{
   background: {BG} !important;
   border: 1px solid {TABLE_BORDER} !important;
@@ -370,38 +361,38 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div {{
 section[data-testid="stSidebar"] [data-baseweb="select"] * {{
   color: {TEXT_LIGHT} !important;
 }}
-/* Dropdown menu */
-div[data-baseweb="popover"] * {{
-  color: {TEXT_LIGHT} !important;
-}}
 div[data-baseweb="menu"] {{
   background: {RADAR_BG} !important;
   border: 1px solid {TABLE_BORDER} !important;
   border-radius: 12px !important;
 }}
-div[data-baseweb="menu"] li {{
-  background: transparent !important;
-}}
 div[data-baseweb="menu"] li:hover {{
   background: {GRID_COLOR} !important;
 }}
-
-/* Multiselect chips */
 section[data-testid="stSidebar"] [data-baseweb="tag"] {{
   background: {BG} !important;
   border: 1px solid {TABLE_BORDER} !important;
   color: {TEXT_LIGHT} !important;
 }}
 
-/* Toggle switch */
-section[data-testid="stSidebar"] [data-testid="stToggleSwitch"] label {{
+/* Pills/buttons */
+div.stButton > button {{
+  border-radius: 12px !important;
+  border: 1px solid {TABLE_BORDER} !important;
+  background: {RADAR_BG} !important;
   color: {TEXT_LIGHT} !important;
+  font-weight: 900 !important;
+  padding: .5rem .85rem !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stToggleSwitch"] span {{
-  color: {TEXT_LIGHT} !important;
+div.stButton > button:hover {{
+  border-color: {ACCENT_LINE} !important;
+}}
+div.stButton > button:focus {{
+  border-color: {ACCENT_LINE} !important;
+  box-shadow: 0 0 0 3px rgba(245,197,24,.12) !important;
 }}
 
-/* Cards + badges */
+/* Cards/badges */
 .card {{
   background: {RADAR_BG};
   border: 1px solid {TABLE_BORDER};
@@ -423,44 +414,6 @@ section[data-testid="stSidebar"] [data-testid="stToggleSwitch"] span {{
 .badge .dim {{ color: {TEXT_DIM}; font-weight: 700; }}
 .small-muted {{ color: {TEXT_DIM} !important; }}
 hr {{ border-color: {TABLE_BORDER} !important; }}
-
-/* League buttons */
-.league-row {{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.5rem;
-  margin-top: .9rem;
-  margin-bottom: .6rem;
-}}
-
-/* Make Streamlit buttons look like pills */
-div.stButton > button {{
-  border-radius: 12px !important;
-  border: 1px solid {TABLE_BORDER} !important;
-  background: {RADAR_BG} !important;
-  color: {TEXT_LIGHT} !important;
-  font-weight: 900 !important;
-  padding: .5rem .85rem !important;
-}}
-div.stButton > button:hover {{
-  border-color: {ACCENT_LINE} !important;
-}}
-/* Active league button: we set via label prefix ✓ and extra styling using :has when supported */
-div.stButton > button:focus {{
-  border-color: {ACCENT_LINE} !important;
-  box-shadow: 0 0 0 3px rgba(245,197,24,.12) !important;
-}}
-
-/* Downloads */
-.stDownloadButton button {{
-  background: {ACCENT_LINE} !important;
-  color: #000 !important;
-  font-weight: 950 !important;
-  border: none !important;
-  border-radius: 12px !important;
-  padding: 10px 14px !important;
-}}
-.stDownloadButton button:hover {{ filter: brightness(0.95) !important; }}
 
 /* TABLE */
 .table-wrap {{
@@ -552,7 +505,7 @@ st.markdown(
   <div>
     <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Multi-League</span></div>
     <h1 style="margin:.45rem 0 0 0; font-size: 1.9rem;">Player Stats Explorer</h1>
-    <div class="small-muted">Buttons on top • Filters left • per 90 • percentiles + z-scores • subtle bars • positions abbreviated</div>
+    <div class="small-muted">League buttons on top • Filters left • per 90 • percentiles + z-scores • subtle bars • positions abbreviated</div>
   </div>
   <div class="badge"><span class="dim">Leagues</span> {len(league_names)}</div>
 </div>
@@ -561,12 +514,10 @@ st.markdown(
 )
 
 # ─────────────────────────────────────────────
-# League selector (TOP BUTTONS)
+# League buttons on top
 # ─────────────────────────────────────────────
 if "league_selected" not in st.session_state:
     st.session_state["league_selected"] = league_names[0]
-
-st.markdown('<div class="league-row">', unsafe_allow_html=True)
 
 def chunks(lst, n=6):
     for i in range(0, len(lst), n):
@@ -580,13 +531,11 @@ for row in chunks(league_names, 6):
         if c.button(label, use_container_width=True, key=f"league_btn_{lg}"):
             st.session_state["league_selected"] = lg
 
-st.markdown("</div>", unsafe_allow_html=True)
-
 league_name = st.session_state["league_selected"]
 file_path = league_to_path[league_name]
 
 # ─────────────────────────────────────────────
-# Load selected league
+# Load league
 # ─────────────────────────────────────────────
 try:
     df = load_data(file_path)
@@ -598,18 +547,23 @@ except Exception as e:
     st.stop()
 
 # ─────────────────────────────────────────────
-# Sidebar — FILTERS LEFT (proper dark styling)
+# Sidebar — ALL FILTERS ONLY HERE
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(f"## 🎛 Filters")
-    st.markdown(f"<div class='small-muted'>League: <b style='color:{ACCENT_LINE}'>{league_name}</b></div>", unsafe_allow_html=True)
+    st.markdown("## 🎛 Filters")
+    st.markdown(
+        f"<div class='small-muted'>League: <b style='color:{ACCENT_LINE}'>{league_name}</b></div>",
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     name_filter = st.text_input("Player search", placeholder="Type player name…", key=f"name_{league_name}")
+
     st.divider()
 
     squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
     squad = st.selectbox("Squad", squads, key=f"squad_{league_name}")
+
     st.divider()
 
     pos_group = st.selectbox(
@@ -617,6 +571,7 @@ with st.sidebar:
         ["All Positions", "Defenders", "Midfielders", "Forwards"],
         key=f"posgrp_{league_name}",
     )
+
     st.divider()
 
     categories = {
@@ -628,11 +583,11 @@ with st.sidebar:
     }
     selected_cat = st.selectbox("Stat category", list(categories.keys()), key=f"cat_{league_name}")
     keywords = categories[selected_cat]
+
     st.divider()
 
     display_mode = st.selectbox("Display mode", ["Percentiles", "Raw values", "Both"], index=0, key=f"display_{league_name}")
     metric_mode = st.selectbox("Metric mode", ["Percentile", "Z-score"], index=0, key=f"metric_{league_name}")
-
     show_bars = st.toggle("Show distribution bars", value=True, key=f"bars_{league_name}")
     show_rank = st.toggle("Show rank", value=True, key=f"rank_{league_name}")
 
@@ -649,6 +604,11 @@ with st.sidebar:
         default=stats_options[:8] if len(stats_options) >= 8 else stats_options,
         key=f"stats_{league_name}",
     )
+
+    st.divider()
+
+    # Optional: export buttons in sidebar (purely optional, remove if you want exports only bottom)
+    show_exports_sidebar = st.toggle("Show export buttons", value=False, key=f"exports_sidebar_{league_name}")
 
     if not selected_stats:
         st.warning("Select at least one stat.")
@@ -673,23 +633,6 @@ if pos_group != "All Positions":
     for t in tokens:
         mask |= df_filtered["positions"].str.contains(t, case=False, na=False)
     df_filtered = df_filtered[mask]
-
-# ─────────────────────────────────────────────
-# Status badges
-# ─────────────────────────────────────────────
-st.markdown(
-    f"""
-<div style="margin-top: .8rem; display:flex; gap:.5rem; flex-wrap:wrap;">
-  <div class="badge"><span class="dim">League</span> {league_name}</div>
-  <div class="badge"><span class="dim">Players</span> {len(df_filtered)}</div>
-  <div class="badge"><span class="dim">Teams</span> {df_filtered["squadName"].nunique()}</div>
-  <div class="badge"><span class="dim">Stats</span> {len(selected_stats)}</div>
-  <div class="badge"><span class="dim">Display</span> {display_mode}</div>
-  <div class="badge"><span class="dim">Metric</span> {metric_mode}</div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
 
 # ─────────────────────────────────────────────
 # Build display dataframe
@@ -784,11 +727,12 @@ if show_bars:
         if c.endswith("(Z)"):
             styled = styled.applymap(z_cell_style, subset=[c])
 
+# Main view (NO filters here)
 st.markdown(
     f"""
 <div style="margin-top: .9rem; margin-bottom: .5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-  <h3 style="margin:0;">Player Table</h3>
-  <div class="badge"><span class="dim">Sorted by</span> {sort_col if sort_col else "—"}</div>
+  <h3 style="margin:0;">{league_name} — Player Table</h3>
+  <div class="badge"><span class="dim">Players</span> {len(df_filtered)}</div>
 </div>
 """,
     unsafe_allow_html=True,
@@ -796,62 +740,24 @@ st.markdown(
 
 st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# Export
-# ─────────────────────────────────────────────
-st.markdown(
-    """
-<div class="card" style="margin-top: 1.2rem;">
-  <h3 style="margin:0 0 .35rem 0;">Export</h3>
-  <div class="small-muted">Exports the current view (filters + columns shown).</div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
+# Exports: optionally in sidebar, otherwise bottom (default bottom)
+csv = df_display.to_csv(index=False).encode("utf-8")
+buffer = BytesIO()
+with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+    df_display.to_excel(writer, index=False)
 
-c1, c2, c3 = st.columns([1, 1, 2])
-
-with c1:
-    csv = df_display.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇ CSV",
-        csv,
-        f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
-        "text/csv",
-        use_container_width=True,
-        key=f"csv_{league_name}",
-    )
-
-with c2:
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_display.to_excel(writer, index=False)
-    st.download_button(
-        "⬇ Excel",
-        buffer.getvalue(),
-        f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        key=f"xlsx_{league_name}",
-    )
-
-with c3:
-    legend = (
-        "Percentiles: green=high, yellow=mid, red=low. Bars fill 0→100."
-        if metric_mode == "Percentile"
-        else "Z-scores: green=positive, red=negative. Bars diverge from 0 (center line)."
-    )
-    st.markdown(
-        f"""
-<div class="card" style="height:100%; display:flex; flex-direction:column; justify-content:space-between;">
-  <div>
-    <div class="badge"><span class="dim">Legend</span> {metric_mode}</div>
-    <div class="small-muted" style="margin-top:.6rem; line-height:1.35;">
-      {legend}<br/>
-      <span style="color:{TEXT_DIM};">Lower-is-better metrics are automatically inverted.</span>
-    </div>
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+if show_exports_sidebar:
+    with st.sidebar:
+        st.markdown("## 💾 Export")
+        st.download_button("⬇ CSV", csv, f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+        st.download_button("⬇ Excel", buffer.getvalue(), f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+else:
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='card'><h3 style='margin:0 0 .35rem 0;'>Export</h3><div class='small-muted'>Exports the current view (filters + columns shown).</div></div>", unsafe_allow_html=True)
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.download_button("⬇ CSV", csv, f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+    with c2:
+        st.download_button("⬇ Excel", buffer.getvalue(), f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
