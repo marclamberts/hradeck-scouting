@@ -15,7 +15,7 @@ from io import BytesIO
 st.set_page_config(page_title="IMPECT Stats", page_icon="⚽", layout="wide")
 
 # File path - change to your actual location
-DATA_FILE = "Keuken Kampioen Divisie.xlsx"
+DATA_FILE = "/Keuken Kampioen Divisie.xlsx"
 
 # Baseball Savant color scale
 def percentile_color(pct):
@@ -207,6 +207,162 @@ if fmt:
     styled = styled.format(fmt, na_rep="-")
 
 # Display
+st.markdown("""
+<style>
+    /* Hide Streamlit default elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Table container styling */
+    .stDataFrame {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    }
+    
+    /* Custom table styling */
+    .dataframe {
+        width: 100%;
+        border-collapse: collapse !important;
+        font-size: 13px !important;
+        border: none !important;
+    }
+    
+    .dataframe thead tr {
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important;
+        color: white !important;
+        text-align: left !important;
+        border: none !important;
+    }
+    
+    .dataframe thead th {
+        padding: 14px 12px !important;
+        font-weight: 600 !important;
+        font-size: 12px !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        border: none !important;
+        border-right: 1px solid rgba(255,255,255,0.1) !important;
+        color: white !important;
+    }
+    
+    .dataframe thead th:first-child {
+        border-left: none !important;
+    }
+    
+    .dataframe tbody tr {
+        border-bottom: 1px solid #e5e7eb !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .dataframe tbody tr:hover {
+        background-color: #f0f9ff !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+        transform: translateY(-1px) !important;
+    }
+    
+    .dataframe tbody tr:nth-child(even) {
+        background-color: #f9fafb !important;
+    }
+    
+    .dataframe tbody tr:nth-child(odd) {
+        background-color: #ffffff !important;
+    }
+    
+    .dataframe tbody td {
+        padding: 12px 12px !important;
+        border: none !important;
+        border-right: 1px solid #f3f4f6 !important;
+        font-size: 13px !important;
+        color: #1f2937 !important;
+    }
+    
+    .dataframe tbody td:first-child {
+        font-weight: 600 !important;
+        color: #111827 !important;
+        position: sticky !important;
+        left: 0 !important;
+        z-index: 1 !important;
+    }
+    
+    /* Number cells */
+    .dataframe tbody td:not(:first-child):not(:nth-child(2)):not(:nth-child(3)) {
+        text-align: center !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+    
+    /* Percentile columns */
+    .dataframe tbody td[data-column$="_pct"] {
+        font-size: 11px !important;
+        color: #6b7280 !important;
+        font-style: italic !important;
+    }
+    
+    /* Remove Streamlit padding */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
+    }
+    
+    /* Title styling */
+    h1 {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Filter styling */
+    .stTextInput input, .stSelectbox select {
+        border-radius: 6px !important;
+        border: 1px solid #d1d5db !important;
+        font-size: 14px !important;
+    }
+    
+    .stTextInput input:focus, .stSelectbox select:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    /* Multiselect styling */
+    .stMultiSelect > div {
+        border-radius: 6px !important;
+        border: 1px solid #d1d5db !important;
+    }
+    
+    /* Button styling */
+    .stDownloadButton button {
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+        color: white !important;
+        border: none !important;
+        padding: 0.5rem 1.5rem !important;
+        font-size: 14px !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stDownloadButton button:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+        transform: translateY(-1px) !important;
+    }
+    
+    /* Caption styling */
+    .stCaption {
+        font-size: 14px !important;
+        color: #6b7280 !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Divider styling */
+    hr {
+        margin: 1.5rem 0 !important;
+        border: none !important;
+        border-top: 2px solid #e5e7eb !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.dataframe(styled, use_container_width=True, height=650)
 
 # Export
