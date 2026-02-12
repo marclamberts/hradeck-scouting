@@ -15,7 +15,7 @@ from io import BytesIO
 st.set_page_config(page_title="IMPECT Stats", page_icon="⚽", layout="wide")
 
 # File path - change to your actual location
-DATA_FILE = "/Keuken Kampioen Divisie.xlsx"
+DATA_FILE = "Keuken Kampioen Divisie.xlsx"
 
 # Baseball Savant color scale
 def percentile_color(pct):
