@@ -16,7 +16,7 @@ st.set_page_config(
     page_title="IMPECT Stats | KKD",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"  # Show sidebar by default
 )
 
 # File path - change to your actual location
@@ -120,6 +120,12 @@ try:
     kpis = get_kpis(df)
     df = calc_percentiles(df, kpis)
     
+# Load data
+try:
+    df = load_data(DATA_FILE)
+    kpis = get_kpis(df)
+    df = calc_percentiles(df, kpis)
+    
     # Show data badge
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); 
@@ -141,40 +147,102 @@ except Exception as e:
     st.error(f"Failed to load: {e}")
     st.stop()
 
-# Filters in columns at top
-st.markdown("""
-<div style="background: white; 
-            padding: 1.5rem; 
-            border-radius: 12px; 
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-            margin-bottom: 1.5rem;
-            border: 1px solid #e2e8f0;">
-    <h3 style="font-size: 0.875rem; 
-               font-weight: 700; 
-               text-transform: uppercase; 
-               letter-spacing: 0.05em; 
-               color: #475569; 
-               margin: 0 0 1rem 0;">
-        🎯 Filters
-    </h3>
-</div>
-""", unsafe_allow_html=True)
-
-col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-
-with col1:
-    name_filter = st.text_input("🔍 Player", placeholder="Search by name...", label_visibility="collapsed")
-
-with col2:
+# -------------------------
+# SIDEBAR - All Filters
+# -------------------------
+with st.sidebar:
+    st.markdown("""
+    <div style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.25rem; 
+                   font-weight: 700; 
+                   color: #0f172a; 
+                   margin: 0;">
+            🎯 Filters & Settings
+        </h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Player search
+    st.markdown("##### 🔍 Player Search")
+    name_filter = st.text_input(
+        "Player name",
+        placeholder="Type player name...",
+        label_visibility="collapsed"
+    )
+    
+    st.divider()
+    
+    # Squad filter
+    st.markdown("##### 🏟️ Squad")
     squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
-    squad = st.selectbox("🏟️ Squad", squads, label_visibility="collapsed")
-
-with col3:
+    squad = st.selectbox("Squad", squads, label_visibility="collapsed")
+    
+    st.divider()
+    
+    # Position filter
+    st.markdown("##### ⚽ Position Group")
     positions = ["All Positions", "Defenders", "Midfielders", "Forwards"]
-    pos_group = st.selectbox("⚽ Position", positions, label_visibility="collapsed")
-
-with col4:
-    show_pct = st.checkbox("📊 %ile", value=False, help="Show percentile columns")
+    pos_group = st.selectbox("Position", positions, label_visibility="collapsed")
+    
+    st.divider()
+    
+    # Stat category
+    st.markdown("##### 📊 Stat Category")
+    categories = {
+        "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
+        "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
+        "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
+        "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
+        "📊 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
+    }
+    
+    selected_cat = st.selectbox(
+        "Category",
+        list(categories.keys()),
+        label_visibility="collapsed"
+    )
+    keywords = categories[selected_cat]
+    
+    st.divider()
+    
+    # Stat selection
+    st.markdown("##### 📈 Select Stats")
+    matching = [k for k in kpis if any(kw in k for kw in keywords)][:20]
+    
+    selected_stats = st.multiselect(
+        "Statistics",
+        options=matching,
+        default=matching[:8] if len(matching) >= 8 else matching,
+        label_visibility="collapsed"
+    )
+    
+    if not selected_stats:
+        st.warning("⚠️ Select at least one stat")
+        st.stop()
+    
+    st.divider()
+    
+    # Info box
+    st.markdown(f"""
+    <div style="background: #f8fafc; 
+                padding: 1rem; 
+                border-radius: 8px; 
+                border: 1px solid #e2e8f0;
+                margin-top: 1rem;">
+        <div style="font-size: 0.75rem; 
+                   font-weight: 600; 
+                   color: #475569; 
+                   text-transform: uppercase; 
+                   letter-spacing: 0.05em;
+                   margin-bottom: 0.5rem;">
+            Current Selection
+        </div>
+        <div style="font-size: 0.875rem; color: #64748b;">
+            <div>📊 {len(selected_stats)} stats</div>
+            <div style="margin-top: 0.25rem;">📋 {selected_cat.split()[1]}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Apply filters
 df_filtered = df.copy()
@@ -212,97 +280,61 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Stat selection
-st.markdown("""
-<div style="margin-top: 2rem;">
-    <h3 style="font-size: 1.125rem; 
-               font-weight: 700; 
-               color: #0f172a; 
-               margin-bottom: 1rem;">
-        📈 Select Statistics
-    </h3>
-</div>
-""", unsafe_allow_html=True)
+# Build table - ONLY PERCENTILES
+cols = ["displayName", "squadName", "positions"]
 
-# Category cards
-categories = {
-    "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
-    "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
-    "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
-    "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
-    "📊 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
-}
-
-# Display as cards
-cols = st.columns(5)
-for idx, (cat_name, keywords) in enumerate(categories.items()):
-    with cols[idx]:
-        if st.button(
-            cat_name,
-            use_container_width=True,
-            type="secondary" if idx != 0 else "primary",
-            key=f"cat_{idx}"
-        ):
-            st.session_state['selected_category'] = cat_name
-
-# Get selected category
-if 'selected_category' not in st.session_state:
-    st.session_state['selected_category'] = "⚽ Goals & Assists"
-
-selected_cat = st.session_state['selected_category']
-keywords = categories[selected_cat]
-
-# Find matching KPIs
-matching = [k for k in kpis if any(kw in k for kw in keywords)][:15]
-
-selected_stats = st.multiselect(
-    "Select stats",
-    options=matching,
-    default=matching[:8] if len(matching) >= 8 else matching,
-    help="Statistics to display"
-)
-
-if not selected_stats:
-    st.warning("Select at least one stat")
-    st.stop()
-
-# Build table
-cols = ["displayName", "squadName", "positions"] + selected_stats
-
-if show_pct:
-    cols_with_pct = ["displayName", "squadName", "positions"]
-    for stat in selected_stats:
-        cols_with_pct.append(stat)
-        if f"{stat}_pct" in df_filtered.columns:
-            cols_with_pct.append(f"{stat}_pct")
-    cols = cols_with_pct
+# Add percentile columns only
+for stat in selected_stats:
+    pct_col = f"{stat}_pct"
+    if pct_col in df_filtered.columns:
+        cols.append(pct_col)
 
 cols = [c for c in cols if c in df_filtered.columns]
 df_display = df_filtered[cols].copy()
 
-# Sort by first stat
-if selected_stats:
-    df_display = df_display.sort_values(selected_stats[0], ascending=False)
+# Rename percentile columns to show cleaner names
+rename_map = {}
+for col in df_display.columns:
+    if col.endswith("_pct"):
+        # Extract the stat name without " (ID)" and "_pct"
+        stat_name = col.replace("_pct", "")
+        # Clean up the name - remove ID in parentheses
+        clean_name = stat_name.split(" (")[0] if " (" in stat_name else stat_name
+        rename_map[col] = clean_name
 
-# Style table
+df_display = df_display.rename(columns=rename_map)
+
+# Sort by first percentile stat (descending)
+if len(df_display.columns) > 3:  # If we have stat columns beyond the base 3
+    first_stat_col = df_display.columns[3]
+    df_display = df_display.sort_values(first_stat_col, ascending=False)
+
+# Style table - color by percentile values
 styled = df_display.style
 
-for stat in selected_stats:
-    if stat in df_display.columns:
-        styled = styled.apply(lambda _: color_map(df_display, stat), subset=[stat], axis=0)
+# Get original stat names for color mapping
+for new_col, orig_col in rename_map.items():
+    if new_col in df_display.columns:
+        # Map colors based on percentile values
+        def color_by_percentile(val):
+            if pd.isna(val):
+                return 'background-color: #FFFFFF'
+            color = percentile_color(val)
+            # Add white text for dark backgrounds
+            if val >= 60:
+                return f'background-color: {color}; color: white; font-weight: 700'
+            return f'background-color: {color}'
+        
+        styled = styled.applymap(
+            color_by_percentile,
+            subset=[new_col]
+        )
 
-# Format numbers
+# Format percentiles as integers
 fmt = {}
-for stat in selected_stats:
-    if stat in df_display.columns:
-        max_val = df_display[stat].max()
-        if pd.notna(max_val):
-            if max_val < 1:
-                fmt[stat] = '{:.3f}'
-            elif max_val < 10:
-                fmt[stat] = '{:.2f}'
-            else:
-                fmt[stat] = '{:.1f}'
+for col in df_display.columns:
+    if col not in ["displayName", "squadName", "positions"]:
+        fmt[col] = '{:.0f}'  # Show as whole numbers (90, 75, etc.)
 
 if fmt:
     styled = styled.format(fmt, na_rep="-")
@@ -315,7 +347,7 @@ st.markdown("""
                    font-weight: 700; 
                    color: #0f172a; 
                    margin: 0;">
-            📊 Player Statistics
+            📊 Player Percentile Rankings
         </h3>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <span style="background: #f1f5f9; 
@@ -324,7 +356,7 @@ st.markdown("""
                          font-size: 0.75rem; 
                          font-weight: 600;
                          color: #475569;">
-                Sorted by best performers
+                Percentiles Only • Sorted by Best
             </span>
         </div>
     </div>
