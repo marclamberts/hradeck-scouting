@@ -1,11 +1,11 @@
 """
-IMPECT Stats Table — Editorial Edition
-======================================
-Data-first (StatsHub / DunksAndThrees / 538-ish) Streamlit table:
-- Clean editorial theme (neutral, minimal gradients/shadows)
-- Subtle percentile highlighting (only extremes pop)
-- Display mode: Percentiles / Raw / Both
-- Optional rank column (based on first selected stat)
+IMPECT Stats Table — Editorial Edition (with Z-score + Distribution Bars)
+=========================================================================
+- Clean, modern sports-analytics palette (appealing + readable)
+- Display modes: Percentiles / Raw values / Both
+- Metric scale toggle: Percentile vs Z-score
+- Small in-cell distribution bars (Pct bars + Z-score diverging bars)
+- Everything assumed per 90 already (no per-90 toggle)
 """
 
 import pandas as pd
@@ -25,7 +25,7 @@ st.set_page_config(
 
 DATA_FILE = "Keuken Kampioen Divisie.xlsx"
 
-# Metrics where lower is better
+# Metrics where lower is better (auto-invert so "higher is better" for Pct & Z)
 INVERTED = ["foul", "lost", "unsuccessful", "failed", "off target", "red", "yellow"]
 
 
@@ -109,7 +109,6 @@ def get_kpis(df: pd.DataFrame) -> list[str]:
 
 
 def calc_percentiles(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
-    # percentile rank per metric; invert if "lower is better"
     for col in kpis:
         vals = pd.to_numeric(df[col], errors="coerce")
         pct = vals.rank(pct=True, method="average") * 100
@@ -117,53 +116,177 @@ def calc_percentiles(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
     return df
 
 
-# -------------------------
-# Styling (editorial + subtle highlights)
-# -------------------------
-def metric_style(val):
+def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
     """
-    Subtle “editorial” highlight:
-    - most cells transparent
-    - strong positive: soft blue wash
-    - strong negative: soft red wash
+    Z-score per metric, after flipping 'lower is better' metrics so that
+    higher Z always means better.
+    """
+    for col in kpis:
+        x = pd.to_numeric(df[col], errors="coerce")
+        # flip "bad when high" metrics
+        if is_inverted(col):
+            x = -x
+
+        mu = x.mean(skipna=True)
+        sd = x.std(skipna=True, ddof=0)
+
+        if sd == 0 or pd.isna(sd):
+            df[f"{col}_z"] = np.nan
+        else:
+            df[f"{col}_z"] = (x - mu) / sd
+    return df
+
+
+# -------------------------
+# Helpers: names + styling
+# -------------------------
+def clean_stat_name(stat: str) -> str:
+    return stat.split(" (")[0] if " (" in stat else stat
+
+
+def clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+def pct_cell_style(val):
+    """
+    Percentile cell:
+    - subtle green tint at high percentiles
+    - subtle red tint at low percentiles
+    - distribution bar (left->right fill)
     """
     if pd.isna(val):
-        return "background-color: transparent; color: #111827;"
-    v = float(val)
+        return "background-color: transparent; color: var(--text);"
 
-    if v >= 90:
-        return "background-color: rgba(37,99,235,.20); color: #0b1220; font-weight: 750;"
-    if v >= 75:
-        return "background-color: rgba(37,99,235,.12); color: #0b1220; font-weight: 650;"
-    if v >= 60:
-        return "background-color: rgba(37,99,235,.07); color: #111827;"
-    if v <= 10:
-        return "background-color: rgba(185,28,28,.16); color: #0b1220; font-weight: 700;"
-    if v <= 25:
-        return "background-color: rgba(185,28,28,.08); color: #111827;"
-    return "background-color: transparent; color: #111827;"
+    v = float(val)
+    v = clamp(v, 0, 100)
+
+    # Distribution bar fill
+    bar = f"""
+    background-image:
+      linear-gradient(to right,
+        rgba(6,118,71,.18) 0%,
+        rgba(6,118,71,.18) {v:.1f}%,
+        transparent {v:.1f}%,
+        transparent 100%);
+    """
+
+    # Subtle emphasis on extremes
+    if v >= 95:
+        return bar + " color: #054f31; font-weight: 800;"
+    if v >= 85:
+        return bar + " color: #065f46; font-weight: 700;"
+    if v >= 70:
+        return bar + " color: var(--text);"
+    if v <= 15:
+        return """
+        background-image:
+          linear-gradient(to right,
+            rgba(180,35,24,.20) 0%,
+            rgba(180,35,24,.20) """ + f"""{v:.1f}%,
+            transparent """ + f"""{v:.1f}%,
+            transparent 100%);
+        color: #7a271a; font-weight: 700;
+        """
+    if v <= 30:
+        return """
+        background-image:
+          linear-gradient(to right,
+            rgba(180,35,24,.12) 0%,
+            rgba(180,35,24,.12) """ + f"""{v:.1f}%,
+            transparent """ + f"""{v:.1f}%,
+            transparent 100%);
+        color: var(--text);
+        """
+    return bar + " color: var(--text);"
+
+
+def z_cell_style(val):
+    """
+    Z-score cell:
+    - diverging bar around center (0)
+    - center line
+    - green for positive, red for negative
+    """
+    if pd.isna(val):
+        return "background-color: transparent; color: var(--text);"
+
+    z = float(val)
+    zc = clamp(z, -3.0, 3.0)
+    # map [-3..3] => [0..100]
+    pos = (zc + 3.0) / 6.0 * 100.0  # 0..100
+    mid = 50.0
+
+    # Bar: negative fills from pos->mid; positive fills from mid->pos
+    if pos >= mid:
+        bar_layer = f"""
+        linear-gradient(to right,
+          transparent 0%,
+          transparent {mid:.1f}%,
+          rgba(6,118,71,.18) {mid:.1f}%,
+          rgba(6,118,71,.18) {pos:.1f}%,
+          transparent {pos:.1f}%,
+          transparent 100%)
+        """
+        text = "color: #065f46; font-weight: 700;" if z >= 1.25 else "color: var(--text);"
+    else:
+        bar_layer = f"""
+        linear-gradient(to right,
+          transparent 0%,
+          transparent {pos:.1f}%,
+          rgba(180,35,24,.18) {pos:.1f}%,
+          rgba(180,35,24,.18) {mid:.1f}%,
+          transparent {mid:.1f}%,
+          transparent 100%)
+        """
+        text = "color: #7a271a; font-weight: 700;" if z <= -1.25 else "color: var(--text);"
+
+    # Center line at 0
+    center_line = """
+    linear-gradient(to right,
+      transparent 49.4%,
+      rgba(102,112,133,.35) 49.4%,
+      rgba(102,112,133,.35) 50.6%,
+      transparent 50.6%)
+    """
+
+    return f"""
+    background-image: {center_line}, {bar_layer};
+    {text}
+    """
 
 
 # -------------------------
-# Global CSS theme (replace your old massive CSS block)
+# Global CSS theme (appealing + editorial)
 # -------------------------
 st.markdown(
     """
 <style>
-/* =========================
-   Editorial / Data-first UI
-   ========================= */
 html, body, [class*="css"]  {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji" !important;
 }
 :root{
-  --bg: #ffffff;
-  --panel: #f6f7f9;
-  --panel-2: #fbfbfc;
-  --text: #111827;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --accent: #2563eb;
+  /* Surfaces */
+  --bg: #fcfcfd;
+  --panel: #f3f4f6;
+  --panel-2: #f9fafb;
+
+  /* Text */
+  --text: #0f172a;
+  --muted: #667085;
+
+  /* Borders */
+  --border: #e4e7ec;
+
+  /* Accent */
+  --accent: #1f4fd8;
+  --accent-soft: rgba(31,79,216,.08);
+
+  /* Performance */
+  --good: #067647;
+  --good-soft: rgba(6,118,71,.14);
+  --bad: #b42318;
+  --bad-soft: rgba(180,35,24,.14);
 }
 
 /* Remove Streamlit chrome */
@@ -196,18 +319,11 @@ section[data-testid="stSidebar"] textarea{
 }
 section[data-testid="stSidebar"] input:focus,
 section[data-testid="stSidebar"] select:focus{
-  border-color: rgba(37, 99, 235, .65) !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(31,79,216,.15) !important;
 }
 
-/* Headings */
-h1, h2, h3{
-  color: var(--text) !important;
-  letter-spacing: -0.01em !important;
-}
-.small-muted{ color: var(--muted); font-size: 0.9rem; }
-
-/* Cards */
+/* Cards + badges */
 .card{
   background: var(--bg);
   border: 1px solid var(--border);
@@ -217,13 +333,20 @@ h1, h2, h3{
 .badge{
   display:inline-flex;
   align-items:center;
-  gap:.5rem;
-  padding:.35rem .6rem;
+  gap:.45rem;
+  padding:.32rem .6rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: .8rem;
+  font-size: .78rem;
+  font-weight: 600;
   color: var(--muted);
   background: var(--panel-2);
+}
+.small-muted{ color: var(--muted); font-size: 0.9rem; }
+
+h1, h2, h3{
+  color: var(--text) !important;
+  letter-spacing: -0.01em !important;
 }
 
 /* Dataframe wrapper */
@@ -241,12 +364,12 @@ h1, h2, h3{
   width: 100% !important;
 }
 
-/* Header: clean, not glossy */
+/* Header */
 .dataframe thead th{
   position: sticky !important;
   top: 0 !important;
   z-index: 2 !important;
-  background: #0b1220 !important;
+  background: #101828 !important;
   color: #f9fafb !important;
   font-size: 11px !important;
   letter-spacing: .08em !important;
@@ -266,6 +389,7 @@ h1, h2, h3{
   color: var(--text) !important;
   text-align: center !important;
   font-variant-numeric: tabular-nums !important;
+  background-color: transparent !important; /* allow background-image bars to show cleanly */
 }
 .dataframe tbody td:last-child{ border-right:none !important; }
 
@@ -273,8 +397,8 @@ h1, h2, h3{
 .dataframe tbody tr:nth-child(odd){ background: #fff !important; }
 .dataframe tbody tr:nth-child(even){ background: var(--panel-2) !important; }
 
-/* Hover: subtle */
-.dataframe tbody tr:hover{ background: rgba(37,99,235,.06) !important; }
+/* Hover */
+.dataframe tbody tr:hover{ background: rgba(31,79,216,.06) !important; }
 
 /* Left columns */
 .dataframe tbody td:nth-child(1){
@@ -297,17 +421,17 @@ h1, h2, h3{
 
 /* Download buttons */
 .stDownloadButton button{
-  background: #0b1220 !important;
+  background: #101828 !important;
   color: #fff !important;
-  border: 1px solid #0b1220 !important;
+  border: 1px solid #101828 !important;
   border-radius: 12px !important;
   padding: 10px 14px !important;
   box-shadow: none !important;
   font-weight: 650 !important;
 }
 .stDownloadButton button:hover{
-  background: #111b33 !important;
-  border-color: #111b33 !important;
+  background: #18223a !important;
+  border-color: #18223a !important;
 }
 </style>
 """,
@@ -323,7 +447,7 @@ st.markdown(
   <div>
     <div class="badge">IMPECT • Keuken Kampioen Divisie</div>
     <h1 style="margin:.35rem 0 0 0; font-size: 1.85rem;">Player Stats Explorer</h1>
-    <div class="small-muted">Standard + xG • Percentile ranks + exports</div>
+    <div class="small-muted">Standard + xG • per 90 • percentile + z-score modes</div>
   </div>
   <div class="badge">Season 2025/26</div>
 </div>
@@ -332,12 +456,13 @@ st.markdown(
 )
 
 # -------------------------
-# Load data
+# Load + compute
 # -------------------------
 try:
     df = load_data(DATA_FILE)
     kpis = get_kpis(df)
     df = calc_percentiles(df, kpis)
+    df = calc_zscores(df, kpis)
 except Exception as e:
     st.error(f"Failed to load: {e}")
     st.stop()
@@ -357,8 +482,9 @@ with st.sidebar:
     squad = st.selectbox("Squad", squads, label_visibility="collapsed")
 
     st.markdown("#### ⚽ Position Group")
-    positions = ["All Positions", "Defenders", "Midfielders", "Forwards"]
-    pos_group = st.selectbox("Position", positions, label_visibility="collapsed")
+    pos_group = st.selectbox(
+        "Position", ["All Positions", "Defenders", "Midfielders", "Forwards"], label_visibility="collapsed"
+    )
 
     st.markdown("#### 📊 Category")
     categories = {
@@ -405,7 +531,17 @@ with st.sidebar:
         index=0,
         label_visibility="collapsed",
     )
-    show_rank = st.toggle("Show Rank (based on first stat)", value=True)
+
+    metric_mode = st.selectbox(
+        "Metric mode",
+        ["Percentile", "Z-score"],
+        index=0,
+        label_visibility="collapsed",
+        help="Affects the metric columns in Percentiles/Both modes.",
+    )
+
+    show_bars = st.toggle("Show distribution bars", value=True)
+    show_rank = st.toggle("Show Rank (based on first metric column)", value=True)
 
     st.markdown("#### 📈 Select Stats")
     matching = [k for k in kpis if any(kw in k for kw in keywords)][:30]
@@ -449,8 +585,10 @@ st.markdown(
     f"""
 <div style="margin-top: 1rem;">
   <span class="badge">Players: <strong>{len(df_filtered)}</strong></span>
-  <span class="badge">Metrics: <strong>{len(selected_stats)}</strong></span>
+  <span class="badge">Stats selected: <strong>{len(selected_stats)}</strong></span>
   <span class="badge">Teams: <strong>{df_filtered["squadName"].nunique()}</strong></span>
+  <span class="badge">Mode: <strong>{display_mode}</strong></span>
+  <span class="badge">Metric: <strong>{metric_mode}</strong></span>
 </div>
 """,
     unsafe_allow_html=True,
@@ -462,18 +600,14 @@ st.markdown(
 base_cols = ["displayName", "squadName", "positions"]
 cols = base_cols.copy()
 
-# helper to make safe/clean display names
-def clean_stat_name(stat: str) -> str:
-    # remove " (ID)" style suffix
-    return stat.split(" (")[0] if " (" in stat else stat
+metric_suffix = "_pct" if metric_mode == "Percentile" else "_z"
+metric_label = "(Pct)" if metric_mode == "Percentile" else "(Z)"
 
-
-# Add columns depending on display_mode
 if display_mode == "Percentiles":
     for stat in selected_stats:
-        pct_col = f"{stat}_pct"
-        if pct_col in df_filtered.columns:
-            cols.append(pct_col)
+        mcol = f"{stat}{metric_suffix}"
+        if mcol in df_filtered.columns:
+            cols.append(mcol)
 
 elif display_mode == "Raw values":
     for stat in selected_stats:
@@ -484,14 +618,14 @@ else:  # Both
     for stat in selected_stats:
         if stat in df_filtered.columns:
             cols.append(stat)
-        pct_col = f"{stat}_pct"
-        if pct_col in df_filtered.columns:
-            cols.append(pct_col)
+        mcol = f"{stat}{metric_suffix}"
+        if mcol in df_filtered.columns:
+            cols.append(mcol)
 
 cols = [c for c in cols if c in df_filtered.columns]
 df_display = df_filtered[cols].copy()
 
-# Rename percentile columns (and raw columns) nicely, avoiding duplicates
+# Rename columns nicely
 rename_map = {}
 seen = set()
 for col in df_display.columns:
@@ -499,8 +633,9 @@ for col in df_display.columns:
         continue
 
     if col.endswith("_pct"):
-        stat = col[:-4]
-        nice = f"{clean_stat_name(stat)} (Pct)"
+        nice = f"{clean_stat_name(col[:-4])} {metric_label}"
+    elif col.endswith("_z"):
+        nice = f"{clean_stat_name(col[:-2])} {metric_label}"
     else:
         nice = clean_stat_name(col)
 
@@ -514,27 +649,19 @@ for col in df_display.columns:
 
 df_display = df_display.rename(columns=rename_map)
 
-# Sort by first *percentile* if available; else by first stat shown
+# Sort by first metric column when available, else first stat column
 sort_col = None
-if display_mode == "Percentiles":
-    sort_col = df_display.columns[3] if len(df_display.columns) > 3 else None
-elif display_mode == "Raw values":
-    sort_col = df_display.columns[3] if len(df_display.columns) > 3 else None
-else:  # Both: prefer first Pct column if present
-    stat_names = [clean_stat_name(s) for s in selected_stats]
-    for s in stat_names:
-        candidate = f"{s} (Pct)"
-        if candidate in df_display.columns:
-            sort_col = candidate
-            break
-    if sort_col is None and len(df_display.columns) > 3:
-        sort_col = df_display.columns[3]
+for c in df_display.columns:
+    if c.endswith(metric_label):
+        sort_col = c
+        break
+if sort_col is None and len(df_display.columns) > len(base_cols):
+    sort_col = df_display.columns[len(base_cols)]
 
 if sort_col:
-    # Descending makes sense for percentiles; for raw it depends, but acceptable default.
     df_display = df_display.sort_values(sort_col, ascending=False, na_position="last")
 
-# Add Rank column
+# Add Rank
 if show_rank and sort_col:
     df_display.insert(
         0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64")
@@ -545,30 +672,49 @@ if show_rank and sort_col:
 # -------------------------
 styled = df_display.style
 
-# numeric formatting
+# Format numbers
 fmt = {}
 for col in df_display.columns:
     if col in ["Rank"] + base_cols:
         continue
-    # Percentiles as integers; raw as compact
-    if "(Pct)" in col:
+    if col.endswith("(Pct)"):
         fmt[col] = "{:.0f}"
+    elif col.endswith("(Z)"):
+        fmt[col] = "{:+.2f}"
     else:
         fmt[col] = "{:.2f}"
 
 styled = styled.format(fmt, na_rep="-")
 
-# apply subtle highlight ONLY to percentile columns
-for col in df_display.columns:
-    if "(Pct)" in col:
-        styled = styled.applymap(metric_style, subset=[col])
-
-# Slightly mute Rank column
+# Style Rank
 if "Rank" in df_display.columns:
     styled = styled.applymap(
-        lambda v: "color:#6b7280; font-weight:650; background-color: transparent;",
+        lambda v: "color:#667085; font-weight:800; background-color: transparent;",
         subset=["Rank"],
     )
+
+# Apply metric styling (with optional bars)
+for col in df_display.columns:
+    if col.endswith("(Pct)"):
+        if show_bars:
+            styled = styled.applymap(pct_cell_style, subset=[col])
+        else:
+            # fallback: just subtle extremes (no bar)
+            styled = styled.applymap(
+                lambda v: "color:#054f31; font-weight:800;" if pd.notna(v) and float(v) >= 95
+                else ("color:#7a271a; font-weight:700;" if pd.notna(v) and float(v) <= 15 else "color: var(--text);"),
+                subset=[col],
+            )
+
+    if col.endswith("(Z)"):
+        if show_bars:
+            styled = styled.applymap(z_cell_style, subset=[col])
+        else:
+            styled = styled.applymap(
+                lambda v: "color:#065f46; font-weight:800;" if pd.notna(v) and float(v) >= 1.25
+                else ("color:#7a271a; font-weight:800;" if pd.notna(v) and float(v) <= -1.25 else "color: var(--text);"),
+                subset=[col],
+            )
 
 # -------------------------
 # Table header
@@ -577,7 +723,7 @@ st.markdown(
     """
 <div style="margin-top: 1.25rem; margin-bottom: .5rem; display:flex; align-items:center; justify-content:space-between;">
   <h3 style="margin:0; font-size: 1.05rem;">Table</h3>
-  <div class="badge">Tip: filter left • sort by first selected stat</div>
+  <div class="badge">Tip: use sidebar filters • sorted by first metric column</div>
 </div>
 """,
     unsafe_allow_html=True,
@@ -633,15 +779,15 @@ with c3:
   <div class="small-muted" style="text-transform:uppercase; letter-spacing:.08em; font-weight:650;">Current view</div>
   <div style="display:flex; justify-content:space-around; gap:1rem; margin-top:.75rem;">
     <div>
-      <div style="font-size:1.6rem; font-weight:800; color:#111827;">{len(df_display)}</div>
+      <div style="font-size:1.6rem; font-weight:900; color:var(--text);">{len(df_display)}</div>
       <div class="small-muted">Rows</div>
     </div>
     <div>
-      <div style="font-size:1.6rem; font-weight:800; color:#111827;">{len(selected_stats)}</div>
+      <div style="font-size:1.6rem; font-weight:900; color:var(--text);">{len(selected_stats)}</div>
       <div class="small-muted">Stats</div>
     </div>
     <div>
-      <div style="font-size:1.6rem; font-weight:800; color:#111827;">{df_display['squadName'].nunique() if 'squadName' in df_display.columns else 0}</div>
+      <div style="font-size:1.6rem; font-weight:900; color:var(--text);">{df_display['squadName'].nunique() if 'squadName' in df_display.columns else 0}</div>
       <div class="small-muted">Teams</div>
     </div>
   </div>
@@ -651,19 +797,22 @@ with c3:
     )
 
 # -------------------------
-# Legend (compact)
+# Legend
 # -------------------------
+if metric_mode == "Percentile":
+    legend = "Percentiles: green = high, red = low. Bars show percentile fill (0→100)."
+else:
+    legend = "Z-scores: green = positive, red = negative. Bars diverge from 0 (center line)."
+
 st.markdown(
-    """
+    f"""
 <div class="card" style="margin-top: 1.25rem;">
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem;">
     <div>
       <div class="badge">Legend</div>
-      <div class="small-muted" style="margin-top:.35rem;">
-        Percentile columns use subtle highlighting: top performers (blue) and bottom performers (red).
-        “Lower is better” metrics are inverted automatically.
-      </div>
+      <div class="small-muted" style="margin-top:.35rem;">{legend} “Lower is better” stats are auto-inverted.</div>
     </div>
+    <div class="badge">Bars: {"On" if show_bars else "Off"}</div>
   </div>
 </div>
 """,
