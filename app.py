@@ -120,12 +120,6 @@ try:
     kpis = get_kpis(df)
     df = calc_percentiles(df, kpis)
     
-# Load data
-try:
-    df = load_data(DATA_FILE)
-    kpis = get_kpis(df)
-    df = calc_percentiles(df, kpis)
-    
     # Show data badge
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); 
