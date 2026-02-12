@@ -1,7 +1,7 @@
 """
-IMPECT Stats Table - Clean & Simple
-====================================
-FBref/Baseball Savant style table for Keuken Kampioen Divisie
+IMPECT Stats Table - Premium Edition
+=====================================
+Ultra-polished stats table for Keuken Kampioen Divisie
 """
 
 import pandas as pd
@@ -12,7 +12,12 @@ from io import BytesIO
 # -------------------------
 # Config
 # -------------------------
-st.set_page_config(page_title="IMPECT Stats", page_icon="⚽", layout="wide")
+st.set_page_config(
+    page_title="IMPECT Stats | KKD",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # File path - change to your actual location
 DATA_FILE = "Keuken Kampioen Divisie.xlsx"
@@ -85,33 +90,91 @@ def color_map(df, col):
 # -------------------------
 # UI
 # -------------------------
-st.title("⚽ Keuken Kampioen Divisie Stats")
+
+# Premium header
+st.markdown("""
+<div style="margin-bottom: 2rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+        <h1 style="margin: 0;">⚽ Keuken Kampioen Divisie</h1>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <span style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); 
+                         color: white; 
+                         padding: 0.5rem 1rem; 
+                         border-radius: 8px; 
+                         font-weight: 600; 
+                         font-size: 0.875rem;
+                         box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);">
+                Season 25/26
+            </span>
+        </div>
+    </div>
+    <p style="color: #64748b; font-size: 0.875rem; margin: 0;">
+        Premium stats explorer with percentile rankings • Standard + xG metrics
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 # Load data
 try:
     df = load_data(DATA_FILE)
     kpis = get_kpis(df)
     df = calc_percentiles(df, kpis)
+    
+    # Show data badge
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); 
+                border-left: 4px solid #22c55e; 
+                padding: 0.75rem 1rem; 
+                border-radius: 8px; 
+                margin-bottom: 1.5rem;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+        <span style="color: #166534; font-weight: 600; font-size: 0.875rem;">
+            ✓ Data Loaded
+        </span>
+        <span style="color: #16a34a; margin-left: 0.5rem; font-size: 0.875rem;">
+            {len(df)} players • {len(kpis)} metrics
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+    
 except Exception as e:
     st.error(f"Failed to load: {e}")
     st.stop()
 
 # Filters in columns at top
+st.markdown("""
+<div style="background: white; 
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+            margin-bottom: 1.5rem;
+            border: 1px solid #e2e8f0;">
+    <h3 style="font-size: 0.875rem; 
+               font-weight: 700; 
+               text-transform: uppercase; 
+               letter-spacing: 0.05em; 
+               color: #475569; 
+               margin: 0 0 1rem 0;">
+        🎯 Filters
+    </h3>
+</div>
+""", unsafe_allow_html=True)
+
 col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
 
 with col1:
-    name_filter = st.text_input("🔍 Player name", placeholder="Search...")
+    name_filter = st.text_input("🔍 Player", placeholder="Search by name...", label_visibility="collapsed")
 
 with col2:
-    squads = ["All"] + sorted(df["squadName"].dropna().unique().tolist())
-    squad = st.selectbox("🏟️ Squad", squads)
+    squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
+    squad = st.selectbox("🏟️ Squad", squads, label_visibility="collapsed")
 
 with col3:
-    positions = ["All", "Defenders", "Midfielders", "Forwards"]
-    pos_group = st.selectbox("⚽ Position", positions)
+    positions = ["All Positions", "Defenders", "Midfielders", "Forwards"]
+    pos_group = st.selectbox("⚽ Position", positions, label_visibility="collapsed")
 
 with col4:
-    show_pct = st.checkbox("Show %ile", value=False)
+    show_pct = st.checkbox("📊 %ile", value=False, help="Show percentile columns")
 
 # Apply filters
 df_filtered = df.copy()
@@ -119,10 +182,10 @@ df_filtered = df.copy()
 if name_filter:
     df_filtered = df_filtered[df_filtered["displayName"].str.contains(name_filter, case=False, na=False)]
 
-if squad != "All":
+if squad != "All Squads":
     df_filtered = df_filtered[df_filtered["squadName"] == squad]
 
-if pos_group != "All":
+if pos_group != "All Positions":
     pos_map = {
         "Defenders": ["DEFENDER", "BACK"],
         "Midfielders": ["MIDFIELD"],
@@ -134,21 +197,59 @@ if pos_group != "All":
         mask |= df_filtered["positions"].str.contains(t, case=False, na=False)
     df_filtered = df_filtered[mask]
 
-st.caption(f"**{len(df_filtered)}** players")
+# Results counter with better styling
+st.markdown(f"""
+<div style="display: inline-block;
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left: 3px solid #3b82f6;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #1e40af;">
+    📊 {len(df_filtered)} players match filters
+</div>
+""", unsafe_allow_html=True)
 
 # Stat selection
-st.divider()
+st.markdown("""
+<div style="margin-top: 2rem;">
+    <h3 style="font-size: 1.125rem; 
+               font-weight: 700; 
+               color: #0f172a; 
+               margin-bottom: 1rem;">
+        📈 Select Statistics
+    </h3>
+</div>
+""", unsafe_allow_html=True)
 
-# Quick categories
+# Category cards
 categories = {
-    "Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
-    "Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
-    "Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
-    "Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
-    "xG Suite": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
+    "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
+    "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
+    "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
+    "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
+    "📊 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
 }
 
-selected_cat = st.selectbox("📊 Stat Category", list(categories.keys()))
+# Display as cards
+cols = st.columns(5)
+for idx, (cat_name, keywords) in enumerate(categories.items()):
+    with cols[idx]:
+        if st.button(
+            cat_name,
+            use_container_width=True,
+            type="secondary" if idx != 0 else "primary",
+            key=f"cat_{idx}"
+        ):
+            st.session_state['selected_category'] = cat_name
+
+# Get selected category
+if 'selected_category' not in st.session_state:
+    st.session_state['selected_category'] = "⚽ Goals & Assists"
+
+selected_cat = st.session_state['selected_category']
 keywords = categories[selected_cat]
 
 # Find matching KPIs
@@ -206,167 +307,417 @@ for stat in selected_stats:
 if fmt:
     styled = styled.format(fmt, na_rep="-")
 
+# Table header section
+st.markdown("""
+<div style="margin-top: 2rem; margin-bottom: 1rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="font-size: 1.125rem; 
+                   font-weight: 700; 
+                   color: #0f172a; 
+                   margin: 0;">
+            📊 Player Statistics
+        </h3>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="background: #f1f5f9; 
+                         padding: 0.375rem 0.75rem; 
+                         border-radius: 6px; 
+                         font-size: 0.75rem; 
+                         font-weight: 600;
+                         color: #475569;">
+                Sorted by best performers
+            </span>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 # Display
 st.markdown("""
 <style>
-    /* Hide Streamlit default elements */
+    /* Global Design System */
+    :root {
+        --primary-blue: #1e40af;
+        --primary-blue-dark: #1e3a8a;
+        --accent-gold: #f59e0b;
+        --text-primary: #0f172a;
+        --text-secondary: #475569;
+        --text-light: #64748b;
+        --bg-primary: #ffffff;
+        --bg-secondary: #f8fafc;
+        --bg-hover: #f1f5f9;
+        --border-light: #e2e8f0;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Remove Streamlit branding completely */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    .stDeployButton {display: none;}
     
-    /* Table container styling */
-    .stDataFrame {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-    }
-    
-    /* Custom table styling */
-    .dataframe {
-        width: 100%;
-        border-collapse: collapse !important;
-        font-size: 13px !important;
-        border: none !important;
-    }
-    
-    .dataframe thead tr {
-        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important;
-        color: white !important;
-        text-align: left !important;
-        border: none !important;
-    }
-    
-    .dataframe thead th {
-        padding: 14px 12px !important;
-        font-weight: 600 !important;
-        font-size: 12px !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.5px !important;
-        border: none !important;
-        border-right: 1px solid rgba(255,255,255,0.1) !important;
-        color: white !important;
-    }
-    
-    .dataframe thead th:first-child {
-        border-left: none !important;
-    }
-    
-    .dataframe tbody tr {
-        border-bottom: 1px solid #e5e7eb !important;
-        transition: all 0.2s ease !important;
-    }
-    
-    .dataframe tbody tr:hover {
-        background-color: #f0f9ff !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
-        transform: translateY(-1px) !important;
-    }
-    
-    .dataframe tbody tr:nth-child(even) {
-        background-color: #f9fafb !important;
-    }
-    
-    .dataframe tbody tr:nth-child(odd) {
-        background-color: #ffffff !important;
-    }
-    
-    .dataframe tbody td {
-        padding: 12px 12px !important;
-        border: none !important;
-        border-right: 1px solid #f3f4f6 !important;
-        font-size: 13px !important;
-        color: #1f2937 !important;
-    }
-    
-    .dataframe tbody td:first-child {
-        font-weight: 600 !important;
-        color: #111827 !important;
-        position: sticky !important;
-        left: 0 !important;
-        z-index: 1 !important;
-    }
-    
-    /* Number cells */
-    .dataframe tbody td:not(:first-child):not(:nth-child(2)):not(:nth-child(3)) {
-        text-align: center !important;
-        font-variant-numeric: tabular-nums !important;
-    }
-    
-    /* Percentile columns */
-    .dataframe tbody td[data-column$="_pct"] {
-        font-size: 11px !important;
-        color: #6b7280 !important;
-        font-style: italic !important;
-    }
-    
-    /* Remove Streamlit padding */
+    /* Page Layout */
     .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
+        padding: 1.5rem 2rem !important;
+        max-width: 100% !important;
     }
     
-    /* Title styling */
+    /* Title Section */
     h1 {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
-        font-weight: 700 !important;
-        color: #111827 !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        font-weight: 800 !important;
+        font-size: 2.25rem !important;
+        background: linear-gradient(135deg, var(--primary-blue-dark) 0%, var(--primary-blue) 50%, #2563eb 100%) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        background-clip: text !important;
+        margin-bottom: 0.25rem !important;
+        letter-spacing: -0.025em !important;
+    }
+    
+    /* Filter Bar Enhancement */
+    .stTextInput > div > div > input,
+    .stSelectbox > div > div > select {
+        border: 1.5px solid var(--border-light) !important;
+        border-radius: 8px !important;
+        padding: 0.625rem 1rem !important;
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+        color: var(--text-primary) !important;
+        background: white !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stSelectbox > div > div > select:focus {
+        border-color: var(--primary-blue) !important;
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1), var(--shadow-md) !important;
+        outline: none !important;
+    }
+    
+    .stTextInput > div > div > input::placeholder {
+        color: var(--text-light) !important;
+        font-weight: 400 !important;
+    }
+    
+    /* Checkbox Enhancement */
+    .stCheckbox {
+        padding: 0.5rem !important;
+        border-radius: 8px !important;
+        background: var(--bg-secondary) !important;
+        border: 1.5px solid var(--border-light) !important;
+    }
+    
+    .stCheckbox:hover {
+        background: var(--bg-hover) !important;
+        border-color: var(--primary-blue) !important;
+    }
+    
+    /* Multiselect Enhancement */
+    .stMultiSelect > div {
+        border: 1.5px solid var(--border-light) !important;
+        border-radius: 8px !important;
+        background: white !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    
+    .stMultiSelect > div:focus-within {
+        border-color: var(--primary-blue) !important;
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1), var(--shadow-md) !important;
+    }
+    
+    /* Selectbox Enhancement */
+    .stSelectbox label {
+        font-weight: 600 !important;
+        color: var(--text-primary) !important;
+        font-size: 0.875rem !important;
         margin-bottom: 0.5rem !important;
     }
     
-    /* Filter styling */
-    .stTextInput input, .stSelectbox select {
-        border-radius: 6px !important;
-        border: 1px solid #d1d5db !important;
-        font-size: 14px !important;
-    }
-    
-    .stTextInput input:focus, .stSelectbox select:focus {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-    }
-    
-    /* Multiselect styling */
-    .stMultiSelect > div {
-        border-radius: 6px !important;
-        border: 1px solid #d1d5db !important;
-    }
-    
-    /* Button styling */
-    .stDownloadButton button {
-        border-radius: 6px !important;
+    /* Caption Enhancement */
+    .stCaption {
+        font-size: 0.875rem !important;
+        color: var(--text-secondary) !important;
         font-weight: 600 !important;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+        padding: 0.5rem 0.75rem !important;
+        background: var(--bg-secondary) !important;
+        border-radius: 6px !important;
+        display: inline-block !important;
+        margin-top: 0.5rem !important;
+    }
+    
+    /* Divider Enhancement */
+    hr {
+        margin: 2rem 0 !important;
+        border: none !important;
+        height: 2px !important;
+        background: linear-gradient(90deg, transparent, var(--border-light), transparent) !important;
+    }
+    
+    /* TABLE DESIGN - Premium Stats Website Style */
+    .stDataFrame {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
+        border: 1px solid var(--border-light) !important;
+    }
+    
+    /* Table structure */
+    .dataframe {
+        width: 100% !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        font-size: 13px !important;
+        border: none !important;
+    }
+    
+    /* Header Row - Premium Blue Design */
+    .dataframe thead tr {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    .dataframe thead th {
+        padding: 16px 14px !important;
+        font-weight: 700 !important;
+        font-size: 11px !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.8px !important;
+        color: #f1f5f9 !important;
+        text-align: left !important;
+        border: none !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        white-space: nowrap !important;
+        position: relative !important;
+    }
+    
+    .dataframe thead th:first-child {
+        padding-left: 20px !important;
+        border-left: none !important;
+    }
+    
+    .dataframe thead th:last-child {
+        border-right: none !important;
+    }
+    
+    /* Add subtle gradient underline to headers */
+    .dataframe thead th::after {
+        content: '' !important;
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 2px !important;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent) !important;
+    }
+    
+    /* Body Rows - Enhanced */
+    .dataframe tbody tr {
+        border-bottom: 1px solid #e2e8f0 !important;
+        transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        background: white !important;
+    }
+    
+    .dataframe tbody tr:nth-child(even) {
+        background: #f8fafc !important;
+    }
+    
+    .dataframe tbody tr:hover {
+        background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 50%, #eff6ff 100%) !important;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1) !important;
+        transform: scale(1.002) !important;
+        position: relative !important;
+        z-index: 1 !important;
+        border-color: #93c5fd !important;
+    }
+    
+    /* Table Cells - Enhanced */
+    .dataframe tbody td {
+        padding: 14px 14px !important;
+        border: none !important;
+        border-right: 1px solid #f1f5f9 !important;
+        font-size: 13px !important;
+        color: var(--text-primary) !important;
+        vertical-align: middle !important;
+        transition: all 0.15s ease !important;
+    }
+    
+    .dataframe tbody td:first-child {
+        padding-left: 20px !important;
+        border-left: none !important;
+    }
+    
+    .dataframe tbody td:last-child {
+        border-right: none !important;
+    }
+    
+    /* Player Name Column - Sticky & Bold */
+    .dataframe tbody td:first-child {
+        font-weight: 700 !important;
+        color: var(--text-primary) !important;
+        font-size: 13.5px !important;
+        position: sticky !important;
+        left: 0 !important;
+        z-index: 2 !important;
+        background: inherit !important;
+        box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    /* Squad Column - Secondary Info */
+    .dataframe tbody td:nth-child(2) {
+        color: var(--text-secondary) !important;
+        font-weight: 500 !important;
+        font-size: 12.5px !important;
+    }
+    
+    /* Position Column - Badge Style */
+    .dataframe tbody td:nth-child(3) {
+        color: var(--text-light) !important;
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.3px !important;
+    }
+    
+    /* Stat Columns - Right-aligned with tabular nums */
+    .dataframe tbody td:nth-child(n+4) {
+        text-align: center !important;
+        font-variant-numeric: tabular-nums !important;
+        font-weight: 600 !important;
+        font-size: 13.5px !important;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
+    }
+    
+    /* Percentile columns styling */
+    .dataframe tbody td[title*="pct"],
+    .dataframe tbody td[title*="percentile"] {
+        font-size: 10.5px !important;
+        color: var(--text-light) !important;
+        font-weight: 500 !important;
+        font-style: italic !important;
+        opacity: 0.75 !important;
+    }
+    
+    /* Enhanced color cell borders for better definition */
+    .dataframe tbody td[style*="background-color: #08519c"],
+    .dataframe tbody td[style*="background-color: #3182bd"],
+    .dataframe tbody td[style*="background-color: #6baed6"] {
+        color: white !important;
+        font-weight: 700 !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+        border-color: rgba(255, 255, 255, 0.2) !important;
+    }
+    
+    /* Download Buttons - Premium Style */
+    .stDownloadButton button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 0.875rem !important;
+        padding: 0.625rem 1.5rem !important;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
         color: white !important;
         border: none !important;
-        padding: 0.5rem 1.5rem !important;
-        font-size: 14px !important;
-        transition: all 0.2s ease !important;
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3), 0 2px 4px -1px rgba(37, 99, 235, 0.2) !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        letter-spacing: 0.025em !important;
     }
     
     .stDownloadButton button:hover {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
-        transform: translateY(-1px) !important;
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+        box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.4), 0 4px 8px -2px rgba(37, 99, 235, 0.3) !important;
+        transform: translateY(-2px) !important;
     }
     
-    /* Caption styling */
-    .stCaption {
-        font-size: 14px !important;
-        color: #6b7280 !important;
-        font-weight: 500 !important;
+    .stDownloadButton button:active {
+        transform: translateY(0) !important;
+        box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3) !important;
     }
     
-    /* Divider styling */
-    hr {
-        margin: 1.5rem 0 !important;
-        border: none !important;
-        border-top: 2px solid #e5e7eb !important;
+    /* Scrollbar Styling */
+    .stDataFrame ::-webkit-scrollbar {
+        height: 10px !important;
+        width: 10px !important;
+    }
+    
+    .stDataFrame ::-webkit-scrollbar-track {
+        background: #f1f5f9 !important;
+        border-radius: 10px !important;
+    }
+    
+    .stDataFrame ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #94a3b8, #64748b) !important;
+        border-radius: 10px !important;
+        border: 2px solid #f1f5f9 !important;
+    }
+    
+    .stDataFrame ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #64748b, #475569) !important;
+    }
+    
+    /* Loading Animation */
+    @keyframes shimmer {
+        0% { background-position: -1000px 0; }
+        100% { background-position: 1000px 0; }
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .dataframe thead th {
+            font-size: 10px !important;
+            padding: 12px 10px !important;
+        }
+        
+        .dataframe tbody td {
+            font-size: 12px !important;
+            padding: 12px 10px !important;
+        }
+    }
+    
+    /* Add subtle animation on page load */
+    .stDataFrame {
+        animation: fadeIn 0.4s ease-in !important;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.dataframe(styled, use_container_width=True, height=650)
+st.dataframe(styled, use_container_width=True, height=650, hide_index=True)
 
-# Export
-col1, col2 = st.columns(2)
+# Export section with premium styling
+st.markdown("""
+<div style="margin-top: 2rem; 
+            padding: 1.5rem; 
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;">
+    <h3 style="font-size: 0.875rem; 
+               font-weight: 700; 
+               text-transform: uppercase; 
+               letter-spacing: 0.05em; 
+               color: #475569; 
+               margin: 0 0 1rem 0;">
+        💾 Export Data
+    </h3>
+</div>
+""", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:
     csv = df_display.to_csv(index=False).encode('utf-8')
@@ -389,3 +740,77 @@ with col2:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
+
+with col3:
+    # Stats summary
+    st.markdown(f"""
+    <div style="background: white; 
+                padding: 1rem; 
+                border-radius: 8px; 
+                border: 1px solid #e2e8f0;
+                text-align: center;">
+        <div style="color: #64748b; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+            Current View
+        </div>
+        <div style="display: flex; justify-content: space-around; gap: 1rem;">
+            <div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: #0f172a;">{len(df_display)}</div>
+                <div style="font-size: 0.75rem; color: #64748b;">Players</div>
+            </div>
+            <div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: #0f172a;">{len(selected_stats)}</div>
+                <div style="font-size: 0.75rem; color: #64748b;">Stats</div>
+            </div>
+            <div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: #0f172a;">{df_display['squadName'].nunique()}</div>
+                <div style="font-size: 0.75rem; color: #64748b;">Teams</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Footer with legend
+st.markdown("""
+<div style="margin-top: 2rem; 
+            padding: 1.5rem; 
+            background: white; 
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+    <h4 style="font-size: 0.875rem; 
+               font-weight: 700; 
+               color: #0f172a; 
+               margin: 0 0 1rem 0;">
+        🎨 Color Scale Guide
+    </h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: #08519c; border-radius: 4px;"></div>
+            <span style="font-size: 0.813rem; color: #475569;"><strong>90-100th</strong> Elite</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: #3182bd; border-radius: 4px;"></div>
+            <span style="font-size: 0.813rem; color: #475569;"><strong>75-89th</strong> Excellent</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: #6baed6; border-radius: 4px;"></div>
+            <span style="font-size: 0.813rem; color: #475569;"><strong>60-74th</strong> Above Avg</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: #9ecae1; border-radius: 4px;"></div>
+            <span style="font-size: 0.813rem; color: #475569;"><strong>40-59th</strong> Average</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: #c6dbef; border-radius: 4px;"></div>
+            <span style="font-size: 0.813rem; color: #475569;"><strong>25-39th</strong> Below Avg</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: #eff3ff; border-radius: 4px; border: 1px solid #e2e8f0;"></div>
+            <span style="font-size: 0.813rem; color: #475569;"><strong>0-24th</strong> Poor</span>
+        </div>
+    </div>
+    <p style="margin-top: 1rem; font-size: 0.75rem; color: #64748b; font-style: italic;">
+        * For negative metrics (fouls, turnovers), the color scale is automatically inverted.
+    </p>
+</div>
+""", unsafe_allow_html=True)
