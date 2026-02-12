@@ -288,12 +288,22 @@ df_display = df_filtered[cols].copy()
 
 # Rename percentile columns to show cleaner names
 rename_map = {}
+seen_names = set()
 for col in df_display.columns:
     if col.endswith("_pct"):
         # Extract the stat name without " (ID)" and "_pct"
         stat_name = col.replace("_pct", "")
         # Clean up the name - remove ID in parentheses
         clean_name = stat_name.split(" (")[0] if " (" in stat_name else stat_name
+        
+        # Handle duplicates by adding suffix
+        original_clean_name = clean_name
+        counter = 1
+        while clean_name in seen_names:
+            clean_name = f"{original_clean_name} [{counter}]"
+            counter += 1
+        
+        seen_names.add(clean_name)
         rename_map[col] = clean_name
 
 df_display = df_display.rename(columns=rename_map)
@@ -306,9 +316,9 @@ if len(df_display.columns) > 3:  # If we have stat columns beyond the base 3
 # Style table - color by percentile values
 styled = df_display.style
 
-# Get original stat names for color mapping
-for new_col, orig_col in rename_map.items():
-    if new_col in df_display.columns:
+# Color the renamed columns
+for col in df_display.columns:
+    if col not in ["displayName", "squadName", "positions"]:
         # Map colors based on percentile values
         def color_by_percentile(val):
             if pd.isna(val):
@@ -321,7 +331,7 @@ for new_col, orig_col in rename_map.items():
         
         styled = styled.applymap(
             color_by_percentile,
-            subset=[new_col]
+            subset=[col]
         )
 
 # Format percentiles as integers
