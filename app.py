@@ -1,14 +1,13 @@
 """
-IMPECT Stats Table — StatsBomb Edition (Improved Table)
-======================================================
-Fixes based on your screenshot:
-- Hide dataframe index (removes the extra left number column)
-- Subtle distribution bars (no big blocks)
-- Better column sizing + wrapping
-- Sticky first columns (Rank, Player, Squad, Positions)
-- Consistent font + dark styling across filters + table
+IMPECT Stats Table — StatsBomb Edition (Improved + Position Abbreviations)
+=========================================================================
+Adds:
+- Positions shown as abbreviations (e.g., LB, RCB, CM, RW, ST)
+- Keeps everything else: dark palette, filters, pct/z toggles, subtle bars,
+  sticky first columns, hidden index, HTML rendering.
 
-Uses HTML rendering via Styler.to_html() to ensure CSS applies.
+NOTE: Abbreviation is rule-based (works well for most strings like
+LEFT_WINGBACK_DEFENDER, CENTRAL_MIDFIELD, RIGHT_WINGER, CENTER_FORWARD, etc.)
 """
 
 import pandas as pd
@@ -62,6 +61,124 @@ def clean_stat_name(stat: str) -> str:
 
 
 # ─────────────────────────────────────────────
+# Position abbreviations
+# ─────────────────────────────────────────────
+def _abbr_single(token: str) -> str:
+    """
+    Convert a single IMPECT-like token to an abbreviation.
+    Examples:
+      LEFT_WINGBACK_DEFENDER -> LWB
+      RIGHT_WINGER -> RW
+      CENTER_FORWARD -> CF
+      CENTRAL_DEFENDER -> CB
+      DEFENSE_MIDFIELD -> DM
+      ATTACKING_MIDFIELD -> AM
+      CENTRAL_MIDFIELD -> CM
+    """
+    t = (token or "").strip().upper()
+    if not t:
+        return ""
+
+    # Normalize some variants
+    t = t.replace("CENTRE", "CENTER")
+
+    # Common direct mappings (if your dataset has exact tokens like these)
+    direct = {
+        "GOALKEEPER": "GK",
+        "KEEPER": "GK",
+        "CENTER_FORWARD": "CF",
+        "CENTRAL_FORWARD": "CF",
+        "STRIKER": "ST",
+        "CENTER_STRIKER": "ST",
+        "SECOND_STRIKER": "SS",
+        "ATTACKING_MIDFIELD": "AM",
+        "DEFENSE_MIDFIELD": "DM",
+        "DEFENSIVE_MIDFIELD": "DM",
+        "CENTRAL_MIDFIELD": "CM",
+        "WIDE_MIDFIELD": "WM",
+        "CENTRAL_DEFENDER": "CB",
+        "CENTER_BACK": "CB",
+        "FULLBACK": "FB",
+    }
+    if t in direct:
+        return direct[t]
+
+    # Side
+    side = ""
+    if t.startswith("LEFT_"):
+        side = "L"
+        t = t[len("LEFT_") :]
+    elif t.startswith("RIGHT_"):
+        side = "R"
+        t = t[len("RIGHT_") :]
+
+    # Wingback / fullback / winger / wide
+    if "WINGBACK" in t:
+        return f"{side}WB" if side else "WB"
+    if "FULLBACK" in t or "BACK" == t:
+        return f"{side}B" if side else "FB"
+    if "WINGER" in t:
+        return f"{side}W" if side else "W"
+    if "WIDE" in t and "MIDFIELD" in t:
+        return f"{side}M" if side else "WM"
+
+    # Defender types
+    if "DEFENDER" in t or "DEFENCE" in t or "DEFENSE" in t:
+        # Central defenders
+        if "CENTRAL" in t or "CENTER" in t:
+            return "CB"
+        # If sided defender (e.g., LEFT_DEFENDER)
+        if side:
+            return f"{side}B"
+        return "DEF"
+
+    # Midfield types
+    if "MIDFIELD" in t:
+        if "ATTACK" in t:
+            return "AM"
+        if "DEFENSE" in t or "DEFENCE" in t:
+            return "DM"
+        if "CENTRAL" in t or "CENTER" in t:
+            return "CM"
+        # sided midfield if available
+        if side:
+            return f"{side}M"
+        return "MF"
+
+    # Forward types
+    if "FORWARD" in t:
+        if "CENTER" in t or "CENTRAL" in t:
+            return "CF"
+        if side:
+            return f"{side}F"
+        return "F"
+
+    # Fallback: compress words to initials (e.g., ATTACKING_WINGER -> AW)
+    parts = [p for p in token.split("_") if p]
+    initials = "".join(p[0] for p in parts[:3]).upper()
+    return initials or token[:3].upper()
+
+
+def abbreviate_positions(pos_str: str) -> str:
+    """
+    Convert a comma-separated positions string into short abbreviations.
+    Removes duplicates while preserving order.
+    """
+    if pd.isna(pos_str) or not str(pos_str).strip():
+        return ""
+
+    tokens = [p.strip() for p in str(pos_str).split(",") if p.strip()]
+    out = []
+    seen = set()
+    for tok in tokens:
+        ab = _abbr_single(tok)
+        if ab and ab not in seen:
+            seen.add(ab)
+            out.append(ab)
+    return ", ".join(out)
+
+
+# ─────────────────────────────────────────────
 # Data loading
 # ─────────────────────────────────────────────
 @st.cache_data
@@ -87,12 +204,18 @@ def load_data(file_path: str) -> pd.DataFrame:
     ).str.strip()
     merged["displayName"] = np.where(cn == "", fallback, cn)
 
+    # Create abbreviated positions column (keep original too)
+    if "positions" in merged.columns:
+        merged["posAbbr"] = merged["positions"].apply(abbreviate_positions)
+    else:
+        merged["posAbbr"] = ""
+
     return merged
 
 
 def get_kpis(df: pd.DataFrame) -> list[str]:
     base = {
-        "iterationId", "squadId", "squadName", "playerId", "positions",
+        "iterationId", "squadId", "squadName", "playerId", "positions", "posAbbr",
         "commonname", "firstname", "lastname", "birthdate", "birthplace",
         "leg", "countryIds", "gender", "season", "dataVersion",
         "lastChangeTimestamp", "competition_name", "competition_type", "competition_gender",
@@ -124,11 +247,6 @@ def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
 # Cell styles (subtle bars)
 # ─────────────────────────────────────────────
 def pct_cell_style(val):
-    """
-    Subtle bar behind text (not a full block):
-    - bar uses rgba-ish effect by layering gradients
-    - adds a faint baseline track
-    """
     if pd.isna(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
@@ -147,7 +265,6 @@ def pct_cell_style(val):
         weight = 850
         glow = "rgba(245,197,24,.10)"
 
-    # Track + fill (fill is semi-transparent look by mixing with BG via an overlay)
     return f"""
       background-color: transparent;
       background-image:
@@ -160,11 +277,6 @@ def pct_cell_style(val):
 
 
 def z_cell_style(val):
-    """
-    Z-score diverging bar from center:
-    - subtle center line
-    - subtle fill with overlay glow
-    """
     if pd.isna(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
@@ -217,7 +329,7 @@ def z_cell_style(val):
 
 
 # ─────────────────────────────────────────────
-# Global CSS (consistent + improved table layout)
+# Global CSS
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -242,9 +354,7 @@ section[data-testid="stSidebar"] {{
   background: {RADAR_BG} !important;
   border-right: 1px solid {TABLE_BORDER} !important;
 }}
-section[data-testid="stSidebar"] * {{
-  color: {TEXT_LIGHT} !important;
-}}
+section[data-testid="stSidebar"] * {{ color: {TEXT_LIGHT} !important; }}
 
 section[data-testid="stSidebar"] input,
 section[data-testid="stSidebar"] select,
@@ -300,9 +410,7 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
 }}
 .stDownloadButton button:hover {{ filter: brightness(0.95) !important; }}
 
-/* ─────────────────────────────
-   HTML TABLE WRAP
-   ───────────────────────────── */
+/* HTML table */
 .table-wrap {{
   max-height: 720px;
   overflow: auto;
@@ -311,7 +419,6 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
   background: {BG};
 }}
 
-/* Use fixed layout so columns behave */
 table.dataframe {{
   width: 100% !important;
   table-layout: fixed;
@@ -320,7 +427,6 @@ table.dataframe {{
   background: transparent !important;
 }}
 
-/* Header */
 table.dataframe thead th {{
   position: sticky;
   top: 0;
@@ -337,12 +443,10 @@ table.dataframe thead th {{
 }}
 table.dataframe thead th:last-child {{ border-right: none !important; }}
 
-/* Rows */
 table.dataframe tbody tr {{ background: {BG} !important; }}
 table.dataframe tbody tr:nth-child(even) {{ background: {TABLE_ROW_ALT} !important; }}
 table.dataframe tbody tr:hover {{ background: {GRID_COLOR} !important; }}
 
-/* Cells */
 table.dataframe tbody td {{
   background-color: transparent !important;
   color: {TEXT_LIGHT} !important;
@@ -358,7 +462,7 @@ table.dataframe tbody td {{
 }}
 table.dataframe tbody td:last-child {{ border-right: none !important; }}
 
-/* Column sizing (works with table-layout: fixed) */
+/* Column sizing */
 table.dataframe thead th:nth-child(1),
 table.dataframe tbody td:nth-child(1) {{ width: 60px; }}   /* Rank */
 table.dataframe thead th:nth-child(2),
@@ -367,54 +471,35 @@ table.dataframe thead th:nth-child(3),
 table.dataframe tbody td:nth-child(3) {{ width: 170px; text-align:left; color:{TEXT_DIM} !important; font-weight: 750; }} /* Squad */
 table.dataframe thead th:nth-child(4),
 table.dataframe tbody td:nth-child(4) {{
-  width: 360px;
+  width: 170px;              /* Positions abbreviations fit here */
   text-align:left;
   color:{TEXT_LIGHT} !important;
-  white-space: normal;        /* allow wrapping for positions */
-  line-height: 1.25;
+  white-space: nowrap;
 }}
-
-/* Metric columns */
 table.dataframe thead th:nth-child(n+5),
 table.dataframe tbody td:nth-child(n+5) {{ width: 110px; }}
 
-/* Sticky first 4 columns (Rank/Player/Squad/Positions) */
+/* Sticky first 4 columns */
 table.dataframe thead th:nth-child(1),
 table.dataframe tbody td:nth-child(1) {{
-  position: sticky;
-  left: 0;
-  z-index: 9;
-  background: inherit !important;
+  position: sticky; left: 0; z-index: 9; background: inherit !important;
 }}
 table.dataframe thead th:nth-child(2),
 table.dataframe tbody td:nth-child(2) {{
-  position: sticky;
-  left: 60px;
-  z-index: 9;
-  background: inherit !important;
+  position: sticky; left: 60px; z-index: 9; background: inherit !important;
 }}
 table.dataframe thead th:nth-child(3),
 table.dataframe tbody td:nth-child(3) {{
-  position: sticky;
-  left: 250px;
-  z-index: 9;
-  background: inherit !important;
+  position: sticky; left: 250px; z-index: 9; background: inherit !important;
 }}
 table.dataframe thead th:nth-child(4),
 table.dataframe tbody td:nth-child(4) {{
-  position: sticky;
-  left: 420px;
-  z-index: 9;
-  background: inherit !important;
+  position: sticky; left: 420px; z-index: 9; background: inherit !important;
 }}
 
-/* Subtle shadow edge after sticky block */
-table.dataframe tbody td:nth-child(4) {{
-  box-shadow: 8px 0 12px rgba(0,0,0,.25);
-}}
-table.dataframe thead th:nth-child(4) {{
-  box-shadow: 8px 0 12px rgba(0,0,0,.35);
-}}
+/* Shadow edge after sticky block */
+table.dataframe tbody td:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.25); }}
+table.dataframe thead th:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.35); }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -429,7 +514,7 @@ st.markdown(
   <div>
     <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Keuken Kampioen Divisie</span></div>
     <h1 style="margin:.45rem 0 0 0; font-size: 1.9rem;">Player Stats Explorer</h1>
-    <div class="small-muted">StatsBomb-style table • per 90 • percentiles + z-scores • subtle bars</div>
+    <div class="small-muted">StatsBomb-style table • per 90 • percentiles + z-scores • subtle bars • positions abbreviated</div>
   </div>
   <div class="badge"><span class="dim">Season</span> 25/26</div>
 </div>
@@ -541,7 +626,8 @@ st.markdown(
 # ─────────────────────────────────────────────
 # Build display dataframe
 # ─────────────────────────────────────────────
-base_cols = ["displayName", "squadName", "positions"]
+# Use abbreviated positions column
+base_cols = ["displayName", "squadName", "posAbbr"]
 cols = base_cols.copy()
 
 metric_suffix = "_pct" if metric_mode == "Percentile" else "_z"
@@ -567,12 +653,13 @@ else:  # Both
 cols = [c for c in cols if c in df_filtered.columns]
 df_display = df_filtered[cols].copy()
 
-# Rename columns cleanly + avoid duplicates
-rename_map = {}
+# Rename columns (nice headers)
+rename_map = {"posAbbr": "positions"}
 seen = set()
 for col in df_display.columns:
     if col in base_cols:
         continue
+
     if col.endswith("_pct"):
         nice = f"{clean_stat_name(col[:-4])} {metric_label}"
     elif col.endswith("_z"):
@@ -590,19 +677,19 @@ for col in df_display.columns:
 
 df_display = df_display.rename(columns=rename_map)
 
-# Sort by first metric column if present, else first stat column
+# Sort by first metric column if present
 sort_col = None
 for c in df_display.columns:
     if c.endswith(metric_label):
         sort_col = c
         break
-if sort_col is None and len(df_display.columns) > len(base_cols):
-    sort_col = df_display.columns[len(base_cols)]
+if sort_col is None and len(df_display.columns) > 3:
+    sort_col = df_display.columns[3]
 
 if sort_col:
     df_display = df_display.sort_values(sort_col, ascending=False, na_position="last")
 
-# Rank column
+# Rank
 if show_rank and sort_col:
     df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
 
@@ -610,14 +697,12 @@ if show_rank and sort_col:
 # Style
 # ─────────────────────────────────────────────
 styled = df_display.style
-
-# IMPORTANT: hide index (removes the extra left index column)
-styled = styled.hide(axis="index")
+styled = styled.hide(axis="index")  # remove index column
 
 # Format numbers
 fmt = {}
 for c in df_display.columns:
-    if c in ["Rank"] + base_cols:
+    if c in ["Rank", "displayName", "squadName", "positions"]:
         continue
     if c.endswith("(PCT)"):
         fmt[c] = "{:.0f}"
@@ -627,20 +712,20 @@ for c in df_display.columns:
         fmt[c] = "{:.2f}"
 styled = styled.format(fmt, na_rep="-")
 
-# Rank style
-if "Rank" in df_display.columns:
-    styled = styled.applymap(
-        lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;",
-        subset=["Rank"],
-    )
-
-# Metric bars
+# Bars
 if show_bars:
     for c in df_display.columns:
         if c.endswith("(PCT)"):
             styled = styled.applymap(pct_cell_style, subset=[c])
         if c.endswith("(Z)"):
             styled = styled.applymap(z_cell_style, subset=[c])
+
+# Rank style
+if "Rank" in df_display.columns:
+    styled = styled.applymap(
+        lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;",
+        subset=["Rank"],
+    )
 
 # ─────────────────────────────────────────────
 # Render
@@ -674,25 +759,14 @@ c1, c2, c3 = st.columns([1, 1, 2])
 
 with c1:
     csv = df_display.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇ CSV",
-        csv,
-        f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
-        "text/csv",
-        use_container_width=True,
-    )
+    st.download_button("⬇ CSV", csv, f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
 
 with c2:
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df_display.to_excel(writer, index=False)
-    st.download_button(
-        "⬇ Excel",
-        buffer.getvalue(),
-        f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
+    st.download_button("⬇ Excel", buffer.getvalue(), f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 with c3:
     legend = (
@@ -709,11 +783,6 @@ with c3:
       {legend}<br/>
       <span style="color:{TEXT_DIM};">Lower-is-better metrics are automatically inverted.</span>
     </div>
-  </div>
-  <div style="margin-top:1rem; display:flex; gap:.5rem; flex-wrap:wrap;">
-    <div class="badge" style="border-color:{PCT_HIGH};"><span style="color:{PCT_HIGH}; font-weight:950;">■</span> High</div>
-    <div class="badge" style="border-color:{PCT_MID};"><span style="color:{PCT_MID}; font-weight:950;">■</span> Mid</div>
-    <div class="badge" style="border-color:{PCT_LOW};"><span style="color:{PCT_LOW}; font-weight:950;">■</span> Low</div>
   </div>
 </div>
 """,
