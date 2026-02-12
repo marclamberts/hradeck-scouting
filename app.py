@@ -147,7 +147,7 @@ def calculate_per90(df: pd.DataFrame, kpi_cols: list) -> pd.DataFrame:
     
     return df_p90
 
-# -------------------------
+# -------------------------x
 # Styling functions
 # -------------------------
 def style_dataframe(df: pd.DataFrame, stat_cols: list, show_percentiles: bool = True):
