@@ -370,364 +370,399 @@ st.markdown("""
 # Display
 st.markdown("""
 <style>
-    /* Global Design System */
+    /* ============================================
+       GLOBAL DESIGN SYSTEM
+       ============================================ */
     :root {
-        --primary-blue: #1e40af;
-        --primary-blue-dark: #1e3a8a;
-        --accent-gold: #f59e0b;
-        --text-primary: #0f172a;
-        --text-secondary: #475569;
+        --primary: #0f172a;
+        --primary-light: #1e293b;
+        --accent: #3b82f6;
+        --accent-dark: #1d4ed8;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --text: #0f172a;
         --text-light: #64748b;
-        --bg-primary: #ffffff;
-        --bg-secondary: #f8fafc;
-        --bg-hover: #f1f5f9;
-        --border-light: #e2e8f0;
-        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        --border: #e2e8f0;
+        --bg: #ffffff;
+        --bg-alt: #f8fafc;
     }
     
-    /* Remove Streamlit branding completely */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display: none;}
+    /* Remove all Streamlit branding */
+    #MainMenu, footer, header, .stDeployButton {
+        visibility: hidden !important;
+        display: none !important;
+    }
     
-    /* Page Layout */
     .block-container {
-        padding: 1.5rem 2rem !important;
+        padding: 1rem 2rem !important;
         max-width: 100% !important;
     }
     
-    /* Title Section */
-    h1 {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-        font-weight: 800 !important;
-        font-size: 2.25rem !important;
-        background: linear-gradient(135deg, var(--primary-blue-dark) 0%, var(--primary-blue) 50%, #2563eb 100%) !important;
-        -webkit-background-clip: text !important;
-        -webkit-text-fill-color: transparent !important;
-        background-clip: text !important;
-        margin-bottom: 0.25rem !important;
-        letter-spacing: -0.025em !important;
-    }
+    /* ============================================
+       PREMIUM TABLE DESIGN
+       ============================================ */
     
-    /* Filter Bar Enhancement */
-    .stTextInput > div > div > input,
-    .stSelectbox > div > div > select {
-        border: 1.5px solid var(--border-light) !important;
-        border-radius: 8px !important;
-        padding: 0.625rem 1rem !important;
-        font-size: 0.875rem !important;
-        font-weight: 500 !important;
-        color: var(--text-primary) !important;
-        background: white !important;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        box-shadow: var(--shadow-sm) !important;
-    }
-    
-    .stTextInput > div > div > input:focus,
-    .stSelectbox > div > div > select:focus {
-        border-color: var(--primary-blue) !important;
-        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1), var(--shadow-md) !important;
-        outline: none !important;
-    }
-    
-    .stTextInput > div > div > input::placeholder {
-        color: var(--text-light) !important;
-        font-weight: 400 !important;
-    }
-    
-    /* Checkbox Enhancement */
-    .stCheckbox {
-        padding: 0.5rem !important;
-        border-radius: 8px !important;
-        background: var(--bg-secondary) !important;
-        border: 1.5px solid var(--border-light) !important;
-    }
-    
-    .stCheckbox:hover {
-        background: var(--bg-hover) !important;
-        border-color: var(--primary-blue) !important;
-    }
-    
-    /* Multiselect Enhancement */
-    .stMultiSelect > div {
-        border: 1.5px solid var(--border-light) !important;
-        border-radius: 8px !important;
-        background: white !important;
-        box-shadow: var(--shadow-sm) !important;
-    }
-    
-    .stMultiSelect > div:focus-within {
-        border-color: var(--primary-blue) !important;
-        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1), var(--shadow-md) !important;
-    }
-    
-    /* Selectbox Enhancement */
-    .stSelectbox label {
-        font-weight: 600 !important;
-        color: var(--text-primary) !important;
-        font-size: 0.875rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Caption Enhancement */
-    .stCaption {
-        font-size: 0.875rem !important;
-        color: var(--text-secondary) !important;
-        font-weight: 600 !important;
-        padding: 0.5rem 0.75rem !important;
-        background: var(--bg-secondary) !important;
-        border-radius: 6px !important;
-        display: inline-block !important;
-        margin-top: 0.5rem !important;
-    }
-    
-    /* Divider Enhancement */
-    hr {
-        margin: 2rem 0 !important;
-        border: none !important;
-        height: 2px !important;
-        background: linear-gradient(90deg, transparent, var(--border-light), transparent) !important;
-    }
-    
-    /* TABLE DESIGN - Premium Stats Website Style */
+    /* Table wrapper - card style */
     .stDataFrame {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif !important;
-        border-radius: 12px !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        border-radius: 16px !important;
         overflow: hidden !important;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
-        border: 1px solid var(--border-light) !important;
+        box-shadow: 
+            0 0 0 1px rgba(0, 0, 0, 0.05),
+            0 4px 6px -1px rgba(0, 0, 0, 0.08),
+            0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+        border: none !important;
+        background: white !important;
     }
     
-    /* Table structure */
     .dataframe {
         width: 100% !important;
         border-collapse: separate !important;
         border-spacing: 0 !important;
-        font-size: 13px !important;
         border: none !important;
     }
     
-    /* Header Row - Premium Blue Design */
-    .dataframe thead tr {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
+    /* ============================================
+       HEADER DESIGN - Dark & Modern
+       ============================================ */
+    .dataframe thead {
         position: sticky !important;
         top: 0 !important;
-        z-index: 10 !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+        z-index: 100 !important;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
+        box-shadow: 
+            0 1px 0 0 rgba(255, 255, 255, 0.1) inset,
+            0 4px 12px rgba(0, 0, 0, 0.25) !important;
     }
     
     .dataframe thead th {
-        padding: 16px 14px !important;
+        padding: 18px 16px !important;
         font-weight: 700 !important;
         font-size: 11px !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.8px !important;
-        color: #f1f5f9 !important;
-        text-align: left !important;
+        letter-spacing: 1.2px !important;
+        color: #f8fafc !important;
+        text-align: center !important;
         border: none !important;
         border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
         white-space: nowrap !important;
+        background: transparent !important;
         position: relative !important;
     }
     
-    .dataframe thead th:first-child {
-        padding-left: 20px !important;
+    /* First 3 columns - left aligned */
+    .dataframe thead th:nth-child(1),
+    .dataframe thead th:nth-child(2),
+    .dataframe thead th:nth-child(3) {
+        text-align: left !important;
+    }
+    
+    /* Player name column - wider */
+    .dataframe thead th:nth-child(1) {
+        padding-left: 24px !important;
+        min-width: 200px !important;
         border-left: none !important;
     }
     
+    /* Remove right border from last column */
     .dataframe thead th:last-child {
         border-right: none !important;
     }
     
-    /* Add subtle gradient underline to headers */
+    /* Subtle gradient underline effect */
     .dataframe thead th::after {
         content: '' !important;
         position: absolute !important;
         bottom: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
+        left: 10% !important;
+        right: 10% !important;
         height: 2px !important;
-        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent) !important;
+        background: linear-gradient(90deg, 
+            transparent 0%, 
+            rgba(59, 130, 246, 0.6) 50%, 
+            transparent 100%) !important;
+        opacity: 0 !important;
+        transition: opacity 0.3s ease !important;
     }
     
-    /* Body Rows - Enhanced */
+    .dataframe thead th:hover::after {
+        opacity: 1 !important;
+    }
+    
+    /* ============================================
+       BODY ROWS - Enhanced Alternating
+       ============================================ */
     .dataframe tbody tr {
-        border-bottom: 1px solid #e2e8f0 !important;
-        transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        border: none !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
         background: white !important;
     }
     
-    .dataframe tbody tr:nth-child(even) {
-        background: #f8fafc !important;
+    .dataframe tbody tr:nth-child(odd) {
+        background: #fafbfc !important;
     }
     
     .dataframe tbody tr:hover {
-        background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 50%, #eff6ff 100%) !important;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1) !important;
-        transform: scale(1.002) !important;
+        background: linear-gradient(90deg, 
+            #f0f9ff 0%, 
+            #e0f2fe 50%, 
+            #f0f9ff 100%) !important;
+        transform: scale(1.002) translateY(-1px) !important;
+        box-shadow: 
+            0 0 0 1px #bae6fd,
+            0 8px 16px -4px rgba(59, 130, 246, 0.15) !important;
+        border-color: #7dd3fc !important;
+        z-index: 10 !important;
         position: relative !important;
-        z-index: 1 !important;
-        border-color: #93c5fd !important;
     }
     
-    /* Table Cells - Enhanced */
+    /* Hover effect on cells */
+    .dataframe tbody tr:hover td {
+        border-color: rgba(186, 230, 253, 0.5) !important;
+    }
+    
+    /* ============================================
+       TABLE CELLS - Premium Typography
+       ============================================ */
     .dataframe tbody td {
-        padding: 14px 14px !important;
+        padding: 16px 16px !important;
+        font-size: 13.5px !important;
+        color: var(--text) !important;
         border: none !important;
         border-right: 1px solid #f1f5f9 !important;
-        font-size: 13px !important;
-        color: var(--text-primary) !important;
+        text-align: center !important;
         vertical-align: middle !important;
         transition: all 0.15s ease !important;
-    }
-    
-    .dataframe tbody td:first-child {
-        padding-left: 20px !important;
-        border-left: none !important;
+        font-variant-numeric: tabular-nums !important;
     }
     
     .dataframe tbody td:last-child {
         border-right: none !important;
     }
     
-    /* Player Name Column - Sticky & Bold */
-    .dataframe tbody td:first-child {
+    /* ============================================
+       PLAYER INFO COLUMNS - Left Side
+       ============================================ */
+    
+    /* Player Name - Bold & Sticky */
+    .dataframe tbody td:nth-child(1) {
         font-weight: 700 !important;
-        color: var(--text-primary) !important;
-        font-size: 13.5px !important;
+        font-size: 14px !important;
+        color: #0f172a !important;
+        text-align: left !important;
+        padding-left: 24px !important;
         position: sticky !important;
         left: 0 !important;
-        z-index: 2 !important;
+        z-index: 20 !important;
         background: inherit !important;
-        box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05) !important;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04) !important;
+        min-width: 200px !important;
+        max-width: 250px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     
-    /* Squad Column - Secondary Info */
+    /* Squad Name - Secondary */
     .dataframe tbody td:nth-child(2) {
-        color: var(--text-secondary) !important;
         font-weight: 500 !important;
         font-size: 12.5px !important;
+        color: #64748b !important;
+        text-align: left !important;
+        max-width: 180px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     
-    /* Position Column - Badge Style */
+    /* Position - Badge Style */
     .dataframe tbody td:nth-child(3) {
-        color: var(--text-light) !important;
-        font-size: 11.5px !important;
         font-weight: 600 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.3px !important;
-    }
-    
-    /* Stat Columns - Right-aligned with tabular nums */
-    .dataframe tbody td:nth-child(n+4) {
-        text-align: center !important;
-        font-variant-numeric: tabular-nums !important;
-        font-weight: 600 !important;
-        font-size: 13.5px !important;
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
-    }
-    
-    /* Percentile columns styling */
-    .dataframe tbody td[title*="pct"],
-    .dataframe tbody td[title*="percentile"] {
         font-size: 10.5px !important;
-        color: var(--text-light) !important;
-        font-weight: 500 !important;
-        font-style: italic !important;
-        opacity: 0.75 !important;
+        color: #475569 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        text-align: left !important;
+        opacity: 0.85 !important;
     }
     
-    /* Enhanced color cell borders for better definition */
+    /* ============================================
+       PERCENTILE CELLS - Premium Badges
+       ============================================ */
+    .dataframe tbody td:nth-child(n+4) {
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace !important;
+        border-radius: 6px !important;
+        margin: 2px !important;
+        position: relative !important;
+    }
+    
+    /* Elite percentiles - Add subtle glow */
     .dataframe tbody td[style*="background-color: #08519c"],
     .dataframe tbody td[style*="background-color: #3182bd"],
     .dataframe tbody td[style*="background-color: #6baed6"] {
-        color: white !important;
-        font-weight: 700 !important;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
-        border-color: rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+            0 2px 8px rgba(59, 130, 246, 0.3) !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+        position: relative !important;
     }
     
-    /* Download Buttons - Premium Style */
-    .stDownloadButton button {
-        border-radius: 8px !important;
+    /* Add shine effect on hover for colored cells */
+    .dataframe tbody tr:hover td[style*="background-color: #08519c"],
+    .dataframe tbody tr:hover td[style*="background-color: #3182bd"],
+    .dataframe tbody tr:hover td[style*="background-color: #6baed6"] {
+        box-shadow: 
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
+            0 4px 12px rgba(59, 130, 246, 0.4) !important;
+    }
+    
+    /* Lower percentiles - subtle styling */
+    .dataframe tbody td[style*="background-color: #9ecae1"],
+    .dataframe tbody td[style*="background-color: #c6dbef"],
+    .dataframe tbody td[style*="background-color: #eff3ff"] {
+        border: 1px solid rgba(59, 130, 246, 0.15) !important;
         font-weight: 600 !important;
-        font-size: 0.875rem !important;
-        padding: 0.625rem 1.5rem !important;
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    }
+    
+    /* ============================================
+       SCROLLBAR - Custom Design
+       ============================================ */
+    .stDataFrame ::-webkit-scrollbar {
+        height: 12px !important;
+        width: 12px !important;
+    }
+    
+    .stDataFrame ::-webkit-scrollbar-track {
+        background: #f1f5f9 !important;
+        border-radius: 100px !important;
+        margin: 8px !important;
+    }
+    
+    .stDataFrame ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #94a3b8, #64748b) !important;
+        border-radius: 100px !important;
+        border: 3px solid #f1f5f9 !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stDataFrame ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #64748b, #475569) !important;
+        border-width: 2px !important;
+    }
+    
+    /* ============================================
+       SIDEBAR ENHANCEMENTS
+       ============================================ */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+        border-right: 1px solid #e2e8f0 !important;
+    }
+    
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h5 {
+        color: #0f172a !important;
+    }
+    
+    section[data-testid="stSidebar"] .stTextInput input,
+    section[data-testid="stSidebar"] .stSelectbox select {
+        background: white !important;
+        border: 1.5px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    section[data-testid="stSidebar"] .stTextInput input:focus,
+    section[data-testid="stSidebar"] .stSelectbox select:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    section[data-testid="stSidebar"] .stMultiSelect {
+        background: white !important;
+        border-radius: 8px !important;
+    }
+    
+    /* ============================================
+       BUTTON ENHANCEMENTS
+       ============================================ */
+    .stDownloadButton button {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
         color: white !important;
         border: none !important;
-        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3), 0 2px 4px -1px rgba(37, 99, 235, 0.2) !important;
+        border-radius: 10px !important;
+        padding: 12px 24px !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        letter-spacing: 0.3px !important;
+        box-shadow: 
+            0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+            0 4px 12px rgba(59, 130, 246, 0.3) !important;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        letter-spacing: 0.025em !important;
     }
     
     .stDownloadButton button:hover {
-        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
-        box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.4), 0 4px 8px -2px rgba(37, 99, 235, 0.3) !important;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        box-shadow: 
+            0 1px 0 0 rgba(255, 255, 255, 0.3) inset,
+            0 6px 20px rgba(59, 130, 246, 0.4) !important;
         transform: translateY(-2px) !important;
     }
     
     .stDownloadButton button:active {
         transform: translateY(0) !important;
-        box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3) !important;
+        box-shadow: 
+            0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+            0 2px 8px rgba(59, 130, 246, 0.3) !important;
     }
     
-    /* Scrollbar Styling */
-    .stDataFrame ::-webkit-scrollbar {
-        height: 10px !important;
-        width: 10px !important;
-    }
-    
-    .stDataFrame ::-webkit-scrollbar-track {
-        background: #f1f5f9 !important;
-        border-radius: 10px !important;
-    }
-    
-    .stDataFrame ::-webkit-scrollbar-thumb {
-        background: linear-gradient(135deg, #94a3b8, #64748b) !important;
-        border-radius: 10px !important;
-        border: 2px solid #f1f5f9 !important;
-    }
-    
-    .stDataFrame ::-webkit-scrollbar-thumb:hover {
-        background: linear-gradient(135deg, #64748b, #475569) !important;
-    }
-    
-    /* Loading Animation */
-    @keyframes shimmer {
-        0% { background-position: -1000px 0; }
-        100% { background-position: 1000px 0; }
-    }
-    
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-        .dataframe thead th {
-            font-size: 10px !important;
-            padding: 12px 10px !important;
-        }
-        
-        .dataframe tbody td {
-            font-size: 12px !important;
-            padding: 12px 10px !important;
-        }
-    }
-    
-    /* Add subtle animation on page load */
-    .stDataFrame {
-        animation: fadeIn 0.4s ease-in !important;
-    }
-    
-    @keyframes fadeIn {
+    /* ============================================
+       ANIMATIONS
+       ============================================ */
+    @keyframes slideIn {
         from {
             opacity: 0;
-            transform: translateY(10px);
+            transform: translateY(20px);
         }
         to {
             opacity: 1;
             transform: translateY(0);
+        }
+    }
+    
+    .stDataFrame {
+        animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+    
+    /* Add subtle pulse to elite cells */
+    @keyframes pulse {
+        0%, 100% {
+            box-shadow: 
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+                0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+        50% {
+            box-shadow: 
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.35),
+                0 4px 16px rgba(59, 130, 246, 0.4);
+        }
+    }
+    
+    .dataframe tbody tr:hover td[style*="background-color: #08519c"] {
+        animation: pulse 2s ease-in-out infinite !important;
+    }
+    
+    /* ============================================
+       RESPONSIVE DESIGN
+       ============================================ */
+    @media (max-width: 1200px) {
+        .dataframe thead th,
+        .dataframe tbody td {
+            padding: 12px 10px !important;
+            font-size: 12px !important;
         }
     }
 </style>
