@@ -1,895 +1,498 @@
-# app.py — IMPECT Live Scouting (API + Excel Templates) + Profile Radars
-# ========================================================================
-# ✅ One-page Streamlit app
-# ✅ Load from Excel templates OR IMPECT API
-# ✅ Computes derived metrics + profile templates
-# ✅ Auto-builds profiles from available KPIs
-# ✅ Benchmarks by position tokens
-# ✅ Shows radar + KPI table in-app
+"""
+IMPECT Stats Table - FBref/Baseball Savant Style
+=================================================
+Modern, interactive stats tables with percentile rankings and color coding.
 
-import time
-import random
-import re
-import requests
-import numpy as np
+Features:
+- Position-specific stat tables
+- Percentile-based color coding
+- Advanced filtering
+- Per 90 calculations
+- Export to CSV/Excel
+"""
+
+import os
 import pandas as pd
+import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 # -------------------------
-# Streamlit config
+# Config
 # -------------------------
-st.set_page_config(page_title="IMPECT Scout", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="IMPECT Stats", page_icon="📊", layout="wide")
 
-# -------------------------
-# IMPECT API config
-# -------------------------
-TOKEN_URL = "https://login.impect.com/auth/realms/production/protocol/openid-connect/token"
-BASE_API_URL = "https://api.impect.com"
+# Default templates directory (change to your actual path)
+DEFAULT_TEMPLATES_DIR = "/Users/user/Documents/GitHub//hradeck-scouting/"
 
-TIMEOUT_SECONDS = 30
-MAX_RETRIES = 8
-BACKOFF_BASE = 0.75
-BACKOFF_CAP = 30.0
-
-# -------------------------
-# Profile/radar config
-# -------------------------
-BENCHMARK_BY_POSITION = True
-MIN_POSITION_SAMPLE = 10
-MIN_METRICS_PER_RADAR = 6
-MAX_METRICS_PER_RADAR = 12
-
-DEFAULT_PROFILES = ["Winger", "Striker", "Attacking Mid", "Midfielder", "Fullback", "Centerback", "Goalkeeper"]
-
-POSITION_TO_PROFILES = {
-    "CENTER_FORWARD": ["Striker"],
-    "LEFT_WINGER": ["Winger"],
-    "RIGHT_WINGER": ["Winger"],
-    "LEFT_WINGBACK_DEFENDER": ["Fullback"],
-    "RIGHT_WINGBACK_DEFENDER": ["Fullback"],
-    "CENTER_BACK": ["Centerback"],
-    "CENTRE_BACK": ["Centerback"],
-    "CENTRAL_DEFENDER": ["Centerback"],
-    "GOALKEEPER": ["Goalkeeper"],
-    "ATTACKING_MIDFIELD": ["Attacking Mid"],
-    "CENTRAL_MIDFIELD": ["Midfielder"],
-    "DEFENSE_MIDFIELD": ["Midfielder"],
-    "MIDFIELD": ["Midfielder"],
+# Position templates available
+POSITION_TEMPLATES = {
+    "GK": "Goalkeeper",
+    "CB": "Center Back",
+    "FB": "Fullback",
+    "DM": "Defensive Midfielder",
+    "CM": "Central Midfielder",
+    "AM": "Attacking Midfielder",
+    "W": "Winger",
+    "ST": "Striker",
 }
 
-# Invert: profile -> [position tokens]
-PROFILE_TO_POSITIONS = {}
-for pos_key, prof_list in POSITION_TO_PROFILES.items():
-    for p in prof_list:
-        PROFILE_TO_POSITIONS.setdefault(p, []).append(pos_key)
+# Color scales for percentile rankings
+def percentile_color(pct):
+    """Return color based on percentile (Baseball Savant style)"""
+    if pd.isna(pct):
+        return "#FFFFFF"
+    if pct >= 90:
+        return "#08519c"  # Dark blue
+    if pct >= 75:
+        return "#3182bd"  # Blue
+    if pct >= 60:
+        return "#6baed6"  # Light blue
+    if pct >= 40:
+        return "#9ecae1"  # Very light blue
+    if pct >= 25:
+        return "#c6dbef"  # Pale blue
+    if pct >= 10:
+        return "#eff3ff"  # Almost white
+    return "#FFFFFF"  # White
 
-# -------------------------
-# Derived metrics
-# -------------------------
-DERIVED = {
-    "Aerial Win %": {
-        "num": ["Won Aerial Duels (96)"],
-        "denom": ["Won Aerial Duels (96)", "Lost Aerial Duels (97)"],
-        "scale": 100,
-    },
-    "Ground Duel Win %": {
-        "num": ["Won Ground Duels (94)"],
-        "denom": ["Won Ground Duels (94)", "Lost Ground Duels (95)"],
-        "scale": 100,
-    },
-    "Pass Accuracy %": {
-        "num": ["Successful Passes (90)"],
-        "denom": ["Successful Passes (90)", "Unsuccessful Passes (91)"],
-        "scale": 100,
-    },
-    "Shots on Target %": {
-        "num": ["Total Shots On Target (1515)"],
-        "denom": ["Total Shots (100)"],
-        "scale": 100,
-    },
-    "Crosses": {
-        "num": [
-            "SUCCESSFUL_PASSES_BY_ACTION_LOW_CROSS (293)",
-            "SUCCESSFUL_PASSES_BY_ACTION_HIGH_CROSS (294)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Cross Bypasses": {
-        "num": [
-            "BYPASSED_OPPONENTS_BY_ACTION_LOW_CROSS (110)",
-            "BYPASSED_OPPONENTS_BY_ACTION_HIGH_CROSS (111)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Pass Bypasses": {
-        "num": [
-            "BYPASSED_OPPONENTS_BY_ACTION_LOW_PASS (106)",
-            "BYPASSED_OPPONENTS_BY_ACTION_DIAGONAL_PASS (107)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Pass Def Bypasses": {
-        "num": [
-            "BYPASSED_DEFENDERS_BY_ACTION_LOW_PASS (167)",
-            "BYPASSED_DEFENDERS_BY_ACTION_DIAGONAL_PASS (168)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Advanced Touches": {
-        "num": [
-            "OFFENSIVE_TOUCHES_IN_PITCH_POSITION_FINAL_THIRD (598)",
-            "OFFENSIVE_TOUCHES_IN_PITCH_POSITION_OPPONENT_BOX (599)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Defensive Actions": {
-        "num": [
-            "DEFENSIVE_TOUCHES_BY_ACTION_INTERCEPTION (611)",
-            "DEFENSIVE_TOUCHES_BY_ACTION_DUEL (612)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Final Third Bypasses": {
-        "num": [
-            "BYPASSED_OPPONENTS_FROM_PITCH_POSITION_FINAL_THIRD (145)",
-            "BYPASSED_OPPONENTS_FROM_PITCH_POSITION_OPPONENT_BOX (146)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Final Third Def Bypasses": {
-        "num": [
-            "BYPASSED_DEFENDERS_FROM_PITCH_POSITION_FINAL_THIRD (206)",
-            "BYPASSED_DEFENDERS_FROM_PITCH_POSITION_OPPONENT_BOX (207)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Deep Passes": {
-        "num": [
-            "SUCCESSFUL_PASSES_FROM_PITCH_POSITION_FINAL_THIRD (327)",
-            "SUCCESSFUL_PASSES_FROM_PITCH_POSITION_OPPONENT_BOX (328)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
-    "Deep Ball Losses": {
-        "num": [
-            "BALL_LOSS_REMOVED_TEAMMATES_FROM_PITCH_POSITION_FINAL_THIRD (682)",
-            "BALL_LOSS_REMOVED_TEAMMATES_FROM_PITCH_POSITION_OPPONENT_BOX (683)",
-        ],
-        "denom": None,
-        "scale": 1,
-    },
+def percentile_color_inverted(pct):
+    """Inverted color scale (for metrics where lower is better)"""
+    if pd.isna(pct):
+        return "#FFFFFF"
+    return percentile_color(100 - pct)
+
+# Metrics where lower is better
+INVERTED_METRICS = {
+    "Number of Fouls", "fouls", "red", "yellow", "card",
+    "lost", "unsuccessful", "failed", "off target"
 }
 
-# -------------------------
-# Profile templates
-# -------------------------
-PROFILE_TEMPLATES = {
-    "Striker": [
-        ("Goals", [28], False),
-        ("Assists", [77], False),
-        ("xG", [82], False),
-        ("Non-Shot xG", [83], False),
-        ("Total Shots", [100], False),
-        ("Shots Off Target", [101], True),
-        ("Touches in Box", [599], False),
-        ("Advanced Touches", ["Advanced Touches"], False),
-        ("Bypassed Opponents", [0], False),
-        ("Aerial Win %", ["Aerial Win %"], False),
-        ("Critical Ball Losses", [49], True),
-        ("Deep Ball Losses", ["Deep Ball Losses"], True),
-    ],
-    "Winger": [
-        ("Goals", [28], False),
-        ("Assists", [77], False),
-        ("xG", [82], False),
-        ("Non-Shot xG", [83], False),
-        ("Crosses", ["Crosses"], False),
-        ("Cross Bypasses", ["Cross Bypasses"], False),
-        ("Dribble Bypasses", [87], False),
-        ("Defenders Beaten", [88], False),
-        ("Touches in Box", [599], False),
-        ("Final Third Bypasses", ["Final Third Bypasses"], False),
-        ("Ball Losses", [22], True),
-        ("Critical Ball Losses", [49], True),
-    ],
-    "Attacking Mid": [
-        ("Assists", [77], False),
-        ("xG", [82], False),
-        ("Non-Shot xG", [83], False),
-        ("Pass Bypasses", ["Pass Bypasses"], False),
-        ("Pass Def Bypasses", ["Pass Def Bypasses"], False),
-        ("Bypassed Opponents", [0], False),
-        ("Bypassed Defenders", [2], False),
-        ("Deep Passes", ["Deep Passes"], False),
-        ("Advanced Touches", ["Advanced Touches"], False),
-        ("Final Third Bypasses", ["Final Third Bypasses"], False),
-        ("Ball Losses", [22], True),
-        ("Critical Ball Losses", [49], True),
-    ],
-    "Midfielder": [
-        ("Bypassed Opponents", [0], False),
-        ("Bypassed Defenders", [2], False),
-        ("Pass Bypasses", ["Pass Bypasses"], False),
-        ("Pass Def Bypasses", ["Pass Def Bypasses"], False),
-        ("Bypassed Midfielders", [29], False),
-        ("Pass Accuracy %", ["Pass Accuracy %"], False),
-        ("Aerial Win %", ["Aerial Win %"], False),
-        ("Ground Duel Win %", ["Ground Duel Win %"], False),
-        ("Defensive Actions", ["Defensive Actions"], False),
-        ("Ball Losses", [22], True),
-        ("Critical Ball Losses", [49], True),
-    ],
-    "Centerback": [
-        ("Aerial Win %", ["Aerial Win %"], False),
-        ("Ground Duel Win %", ["Ground Duel Win %"], False),
-        ("Defensive Actions", ["Defensive Actions"], False),
-        ("Bypassed Opponents", [0], False),
-        ("Bypassed Defenders", [2], False),
-        ("Pass Accuracy %", ["Pass Accuracy %"], False),
-        ("Pass Def Bypasses", ["Pass Def Bypasses"], False),
-        ("Clearance Bypasses", [112], False),
-        ("Header Bypasses", [113], False),
-        ("Ball Losses", [22], True),
-        ("Critical Ball Losses", [49], True),
-    ],
-    "Fullback": [
-        ("Crosses", ["Crosses"], False),
-        ("Cross Bypasses", ["Cross Bypasses"], False),
-        ("Bypassed Opponents", [0], False),
-        ("Bypassed Defenders", [2], False),
-        ("Aerial Win %", ["Aerial Win %"], False),
-        ("Ground Duel Win %", ["Ground Duel Win %"], False),
-        ("Defensive Actions", ["Defensive Actions"], False),
-        ("Pass Accuracy %", ["Pass Accuracy %"], False),
-        ("Pass Def Bypasses", ["Pass Def Bypasses"], False),
-        ("Final Third Bypasses", ["Final Third Bypasses"], False),
-        ("Ball Losses", [22], True),
-    ],
-    "Goalkeeper": [
-        ("Pass Accuracy %", ["Pass Accuracy %"], False),
-        ("Bypassed Opponents", [0], False),
-        ("Bypassed Defenders", [2], False),
-        ("Pass Bypasses", ["Pass Bypasses"], False),
-        ("Pass Def Bypasses", ["Pass Def Bypasses"], False),
-        ("Offensive Touches", [92], False),
-        ("Clearance Bypasses", [112], False),
-        ("Ball Losses", [22], True),
-        ("Critical Ball Losses", [49], True),
-        ("Own Goals", [38], True),
-    ],
-}
-
+def is_inverted_metric(col_name: str) -> bool:
+    """Check if metric should use inverted color scale"""
+    col_lower = col_name.lower()
+    return any(inv in col_lower for inv in INVERTED_METRICS)
 
 # -------------------------
-# Name + position helpers
+# Data loading
 # -------------------------
-def positions_column(df: pd.DataFrame):
-    if "positions" in df.columns:
-        return "positions"
-    if "position" in df.columns:
-        return "position"
-    return None
-
-
-def normalize_positions_str(x) -> str:
-    if x is None or (isinstance(x, float) and np.isnan(x)):
-        return ""
-    return str(x).strip()
-
-
-def profiles_for_player(pos_str: str, available_profiles: set[str]):
-    if not pos_str:
-        return [p for p in DEFAULT_PROFILES if p in available_profiles][:3]
-
-    tokens = [t.strip().upper() for t in pos_str.replace(";", ",").split(",") if t.strip()]
-    chosen = []
-    for t in tokens:
-        for key, plist in POSITION_TO_PROFILES.items():
-            if key in t:
-                for p in plist:
-                    if p in available_profiles and p not in chosen:
-                        chosen.append(p)
-
-    if not chosen:
-        chosen = [p for p in DEFAULT_PROFILES if p in available_profiles]
-    return chosen[:3]
-
-
-def filter_for_profile(df: pd.DataFrame, pos_col: str | None, profile_name: str):
-    if not pos_col or profile_name not in PROFILE_TO_POSITIONS:
-        return df
-    tokens = PROFILE_TO_POSITIONS[profile_name]
-    mask = pd.Series(False, index=df.index)
-    for t in tokens:
-        mask |= df[pos_col].astype(str).str.contains(t, case=False, na=False)
-    out = df[mask]
-    return out if len(out) >= MIN_POSITION_SAMPLE else df
-
-
-# -------------------------
-# KPI resolver helpers
-# -------------------------
-def kpi_id_from_col(colname: str):
-    if not isinstance(colname, str):
-        return None
-    m = re.search(r"\((\d+)\)\s*$", colname.strip())
-    return int(m.group(1)) if m else None
-
-
-def resolve_by_kpi_id(kpi_id: int, columns):
-    suffix = f"({kpi_id})"
-    hits = [c for c in columns if isinstance(c, str) and c.strip().endswith(suffix)]
-    return sorted(hits, key=len)[0] if hits else None
-
-
-def resolve_any(candidates, columns):
-    for cand in candidates:
-        if isinstance(cand, int):
-            col = resolve_by_kpi_id(cand, columns)
-            if col:
-                return col
-        elif isinstance(cand, str):
-            if cand in columns:
-                return cand
-            cid = kpi_id_from_col(cand)
-            if cid is not None:
-                col = resolve_by_kpi_id(cid, columns)
-                if col:
-                    return col
-    return None
-
-
-def build_profiles_from_df(df: pd.DataFrame):
-    profiles = {}
-    cols = list(df.columns)
-    for prof_name, metrics in PROFILE_TEMPLATES.items():
-        built = []
-        for label, candidates, invert in metrics:
-            real = resolve_any(candidates, cols)
-            if real is None:
-                continue
-            built.append((label, real, invert))
-        if len(built) >= MIN_METRICS_PER_RADAR:
-            profiles[prof_name] = built[:MAX_METRICS_PER_RADAR]
-    return profiles
-
-
-# -------------------------
-# Percentile + normalization
-# -------------------------
-def safe_divide(num, denom, scale=1.0):
-    num_f = pd.to_numeric(num, errors="coerce").astype(float)
-    den_f = pd.to_numeric(denom, errors="coerce").astype(float)
-    out = np.full(len(num_f), np.nan, dtype=float)
-    np.divide(num_f.to_numpy(), den_f.to_numpy(), out=out, where=(den_f.to_numpy() > 0))
-    return out * float(scale)
-
-
-def compute_derived(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    needed = []
-    for spec in DERIVED.values():
-        needed += spec["num"]
-        if spec["denom"] is not None:
-            needed += spec["denom"]
-    for c in set(needed):
-        if c in out.columns:
-            out[c] = pd.to_numeric(out[c], errors="coerce")
-
-    for name, spec in DERIVED.items():
-        if any(c not in out.columns for c in spec["num"]):
-            out[name] = np.nan
-            continue
-        num = out[spec["num"]].sum(axis=1)
-        if spec["denom"] is None:
-            out[name] = pd.to_numeric(num, errors="coerce").astype(float) * float(spec["scale"])
-            continue
-        if any(c not in out.columns for c in spec["denom"]):
-            out[name] = np.nan
-            continue
-        denom = out[spec["denom"]].sum(axis=1)
-        out[name] = safe_divide(num, denom, scale=spec["scale"])
-    return out
-
-
-def percentile_rank(series: pd.Series, value, invert: bool):
-    s = pd.to_numeric(series, errors="coerce").dropna()
-    if s.empty or pd.isna(value):
-        return np.nan
-    rank = (s < value).sum() + 0.5 * (s == value).sum()
-    pct = rank / len(s) * 100
-    return 100 - pct if invert else pct
-
-
-def axis_range(series: pd.Series):
-    s = pd.to_numeric(series, errors="coerce").dropna()
-    if s.empty:
-        return (0.0, 1.0)
-    lo, hi = float(s.quantile(0.05)), float(s.quantile(0.95))
-    if hi == lo:
-        lo, hi = float(s.min()), float(s.max())
-    if hi == lo:
-        hi = lo + 1.0
-    return lo, hi
-
-
-def norm01(value, lo, hi, invert=False):
-    if pd.isna(value) or hi == lo:
-        return np.nan
-    x = np.clip((float(value) - lo) / (hi - lo), 0, 1)
-    return 1 - x if invert else float(x)
-
-
-# -------------------------
-# API core
-# -------------------------
-def parse_decimal_comma(series: pd.Series) -> pd.Series:
-    s = series.astype("string").str.replace(" ", "", regex=False)
-    s = s.str.replace(",", ".", regex=False)
-    return pd.to_numeric(s, errors="coerce")
-
-
-def get_with_retry(session: requests.Session, url: str, token: str):
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    for attempt in range(MAX_RETRIES + 1):
-        r = session.get(url, headers=headers, timeout=TIMEOUT_SECONDS)
-        if r.status_code < 400:
-            return r.json()
-        if r.status_code in (429, 500, 502, 503, 504):
-            wait = min(BACKOFF_CAP, BACKOFF_BASE * (2**attempt))
-            wait += random.uniform(0, 0.35 * wait)
-            if attempt >= MAX_RETRIES:
-                r.raise_for_status()
-            time.sleep(wait)
-            continue
-        r.raise_for_status()
-    raise RuntimeError("Retry loop exited unexpectedly")
-
-
-def get_access_token(session: requests.Session, username: str, password: str) -> str:
-    payload = {"client_id": "api", "grant_type": "password", "username": username, "password": password}
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    r = session.post(TOKEN_URL, data=payload, headers=headers, timeout=TIMEOUT_SECONDS)
-    r.raise_for_status()
-    return r.json()["access_token"]
-
-
-def unwrap_data(obj):
-    return obj["data"] if isinstance(obj, dict) and "data" in obj else obj
-
-
-def fetch_kpi_defs(session: requests.Session, token: str, language: str):
-    url = f"{BASE_API_URL}/v5/customerapi/kpis?language={language}"
-    return unwrap_data(get_with_retry(session, url, token))
-
-
-def fetch_iteration_players(session: requests.Session, iteration_id: int, token: str):
-    url = f"{BASE_API_URL}/v5/customerapi/iterations/{iteration_id}/players"
-    return unwrap_data(get_with_retry(session, url, token))
-
-
-def fetch_iteration_squads(session: requests.Session, iteration_id: int, token: str):
-    url = f"{BASE_API_URL}/v5/customerapi/iterations/{iteration_id}/squads"
-    return unwrap_data(get_with_retry(session, url, token))
-
-
-def fetch_player_kpis_for_squad(session: requests.Session, iteration_id: int, squad_id: int, token: str):
-    url = f"{BASE_API_URL}/v5/customerapi/iterations/{iteration_id}/squads/{squad_id}/player-kpis"
-    return unwrap_data(get_with_retry(session, url, token))
-
-
-def extract_long_rows(iteration_id: int, squad_id: int, squad_name: str, items: list):
-    out = []
-    for item in items or []:
-        matches = item.get("matches") or 0
-        player_obj = item.get("player") if isinstance(item, dict) else None
-        p = player_obj if isinstance(player_obj, dict) else item
-        player_id = (p or {}).get("id") or item.get("playerId")
-
-        for kv in (item.get("kpis") or []):
-            out.append(
-                dict(
-                    iterationId=iteration_id,
-                    squadId=squad_id,
-                    squadName=squad_name,
-                    playerId=player_id,
-                    matches=matches,
-                    kpiId=kv.get("kpiId"),
-                    value_raw=kv.get("value"),
-                )
-            )
-    return out
-
-
-@st.cache_data(show_spinner=False, ttl=60 * 30)
-def load_impect_iteration(username: str, password: str, iteration_id: int, language: str, max_workers: int, base_sleep: float):
-    session = requests.Session()
-    token = get_access_token(session, username, password)
-
-    kpi_defs = fetch_kpi_defs(session, token, language)
-    kpi_df = pd.json_normalize(kpi_defs if isinstance(kpi_defs, list) else [])
-    label_col = "details.label" if "details.label" in kpi_df.columns else "name"
-
-    kpi_lookup = (
-        kpi_df.rename(columns={"id": "kpiId", label_col: "kpiLabel", "name": "kpiTechnicalName"})[
-            ["kpiId", "kpiLabel", "kpiTechnicalName"]
-        ]
-        .drop_duplicates()
-    )
-    kpi_lookup["kpiId"] = pd.to_numeric(kpi_lookup["kpiId"], errors="coerce")
-
-    rename_map = dict(
-        zip(
-            kpi_lookup["kpiId"],
-            (
-                kpi_lookup["kpiLabel"]
-                .fillna(kpi_lookup["kpiTechnicalName"])
-                .fillna("kpi")
-                + " (" + kpi_lookup["kpiId"].astype("Int64").astype(str) + ")"
-            ),
-        )
-    )
-
-    players = fetch_iteration_players(session, iteration_id, token)
-    players_df = pd.json_normalize(players if isinstance(players, list) else [])
-    if "id" in players_df.columns:
-        players_df = players_df.rename(columns={"id": "playerId"})
-    players_df["playerId"] = pd.to_numeric(players_df["playerId"], errors="coerce")
-
-    for c in ["commonname", "firstname", "lastname", "positions"]:
-        if c not in players_df.columns:
-            players_df[c] = ""
-
-    squads = fetch_iteration_squads(session, iteration_id, token)
-    squads_df = pd.DataFrame([{"squadId": s.get("id"), "squadName": s.get("name")} for s in (squads or [])])
-    squads_df["squadId"] = pd.to_numeric(squads_df["squadId"], errors="coerce")
-    squads_list = squads_df.dropna(subset=["squadId"]).to_dict("records")
-
-    long_rows = []
-
-    def worker(squad):
-        sid = int(squad["squadId"])
-        sname = str(squad.get("squadName", ""))
-        if base_sleep:
-            time.sleep(base_sleep + random.uniform(0, base_sleep))
-        items = fetch_player_kpis_for_squad(session, iteration_id, sid, token)
-        if not isinstance(items, list):
-            return []
-        return extract_long_rows(iteration_id, sid, sname, items)
-
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = [ex.submit(worker, s) for s in squads_list]
-        for fut in as_completed(futures):
-            long_rows.extend(fut.result())
-
-    long_df = pd.DataFrame(long_rows)
-    if long_df.empty:
-        raise RuntimeError("No KPI rows returned from IMPECT API.")
-
-    long_df["playerId"] = pd.to_numeric(long_df["playerId"], errors="coerce")
-    long_df["kpiId"] = pd.to_numeric(long_df["kpiId"], errors="coerce")
-    long_df["matches"] = pd.to_numeric(long_df["matches"], errors="coerce").fillna(0)
-    long_df["value"] = parse_decimal_comma(long_df["value_raw"])
-    long_df = long_df.dropna(subset=["playerId", "kpiId"])
-
-    key_cols = ["iterationId", "squadId", "squadName", "playerId", "matches", "kpiId"]
-    long_df = long_df.groupby(key_cols, as_index=False)["value"].mean()
-
-    wide_df = (
-        long_df.pivot_table(
-            index=["iterationId", "squadId", "squadName", "playerId", "matches"],
-            columns="kpiId",
-            values="value",
-            aggfunc="mean",
-        )
-        .reset_index()
-    )
-    wide_df.columns.name = None
-    wide_df = wide_df.rename(columns={k: v for k, v in rename_map.items() if k in wide_df.columns})
-
-    wide_df = wide_df.merge(players_df, how="left", on="playerId")
-
-    cn = wide_df["commonname"].fillna("").astype(str).str.strip()
-    fallback = (
-        wide_df["firstname"].fillna("").astype(str).str.strip()
-        + " "
-        + wide_df["lastname"].fillna("").astype(str).str.strip()
-    ).str.strip()
-    wide_df["displayName"] = np.where(cn == "", fallback, cn)
-
-    meta = {"iterationId", "squadId", "squadName", "playerId", "matches", "commonname", "firstname", "lastname", "displayName", "positions"}
-    for c in wide_df.columns:
-        if c in meta:
-            continue
-        wide_df[c] = pd.to_numeric(wide_df[c], errors="coerce")
-
-    wide_df = compute_derived(wide_df)
-
-    return wide_df, players_df, squads_df, kpi_lookup
-
-
-# -------------------------
-# Radar UI builders (Plotly)
-# -------------------------
-def make_radar_plot(df_comp: pd.DataFrame, row: pd.Series, profile_metrics: list[tuple[str, str, bool]]):
-    labels = [m[0] for m in profile_metrics]
-    cols = [m[1] for m in profile_metrics]
-    invert_flags = [m[2] for m in profile_metrics]
-    n = len(labels)
-
-    player_vals = np.array([pd.to_numeric(row.get(c, np.nan), errors="coerce") for c in cols], dtype=float)
-    league_vals = np.array([pd.to_numeric(df_comp[c], errors="coerce").mean() for c in cols], dtype=float)
-
-    pcts = np.array([percentile_rank(df_comp[c], player_vals[i], invert_flags[i]) for i, c in enumerate(cols)], dtype=float)
-
-    ranges = [axis_range(df_comp[c]) for c in cols]
-    player_norm = np.array([norm01(player_vals[i], *ranges[i], invert_flags[i]) for i in range(n)], dtype=float)
-    league_norm = np.array([norm01(league_vals[i], *ranges[i], invert_flags[i]) for i in range(n)], dtype=float)
-
-    player_norm = np.nan_to_num(player_norm, nan=0.0)
-    league_norm = np.nan_to_num(league_norm, nan=0.0)
-    pcts_clean = np.nan_to_num(pcts, nan=0.0)
-
-    theta = labels + [labels[0]]
-    r_player = player_norm.tolist() + [player_norm[0]]
-    r_league = league_norm.tolist() + [league_norm[0]]
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatterpolar(
-            r=r_league,
-            theta=theta,
-            name="Benchmark avg",
-            fill="toself",
-            opacity=0.25,
-        )
-    )
-    fig.add_trace(
-        go.Scatterpolar(
-            r=r_player,
-            theta=theta,
-            name="Player",
-            fill="toself",
-            opacity=0.65,
-        )
-    )
-
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(range=[0, 1], showticklabels=False, ticks=""),
-        ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="left", x=0),
-        height=520,
-        margin=dict(t=50, b=20, l=30, r=30),
-    )
-
-    table = pd.DataFrame(
-        {
-            "Metric": labels,
-            "Column": cols,
-            "Value": player_vals,
-            "Percentile": pcts_clean,
-            "Lower is better": invert_flags,
-        }
-    ).sort_values("Percentile", ascending=False)
-
-    return fig, table
-
-
-# -------------------------
-# UI
-# -------------------------
-st.title("⚽ IMPECT Scout — Profile Radars")
-st.caption("Load from Excel templates or IMPECT API. Auto-builds radars from available KPIs.")
-
-# Data source selection
-data_source = st.radio("Data source", ["📁 Excel Templates", "🌐 IMPECT API"], horizontal=True)
-
-if data_source == "📁 Excel Templates":
-    with st.expander("📁 Load Excel Template", expanded=True):
-        uploaded_file = st.file_uploader(
-            "Upload position template Excel", 
-            type=["xlsx"], 
-            help="Upload a template file (GK, CB, FB, DM, CM, AM, W, ST)"
-        )
+@st.cache_data
+def load_template(template_path: str) -> pd.DataFrame:
+    """Load and prepare template data"""
+    df = pd.read_excel(template_path)
+    
+    # Ensure display name
+    if "displayName" not in df.columns:
+        cn = df.get("commonname", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
+        fallback = (
+            df.get("firstname", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
+            + " "
+            + df.get("lastname", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
+        ).str.strip()
+        df["displayName"] = np.where(cn == "", fallback, cn)
+    
+    # Ensure numeric matches column
+    if "matches" in df.columns:
+        df["matches"] = pd.to_numeric(df["matches"], errors="coerce").fillna(0)
+    else:
+        df["matches"] = 0
+    
+    return df
+
+def get_kpi_columns(df: pd.DataFrame) -> list:
+    """Extract KPI columns (those with IDs in parentheses)"""
+    base_cols = {
+        'iterationId', 'squadId', 'squadName', 'playerId', 'matches', 'positions',
+        'commonname', 'firstname', 'lastname', 'birthdate', 'birthplace', 
+        'leg', 'countryIds', 'gender', 'season', 'dataVersion', 
+        'lastChangeTimestamp', 'competition_name', 'competition_type', 
+        'competition_gender', 'displayName'
+    }
+    
+    kpi_cols = []
+    for col in df.columns:
+        if col not in base_cols and pd.api.types.is_numeric_dtype(df[col]):
+            kpi_cols.append(col)
+    
+    return sorted(kpi_cols)
+
+def calculate_percentiles(df: pd.DataFrame, kpi_cols: list) -> pd.DataFrame:
+    """Calculate percentile rankings for all KPI columns"""
+    df_pct = df.copy()
+    
+    for col in kpi_cols:
+        pct_col = f"{col}_pct"
+        values = pd.to_numeric(df[col], errors="coerce")
         
-        if uploaded_file:
-            try:
-                with st.spinner("Loading Excel..."):
-                    wide_df = pd.read_excel(uploaded_file)
-                    
-                    # Ensure derived metrics
-                    wide_df = compute_derived(wide_df)
-                    
-                    # Create display name if needed
-                    if "displayName" not in wide_df.columns:
-                        cn = wide_df.get("commonname", pd.Series([""] * len(wide_df))).fillna("").astype(str).str.strip()
-                        fallback = (
-                            wide_df.get("firstname", pd.Series([""] * len(wide_df))).fillna("").astype(str).str.strip()
-                            + " "
-                            + wide_df.get("lastname", pd.Series([""] * len(wide_df))).fillna("").astype(str).str.strip()
-                        ).str.strip()
-                        wide_df["displayName"] = np.where(cn == "", fallback, cn)
-                    
-                    st.session_state["wide_df"] = wide_df
-                    st.session_state["kpi_lookup"] = None
-                    st.session_state["data_source"] = "excel"
-                    
-                    st.success(f"Loaded ✅ {wide_df.shape[0]:,} rows × {wide_df.shape[1]:,} columns")
-                    
-            except Exception as e:
-                st.error(f"Excel load failed: {e}")
+        if is_inverted_metric(col):
+            # For "bad" metrics, invert percentiles
+            df_pct[pct_col] = 100 - values.rank(pct=True, method='average') * 100
+        else:
+            df_pct[pct_col] = values.rank(pct=True, method='average') * 100
+    
+    return df_pct
 
-elif data_source == "🌐 IMPECT API":
-    with st.expander("🔐 Connect & Load API", expanded=True):
-        c1, c2, c3, c4, c5 = st.columns([2.2, 2.2, 1.1, 1.2, 1.3])
+def calculate_per90(df: pd.DataFrame, kpi_cols: list) -> pd.DataFrame:
+    """Calculate per-90 minutes stats"""
+    df_p90 = df.copy()
+    
+    # Assume 90 minutes per match (could be refined with actual minutes)
+    df_p90["minutes"] = df_p90["matches"] * 90
+    
+    for col in kpi_cols:
+        if "%" not in col and "win" not in col.lower():  # Don't convert rates
+            p90_col = f"{col}_p90"
+            df_p90[p90_col] = (pd.to_numeric(df[col], errors="coerce") / df_p90["minutes"]) * 90
+    
+    return df_p90
 
-        default_user = st.secrets.get("IMPECT_USERNAME", "")
-        default_pass = st.secrets.get("IMPECT_PASSWORD", "")
+# -------------------------
+# Styling functions
+# -------------------------
+def style_dataframe(df: pd.DataFrame, stat_cols: list, show_percentiles: bool = True):
+    """Apply FBref/Savant-style formatting"""
+    
+    def color_percentile(val, col_name):
+        """Color cell based on percentile"""
+        if pd.isna(val):
+            return 'background-color: #FFFFFF'
+        
+        pct_col = f"{col_name}_pct"
+        if pct_col not in df.columns:
+            return 'background-color: #FFFFFF'
+        
+        # Get percentile for this row
+        idx = val.name if hasattr(val, 'name') else 0
+        if idx not in df.index:
+            return 'background-color: #FFFFFF'
+        
+        pct = df.loc[idx, pct_col]
+        
+        if is_inverted_metric(col_name):
+            color = percentile_color_inverted(pct)
+        else:
+            color = percentile_color(pct)
+        
+        return f'background-color: {color}'
+    
+    # Start with base styling
+    styler = df.style
+    
+    # Apply color coding to stat columns
+    for col in stat_cols:
+        if col in df.columns:
+            styler = styler.applymap(
+                lambda val: color_percentile(val, col),
+                subset=[col]
+            )
+    
+    # Format numbers
+    format_dict = {}
+    for col in stat_cols:
+        if col in df.columns:
+            format_dict[col] = '{:.2f}'
+    
+    if format_dict:
+        styler = styler.format(format_dict, na_rep="-")
+    
+    return styler
 
-        with c1:
-            username = st.text_input("Username", value=default_user)
-        with c2:
-            password = st.text_input("Password", value=default_pass, type="password")
-        with c3:
-            iteration_id = st.number_input("Iteration", min_value=1, value=1421, step=1)
-        with c4:
-            language = st.selectbox("KPI language", ["en", "nl", "de", "fr"], index=0)
-        with c5:
-            load_btn = st.button("🚀 Load", use_container_width=True)
+# -------------------------
+# Main app
+# -------------------------
+st.title("📊 IMPECT Stats Tables")
+st.caption("FBref / Baseball Savant style - Percentile-ranked player statistics")
 
-        max_workers = st.slider("Workers", 1, 6, 3)
-        base_sleep = st.slider("Throttle", 0.0, 1.0, 0.2, 0.05)
-
-        clear = st.button("Clear cache", use_container_width=True)
-        if clear:
-            load_impect_iteration.clear()
-            for k in ["wide_df", "kpi_lookup", "data_source"]:
-                st.session_state.pop(k, None)
-            st.success("Cache cleared.")
-
-        if load_btn:
-            if not username or not password:
-                st.error("Please provide username/password (or set Streamlit secrets).")
-            else:
-                try:
-                    with st.spinner("Loading iteration from IMPECT..."):
-                        wide_df, players_df, squads_df, kpi_lookup = load_impect_iteration(
-                            username=username,
-                            password=password,
-                            iteration_id=int(iteration_id),
-                            language=language,
-                            max_workers=int(max_workers),
-                            base_sleep=float(base_sleep),
-                        )
-                    st.session_state["wide_df"] = wide_df
-                    st.session_state["kpi_lookup"] = kpi_lookup
-                    st.session_state["data_source"] = "api"
-                    st.success(f"Loaded ✅ {wide_df.shape[0]:,} rows × {wide_df.shape[1]:,} columns")
-                except Exception as e:
-                    st.error(f"IMPECT load failed: {e}")
-
-if "wide_df" not in st.session_state:
-    st.info("Load data to start.")
-    st.stop()
-
-wide_df: pd.DataFrame = st.session_state["wide_df"]
-
-# Build profiles
-profiles = build_profiles_from_df(wide_df)
-if not profiles:
-    st.error("No profiles could be built from this data (KPIs missing).")
-    st.stop()
-
-pos_col = positions_column(wide_df)
-
-# Player selection and radar
-left, right = st.columns([1.15, 2.25])
-
-with left:
-    st.subheader("🔎 Player picker")
-
-    q = st.text_input("Search name", placeholder="Type player…")
-    squads = sorted([s for s in wide_df["squadName"].dropna().unique().tolist()]) if "squadName" in wide_df.columns else []
-    squad_sel = st.multiselect("Squad", squads, default=[])
-
-    min_matches = st.number_input("Min matches", min_value=0, value=0, step=1)
-
-    df_pool = wide_df.copy()
-    if q:
-        df_pool = df_pool[df_pool["displayName"].astype(str).str.lower().str.contains(q.strip().lower(), na=False)]
-    if squad_sel and "squadName" in df_pool.columns:
-        df_pool = df_pool[df_pool["squadName"].isin(squad_sel)]
-    if "matches" in df_pool.columns:
-        df_pool = df_pool[pd.to_numeric(df_pool["matches"], errors="coerce").fillna(0) >= float(min_matches)]
-
-    st.caption(f"{df_pool.shape[0]:,} rows in selection pool")
-
-    if df_pool.empty:
-        st.warning("No rows match your filters.")
-        st.stop()
-
-    df_pick = df_pool.sort_values(["displayName", "matches"], ascending=[True, False]).copy()
-    df_pick["__opt__"] = (
-        df_pick["displayName"].astype(str)
-        + "  •  "
-        + df_pick.get("squadName", pd.Series([""] * len(df_pick))).astype(str)
-        + "  •  matches="
-        + df_pick.get("matches", pd.Series([0] * len(df_pick))).astype(str)
+# Sidebar for settings
+with st.sidebar:
+    st.header("⚙️ Settings")
+    
+    # Templates directory input
+    templates_dir = st.text_input(
+        "Templates Directory",
+        value=DEFAULT_TEMPLATES_DIR,
+        help="Path to folder containing template Excel files"
     )
-
-    opt = st.selectbox("Select player row", df_pick["__opt__"].tolist(), index=0)
-    player_row = df_pick[df_pick["__opt__"] == opt].iloc[0]
-
-    st.markdown("#### Player")
-    info_cols = [c for c in ["displayName", "squadName", "positions", "matches", "playerId"] if c in player_row.index]
-    st.dataframe(pd.DataFrame([player_row[info_cols].to_dict()]), use_container_width=True)
-
-    suggested = profiles_for_player(normalize_positions_str(player_row.get(pos_col, "")) if pos_col else "", set(profiles.keys()))
-    prof_default = suggested[0] if suggested else sorted(list(profiles.keys()))[0]
-
-    profile_choice = st.selectbox("Profile", options=sorted(list(profiles.keys())), index=sorted(list(profiles.keys())).index(prof_default))
-    benchmark_by_pos = st.checkbox("Benchmark by position tokens", value=BENCHMARK_BY_POSITION)
-
-with right:
-    st.subheader("📊 Radar")
-
-    prof_metrics = profiles.get(profile_choice, [])
-    if len(prof_metrics) < MIN_METRICS_PER_RADAR:
-        st.warning("Not enough metrics available for this profile.")
-        st.stop()
-
-    if benchmark_by_pos:
-        df_comp = filter_for_profile(df_pool, pos_col, profile_choice)
+    
+    # Check if directory exists
+    if not os.path.exists(templates_dir):
+        st.error(f"Directory not found: {templates_dir}")
+        st.info("Upload templates manually below")
+        use_upload = True
     else:
-        df_comp = df_pool
+        use_upload = False
+        st.success("✅ Templates directory found")
+    
+    st.divider()
+    
+    # Position selection
+    st.subheader("Position")
+    position_code = st.selectbox(
+        "Select position",
+        options=list(POSITION_TEMPLATES.keys()),
+        format_func=lambda x: f"{x} - {POSITION_TEMPLATES[x]}"
+    )
+    
+    st.divider()
+    
+    # Display options
+    st.subheader("Display")
+    show_per90 = st.checkbox("Show per-90 stats", value=False)
+    show_percentiles = st.checkbox("Show percentile columns", value=False)
+    min_matches = st.number_input("Minimum matches", min_value=0, value=1, step=1)
+    
+    st.divider()
+    
+    # Advanced filters
+    with st.expander("🔍 Advanced Filters"):
+        squad_filter = st.text_input("Squad contains", placeholder="e.g., Ajax")
+        name_filter = st.text_input("Name contains", placeholder="e.g., Van")
 
-    fig, table = make_radar_plot(df_comp, player_row, prof_metrics)
-    st.plotly_chart(fig, use_container_width=True)
+# Load data
+if use_upload:
+    uploaded_file = st.file_uploader(
+        f"Upload {position_code} template",
+        type=["xlsx"],
+        help=f"Upload {POSITION_TEMPLATES[position_code]} template Excel file"
+    )
+    
+    if not uploaded_file:
+        st.info("⬆️ Upload a template file to begin")
+        st.stop()
+    
+    df_raw = load_template(uploaded_file)
+else:
+    template_file = os.path.join(templates_dir, f"{position_code}_template.xlsx")
+    
+    if not os.path.exists(template_file):
+        st.error(f"Template not found: {template_file}")
+        st.stop()
+    
+    df_raw = load_template(template_file)
 
-    st.markdown("#### KPI Table")
-    st.dataframe(
-        table[["Metric", "Value", "Percentile", "Lower is better"]].sort_values("Percentile", ascending=False),
-        use_container_width=True,
-        height=420,
+# Show data info
+st.info(f"📁 Loaded: **{len(df_raw)}** players | Position: **{POSITION_TEMPLATES[position_code]}**")
+
+# Get KPI columns
+kpi_cols = get_kpi_columns(df_raw)
+
+if not kpi_cols:
+    st.error("No KPI columns found in template")
+    st.stop()
+
+# Calculate percentiles
+df_with_pct = calculate_percentiles(df_raw, kpi_cols)
+
+# Calculate per-90 if requested
+if show_per90:
+    df_with_pct = calculate_per90(df_with_pct, kpi_cols)
+    display_kpi_cols = [col for col in df_with_pct.columns if col.endswith("_p90")]
+    table_suffix = " (per 90)"
+else:
+    display_kpi_cols = kpi_cols
+    table_suffix = ""
+
+# Apply filters
+df_filtered = df_with_pct.copy()
+
+if min_matches > 0:
+    df_filtered = df_filtered[df_filtered["matches"] >= min_matches]
+
+if squad_filter:
+    if "squadName" in df_filtered.columns:
+        df_filtered = df_filtered[
+            df_filtered["squadName"].astype(str).str.contains(squad_filter, case=False, na=False)
+        ]
+
+if name_filter:
+    df_filtered = df_filtered[
+        df_filtered["displayName"].astype(str).str.contains(name_filter, case=False, na=False)
+    ]
+
+st.info(f"🔍 Filtered: **{len(df_filtered)}** players match criteria")
+
+if df_filtered.empty:
+    st.warning("No players match your filters")
+    st.stop()
+
+# Column selector
+st.subheader("📋 Select Stats to Display")
+
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    # Smart defaults based on position
+    if position_code == "GK":
+        default_stats = [col for col in display_kpi_cols if any(
+            x in col.lower() for x in ["save", "catch", "shot", "pass"]
+        )][:10]
+    elif position_code in ["CB", "FB"]:
+        default_stats = [col for col in display_kpi_cols if any(
+            x in col.lower() for x in ["duel", "pass", "aerial", "touch"]
+        )][:10]
+    elif position_code in ["DM", "CM"]:
+        default_stats = [col for col in display_kpi_cols if any(
+            x in col.lower() for x in ["pass", "duel", "touch", "progressive"]
+        )][:10]
+    elif position_code in ["AM", "W", "ST"]:
+        default_stats = [col for col in display_kpi_cols if any(
+            x in col.lower() for x in ["goal", "assist", "shot", "xg", "touch", "dribble"]
+        )][:10]
+    else:
+        default_stats = display_kpi_cols[:10]
+    
+    selected_stats = st.multiselect(
+        "Statistics to show",
+        options=display_kpi_cols,
+        default=default_stats,
+        help="Select which statistics to display in the table"
     )
 
-    csv = table.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇️ Download radar table (CSV)",
-        data=csv,
-        file_name=f"radar_{player_row.get('displayName','player')}_{profile_choice}.csv".replace(" ", "_"),
-        mime="text/csv",
-        use_container_width=True,
-    )
+with col2:
+    st.metric("Stats selected", len(selected_stats))
+    st.metric("Max recommended", 15)
 
+if not selected_stats:
+    st.warning("Select at least one statistic")
+    st.stop()
+
+# Build display dataframe
+display_cols = ["displayName", "squadName", "matches"] + selected_stats
+
+if show_percentiles:
+    # Add percentile columns
+    pct_cols = [f"{col}_pct" for col in selected_stats if f"{col}_pct" in df_filtered.columns]
+    # Interleave stats and percentiles
+    display_cols_with_pct = ["displayName", "squadName", "matches"]
+    for stat in selected_stats:
+        display_cols_with_pct.append(stat)
+        pct_col = f"{stat}_pct"
+        if pct_col in df_filtered.columns:
+            display_cols_with_pct.append(pct_col)
+    display_cols = display_cols_with_pct
+
+# Filter to display columns that exist
+display_cols = [col for col in display_cols if col in df_filtered.columns]
+
+df_display = df_filtered[display_cols].copy()
+
+# Sort by first stat column (descending)
+if len(selected_stats) > 0:
+    df_display = df_display.sort_values(selected_stats[0], ascending=False)
+
+# Display the table
+st.subheader(f"📊 {POSITION_TEMPLATES[position_code]} Stats{table_suffix}")
+
+# Style and display
+styled_df = style_dataframe(df_display, selected_stats, show_percentiles)
+
+# Convert to HTML with custom CSS
+html = styled_df.to_html(index=False, escape=False)
+
+# Add custom CSS for table styling
+table_css = """
+<style>
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 13px;
+    }
+    th {
+        background-color: #1e40af;
+        color: white;
+        padding: 12px 8px;
+        text-align: left;
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    tr:hover {
+        background-color: #f9fafb;
+    }
+    tr:nth-child(even) {
+        background-color: #f3f4f6;
+    }
+    tr:nth-child(even):hover {
+        background-color: #f9fafb;
+    }
+</style>
+"""
+
+# Display table
+st.markdown(table_css + html, unsafe_allow_html=True)
+
+# Stats summary
 st.divider()
+col1, col2, col3, col4 = st.columns(4)
 
-tabs = st.tabs(["📦 Data (filtered pool)", "📦 Data (full wide)", "🧾 KPI definitions", "🧰 Profiles built"])
-with tabs[0]:
-    st.dataframe(df_pool, use_container_width=True, height=650)
-with tabs[1]:
-    st.dataframe(wide_df, use_container_width=True, height=650)
-with tabs[2]:
-    kpi_lookup = st.session_state.get("kpi_lookup")
-    if isinstance(kpi_lookup, pd.DataFrame):
-        st.dataframe(kpi_lookup, use_container_width=True, height=650)
-    else:
-        st.info("KPI definitions not available (Excel mode).")
-with tabs[3]:
-    prof_info = []
-    for p, mets in profiles.items():
-        prof_info.append({"Profile": p, "Metrics": len(mets), "Metric names": ", ".join([m[0] for m in mets])})
-    st.dataframe(pd.DataFrame(prof_info).sort_values("Profile"), use_container_width=True, height=450)
+with col1:
+    st.metric("Players shown", len(df_display))
+with col2:
+    avg_matches = df_display["matches"].mean()
+    st.metric("Avg matches", f"{avg_matches:.1f}")
+with col3:
+    if selected_stats:
+        avg_first_stat = df_display[selected_stats[0]].mean()
+        st.metric(f"Avg {selected_stats[0][:20]}", f"{avg_first_stat:.2f}")
+with col4:
+    if len(selected_stats) > 1:
+        avg_second_stat = df_display[selected_stats[1]].mean()
+        st.metric(f"Avg {selected_stats[1][:20]}", f"{avg_second_stat:.2f}")
+
+# Export options
+st.divider()
+st.subheader("💾 Export")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    csv = df_display.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        "📥 Download CSV",
+        data=csv,
+        file_name=f"{position_code}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+with col2:
+    # Excel export with styling
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_display.to_excel(writer, index=False, sheet_name='Stats')
+    
+    st.download_button(
+        "📥 Download Excel",
+        data=buffer.getvalue(),
+        file_name=f"{position_code}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+# Show legend
+with st.expander("🎨 Color Scale Legend"):
+    st.markdown("""
+    **Percentile Color Scale** (Baseball Savant style)
+    
+    - 🟦 **90-100th**: Elite (Dark Blue)
+    - 🟦 **75-89th**: Excellent (Blue)
+    - 🟦 **60-74th**: Above Average (Light Blue)
+    - 🟦 **40-59th**: Average (Very Light Blue)
+    - ⬜ **25-39th**: Below Average (Pale Blue)
+    - ⬜ **10-24th**: Poor (Almost White)
+    - ⬜ **0-9th**: Very Poor (White)
+    
+    *For metrics where lower is better (fouls, turnovers), the scale is inverted.*
+    """)
+
+# Data preview tab
+with st.expander("📊 Full Dataset Preview"):
+    st.dataframe(df_filtered, use_container_width=True, height=400)
