@@ -1,112 +1,110 @@
 """
 IMPECT Stats Table - FBref/Baseball Savant Style
 =================================================
-Modern, interactive stats tables with percentile rankings and color coding.
+Automatically loads Keuken Kampioen Divisie data (Standard + xG combined)
 
 Features:
-- Position-specific stat tables
-- Percentile-based color coding
-- Advanced filtering
+- Baseball Savant-style percentile color coding
+- Position filtering
 - Per 90 calculations
+- Advanced stat selection
 - Export to CSV/Excel
 """
 
-import os
 import pandas as pd
 import numpy as np
 import streamlit as st
-import plotly.graph_objects as go
-from pathlib import Path
+from io import BytesIO
 
 # -------------------------
 # Config
 # -------------------------
-st.set_page_config(page_title="IMPECT Stats", page_icon="📊", layout="wide")
+st.set_page_config(page_title="IMPECT Stats", page_icon="⚽", layout="wide")
 
-# Default templates directory (change to your actual path)
-DEFAULT_TEMPLATES_DIR = "/data"
+# Hard-coded file path - change this to your actual file location
+DATA_FILE = "/Users/user/IMPECT/season_25-26_leagues/Keuken Kampioen Divisie.xlsx"
 
-# Position templates available
-POSITION_TEMPLATES = {
-    "GK": "Goalkeeper",
-    "CB": "Center Back",
-    "FB": "Fullback",
-    "DM": "Defensive Midfielder",
-    "CM": "Central Midfielder",
-    "AM": "Attacking Midfielder",
-    "W": "Winger",
-    "ST": "Striker",
-}
-
-# Color scales for percentile rankings
+# Color scales for percentile rankings (Baseball Savant style)
 def percentile_color(pct):
-    """Return color based on percentile (Baseball Savant style)"""
+    """Return color based on percentile"""
     if pd.isna(pct):
         return "#FFFFFF"
     if pct >= 90:
-        return "#08519c"  # Dark blue
+        return "#08519c"  # Dark blue - Elite
     if pct >= 75:
-        return "#3182bd"  # Blue
+        return "#3182bd"  # Blue - Excellent
     if pct >= 60:
-        return "#6baed6"  # Light blue
+        return "#6baed6"  # Light blue - Above average
     if pct >= 40:
-        return "#9ecae1"  # Very light blue
+        return "#9ecae1"  # Very light blue - Average
     if pct >= 25:
-        return "#c6dbef"  # Pale blue
-    if pct >= 10:
-        return "#eff3ff"  # Almost white
-    return "#FFFFFF"  # White
+        return "#c6dbef"  # Pale blue - Below average
+    return "#eff3ff"  # Almost white - Poor
 
-def percentile_color_inverted(pct):
-    """Inverted color scale (for metrics where lower is better)"""
-    if pd.isna(pct):
-        return "#FFFFFF"
-    return percentile_color(100 - pct)
-
-# Metrics where lower is better
-INVERTED_METRICS = {
-    "Number of Fouls", "fouls", "red", "yellow", "card",
-    "lost", "unsuccessful", "failed", "off target"
-}
+# Metrics where lower is better (inverted color scale)
+INVERTED_METRICS = [
+    "Number of Fouls", "Lost Ground Duels", "Lost Aerial Duels",
+    "Unsuccessful Passes", "Failed passes", "Failed dribbles",
+    "Total Shots Off Target", "Red Card", "Yellow Card",
+    "Ball losses", "Critical Ball Losses"
+]
 
 def is_inverted_metric(col_name: str) -> bool:
     """Check if metric should use inverted color scale"""
-    col_lower = col_name.lower()
-    return any(inv in col_lower for inv in INVERTED_METRICS)
+    return any(inv.lower() in col_name.lower() for inv in INVERTED_METRICS)
 
 # -------------------------
 # Data loading
 # -------------------------
 @st.cache_data
-def load_template(template_path: str) -> pd.DataFrame:
-    """Load and prepare template data"""
-    df = pd.read_excel(template_path)
+def load_data(file_path: str):
+    """Load and merge Standard + xG sheets"""
     
-    # Ensure display name
-    if "displayName" not in df.columns:
-        cn = df.get("commonname", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
-        fallback = (
-            df.get("firstname", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
-            + " "
-            + df.get("lastname", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
-        ).str.strip()
-        df["displayName"] = np.where(cn == "", fallback, cn)
+    # Load both sheets
+    standard_df = pd.read_excel(file_path, sheet_name="Standard")
+    xg_df = pd.read_excel(file_path, sheet_name="xG")
     
-    # Ensure numeric matches column
-    if "matches" in df.columns:
-        df["matches"] = pd.to_numeric(df["matches"], errors="coerce").fillna(0)
-    else:
-        df["matches"] = 0
+    # Base columns (metadata)
+    base_cols = [
+        'iterationId', 'squadId', 'squadName', 'playerId', 'matches', 'positions',
+        'commonname', 'firstname', 'lastname', 'birthdate', 'birthplace',
+        'leg', 'countryIds', 'gender', 'season', 'dataVersion',
+        'lastChangeTimestamp', 'competition_name', 'competition_type', 'competition_gender'
+    ]
     
-    return df
+    # Get KPI columns (non-base columns)
+    standard_kpis = [col for col in standard_df.columns if col not in base_cols]
+    xg_kpis = [col for col in xg_df.columns if col not in base_cols]
+    
+    # Merge on playerId
+    merged_df = standard_df.merge(
+        xg_df[['playerId'] + xg_kpis],
+        on='playerId',
+        how='left',
+        suffixes=('', '_xg')
+    )
+    
+    # Create display name
+    cn = merged_df.get("commonname", pd.Series([""] * len(merged_df))).fillna("").astype(str).str.strip()
+    fallback = (
+        merged_df.get("firstname", pd.Series([""] * len(merged_df))).fillna("").astype(str).str.strip()
+        + " "
+        + merged_df.get("lastname", pd.Series([""] * len(merged_df))).fillna("").astype(str).str.strip()
+    ).str.strip()
+    merged_df["displayName"] = np.where(cn == "", fallback, cn)
+    
+    # Ensure matches is numeric
+    merged_df["matches"] = pd.to_numeric(merged_df["matches"], errors="coerce").fillna(0)
+    
+    return merged_df, standard_kpis, xg_kpis
 
 def get_kpi_columns(df: pd.DataFrame) -> list:
-    """Extract KPI columns (those with IDs in parentheses)"""
+    """Extract all KPI columns"""
     base_cols = {
         'iterationId', 'squadId', 'squadName', 'playerId', 'matches', 'positions',
-        'commonname', 'firstname', 'lastname', 'birthdate', 'birthplace', 
-        'leg', 'countryIds', 'gender', 'season', 'dataVersion', 
-        'lastChangeTimestamp', 'competition_name', 'competition_type', 
+        'commonname', 'firstname', 'lastname', 'birthdate', 'birthplace',
+        'leg', 'countryIds', 'gender', 'season', 'dataVersion',
+        'lastChangeTimestamp', 'competition_name', 'competition_type',
         'competition_gender', 'displayName'
     }
     
@@ -137,149 +135,114 @@ def calculate_per90(df: pd.DataFrame, kpi_cols: list) -> pd.DataFrame:
     """Calculate per-90 minutes stats"""
     df_p90 = df.copy()
     
-    # Assume 90 minutes per match (could be refined with actual minutes)
+    # Assume 90 minutes per match
     df_p90["minutes"] = df_p90["matches"] * 90
     
     for col in kpi_cols:
-        if "%" not in col and "win" not in col.lower():  # Don't convert rates
+        # Don't convert rates/percentages to per-90
+        if "%" not in col and " %" not in col.lower() and df_p90["minutes"].sum() > 0:
             p90_col = f"{col}_p90"
             df_p90[p90_col] = (pd.to_numeric(df[col], errors="coerce") / df_p90["minutes"]) * 90
     
     return df_p90
 
-# -------------------------x
-# Styling functions
 # -------------------------
-def style_dataframe(df: pd.DataFrame, stat_cols: list, show_percentiles: bool = True):
-    """Apply FBref/Savant-style formatting"""
+# Position filtering
+# -------------------------
+POSITION_GROUPS = {
+    "All Outfield": [],
+    "Defenders": ["DEFENDER", "CENTRE_BACK", "CENTRAL_DEFENDER", "CENTER_BACK"],
+    "Fullbacks": ["WINGBACK", "LEFT_WINGBACK", "RIGHT_WINGBACK"],
+    "Midfielders": ["MIDFIELD", "CENTRAL_MIDFIELD", "ATTACKING_MIDFIELD", "DEFENSE_MIDFIELD"],
+    "Forwards": ["FORWARD", "WINGER", "CENTER_FORWARD", "LEFT_WINGER", "RIGHT_WINGER"],
+}
+
+def filter_by_position(df: pd.DataFrame, position_group: str):
+    """Filter dataframe by position group"""
+    if position_group == "All Outfield" or not position_group:
+        return df
     
-    def color_percentile(val, col_name):
-        """Color cell based on percentile"""
-        if pd.isna(val):
-            return 'background-color: #FFFFFF'
-        
-        pct_col = f"{col_name}_pct"
-        if pct_col not in df.columns:
-            return 'background-color: #FFFFFF'
-        
-        # Get percentile for this row
-        idx = val.name if hasattr(val, 'name') else 0
-        if idx not in df.index:
-            return 'background-color: #FFFFFF'
-        
-        pct = df.loc[idx, pct_col]
-        
-        if is_inverted_metric(col_name):
-            color = percentile_color_inverted(pct)
+    tokens = POSITION_GROUPS.get(position_group, [])
+    if not tokens:
+        return df
+    
+    mask = pd.Series(False, index=df.index)
+    for token in tokens:
+        mask |= df["positions"].astype(str).str.contains(token, case=False, na=False)
+    
+    return df[mask]
+
+# -------------------------
+# Styling
+# -------------------------
+def create_color_map(df: pd.DataFrame, col: str):
+    """Create color map for a column based on percentiles"""
+    pct_col = f"{col}_pct"
+    if pct_col not in df.columns:
+        return ['background-color: #FFFFFF'] * len(df)
+    
+    colors = []
+    for pct in df[pct_col]:
+        if is_inverted_metric(col):
+            color = percentile_color(100 - pct if not pd.isna(pct) else pct)
         else:
             color = percentile_color(pct)
-        
-        return f'background-color: {color}'
+        colors.append(f'background-color: {color}')
     
-    # Start with base styling
-    styler = df.style
-    
-    # Apply color coding to stat columns
-    for col in stat_cols:
-        if col in df.columns:
-            styler = styler.applymap(
-                lambda val: color_percentile(val, col),
-                subset=[col]
-            )
-    
-    # Format numbers
-    format_dict = {}
-    for col in stat_cols:
-        if col in df.columns:
-            format_dict[col] = '{:.2f}'
-    
-    if format_dict:
-        styler = styler.format(format_dict, na_rep="-")
-    
-    return styler
+    return colors
 
 # -------------------------
 # Main app
 # -------------------------
-st.title("📊 IMPECT Stats Tables")
-st.caption("FBref / Baseball Savant style - Percentile-ranked player statistics")
+st.title("⚽ Keuken Kampioen Divisie Stats")
+st.caption("FBref / Baseball Savant style - Standard + xG combined")
 
-# Sidebar for settings
+# Load data
+try:
+    df_raw, standard_kpis, xg_kpis = load_data(DATA_FILE)
+    st.success(f"✅ Loaded {len(df_raw)} players from {DATA_FILE.split('/')[-1]}")
+except Exception as e:
+    st.error(f"Failed to load data: {e}")
+    st.info(f"Expected file at: {DATA_FILE}")
+    st.stop()
+
+# Get all KPI columns
+kpi_cols = get_kpi_columns(df_raw)
+
+# Sidebar filters
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("🔍 Filters")
     
-    # Templates directory input
-    templates_dir = st.text_input(
-        "Templates Directory",
-        value=DEFAULT_TEMPLATES_DIR,
-        help="Path to folder containing template Excel files"
+    # Position filter
+    position_group = st.selectbox(
+        "Position Group",
+        options=list(POSITION_GROUPS.keys()),
+        index=0
     )
     
-    # Check if directory exists
-    if not os.path.exists(templates_dir):
-        st.error(f"Directory not found: {templates_dir}")
-        st.info("Upload templates manually below")
-        use_upload = True
-    else:
-        use_upload = False
-        st.success("✅ Templates directory found")
+    # Minimum matches
+    min_matches = st.number_input(
+        "Minimum matches",
+        min_value=0,
+        value=3,
+        step=1
+    )
     
     st.divider()
     
-    # Position selection
-    st.subheader("Position")
-    position_code = st.selectbox(
-        "Select position",
-        options=list(POSITION_TEMPLATES.keys()),
-        format_func=lambda x: f"{x} - {POSITION_TEMPLATES[x]}"
-    )
+    # Squad filter
+    squads = sorted(df_raw["squadName"].dropna().unique().tolist())
+    squad_filter = st.multiselect("Squad", squads)
+    
+    # Name search
+    name_filter = st.text_input("Player name contains", placeholder="e.g., Van")
     
     st.divider()
     
     # Display options
-    st.subheader("Display")
+    st.header("📊 Display")
     show_per90 = st.checkbox("Show per-90 stats", value=False)
     show_percentiles = st.checkbox("Show percentile columns", value=False)
-    min_matches = st.number_input("Minimum matches", min_value=0, value=1, step=1)
-    
-    st.divider()
-    
-    # Advanced filters
-    with st.expander("🔍 Advanced Filters"):
-        squad_filter = st.text_input("Squad contains", placeholder="e.g., Ajax")
-        name_filter = st.text_input("Name contains", placeholder="e.g., Van")
-
-# Load data
-if use_upload:
-    uploaded_file = st.file_uploader(
-        f"Upload {position_code} template",
-        type=["xlsx"],
-        help=f"Upload {POSITION_TEMPLATES[position_code]} template Excel file"
-    )
-    
-    if not uploaded_file:
-        st.info("⬆️ Upload a template file to begin")
-        st.stop()
-    
-    df_raw = load_template(uploaded_file)
-else:
-    template_file = os.path.join(templates_dir, f"{position_code}_template.xlsx")
-    
-    if not os.path.exists(template_file):
-        st.error(f"Template not found: {template_file}")
-        st.stop()
-    
-    df_raw = load_template(template_file)
-
-# Show data info
-st.info(f"📁 Loaded: **{len(df_raw)}** players | Position: **{POSITION_TEMPLATES[position_code]}**")
-
-# Get KPI columns
-kpi_cols = get_kpi_columns(df_raw)
-
-if not kpi_cols:
-    st.error("No KPI columns found in template")
-    st.stop()
 
 # Calculate percentiles
 df_with_pct = calculate_percentiles(df_raw, kpi_cols)
@@ -293,78 +256,121 @@ else:
     display_kpi_cols = kpi_cols
     table_suffix = ""
 
-# Apply filters
-df_filtered = df_with_pct.copy()
+# Apply position filter first
+df_filtered = filter_by_position(df_with_pct, position_group)
 
+# Apply other filters
 if min_matches > 0:
     df_filtered = df_filtered[df_filtered["matches"] >= min_matches]
 
 if squad_filter:
-    if "squadName" in df_filtered.columns:
-        df_filtered = df_filtered[
-            df_filtered["squadName"].astype(str).str.contains(squad_filter, case=False, na=False)
-        ]
+    df_filtered = df_filtered[df_filtered["squadName"].isin(squad_filter)]
 
 if name_filter:
     df_filtered = df_filtered[
         df_filtered["displayName"].astype(str).str.contains(name_filter, case=False, na=False)
     ]
 
-st.info(f"🔍 Filtered: **{len(df_filtered)}** players match criteria")
+st.info(f"🔍 **{len(df_filtered)}** players match filters | Position: **{position_group}**")
 
 if df_filtered.empty:
     st.warning("No players match your filters")
     st.stop()
 
-# Column selector
-st.subheader("📋 Select Stats to Display")
+# Stat category selection
+st.subheader("📋 Select Statistics")
 
-col1, col2 = st.columns([3, 1])
+# Create tabs for stat categories
+tab1, tab2, tab3 = st.tabs(["⚽ Standard Stats", "📈 xG Stats", "🎯 Custom Selection"])
 
-with col1:
-    # Smart defaults based on position
-    if position_code == "GK":
-        default_stats = [col for col in display_kpi_cols if any(
-            x in col.lower() for x in ["save", "catch", "shot", "pass"]
-        )][:10]
-    elif position_code in ["CB", "FB"]:
-        default_stats = [col for col in display_kpi_cols if any(
-            x in col.lower() for x in ["duel", "pass", "aerial", "touch"]
-        )][:10]
-    elif position_code in ["DM", "CM"]:
-        default_stats = [col for col in display_kpi_cols if any(
-            x in col.lower() for x in ["pass", "duel", "touch", "progressive"]
-        )][:10]
-    elif position_code in ["AM", "W", "ST"]:
-        default_stats = [col for col in display_kpi_cols if any(
-            x in col.lower() for x in ["goal", "assist", "shot", "xg", "touch", "dribble"]
-        )][:10]
-    else:
-        default_stats = display_kpi_cols[:10]
+with tab1:
+    st.caption("Standard event-based statistics")
     
-    selected_stats = st.multiselect(
-        "Statistics to show",
-        options=display_kpi_cols,
-        default=default_stats,
-        help="Select which statistics to display in the table"
+    # Smart defaults for standard
+    default_standard = [
+        col for col in display_kpi_cols 
+        if any(x in col for x in standard_kpis)
+        and any(key in col.lower() for key in [
+            "goal", "assist", "pass", "shot", "duel", "touch", "dribble"
+        ])
+    ][:12]
+    
+    selected_stats_standard = st.multiselect(
+        "Standard statistics",
+        options=[col for col in display_kpi_cols if any(x in col for x in standard_kpis)],
+        default=default_standard
     )
+    
+    if st.button("Show Standard Stats Table", use_container_width=True):
+        selected_stats = selected_stats_standard
 
-with col2:
-    st.metric("Stats selected", len(selected_stats))
-    st.metric("Max recommended", 15)
+with tab2:
+    st.caption("Expected goals and threat metrics")
+    
+    # Smart defaults for xG
+    default_xg = [
+        col for col in display_kpi_cols 
+        if any(x in col for x in xg_kpis)
+    ][:12]
+    
+    selected_stats_xg = st.multiselect(
+        "xG statistics",
+        options=[col for col in display_kpi_cols if any(x in col for x in xg_kpis)],
+        default=default_xg
+    )
+    
+    if st.button("Show xG Stats Table", use_container_width=True):
+        selected_stats = selected_stats_xg
+
+with tab3:
+    st.caption("Mix and match any stats")
+    
+    # Create categories for easier selection
+    categories = {
+        "Goals & Assists": ["goal", "assist"],
+        "Passing": ["pass"],
+        "Shooting": ["shot"],
+        "Duels": ["duel", "aerial", "ground"],
+        "Possession": ["touch", "dribble"],
+        "xG Metrics": ["xg", "expected"],
+    }
+    
+    selected_category = st.selectbox("Quick filter", ["All"] + list(categories.keys()))
+    
+    if selected_category == "All":
+        filtered_kpis = display_kpi_cols
+    else:
+        keywords = categories[selected_category]
+        filtered_kpis = [
+            col for col in display_kpi_cols 
+            if any(kw in col.lower() for kw in keywords)
+        ]
+    
+    selected_stats_custom = st.multiselect(
+        "Select any statistics",
+        options=filtered_kpis,
+        default=filtered_kpis[:10] if filtered_kpis else []
+    )
+    
+    if st.button("Show Custom Stats Table", use_container_width=True):
+        selected_stats = selected_stats_custom
+
+# Default to standard stats
+if 'selected_stats' not in locals():
+    selected_stats = default_standard if default_standard else display_kpi_cols[:10]
 
 if not selected_stats:
-    st.warning("Select at least one statistic")
+    st.warning("⚠️ Select at least one statistic from the tabs above")
     st.stop()
 
+st.metric("📊 Statistics displayed", len(selected_stats))
+
 # Build display dataframe
-display_cols = ["displayName", "squadName", "matches"] + selected_stats
+display_cols = ["displayName", "squadName", "positions", "matches"] + selected_stats
 
 if show_percentiles:
-    # Add percentile columns
-    pct_cols = [f"{col}_pct" for col in selected_stats if f"{col}_pct" in df_filtered.columns]
-    # Interleave stats and percentiles
-    display_cols_with_pct = ["displayName", "squadName", "matches"]
+    # Add percentile columns interleaved
+    display_cols_with_pct = ["displayName", "squadName", "positions", "matches"]
     for stat in selected_stats:
         display_cols_with_pct.append(stat)
         pct_col = f"{stat}_pct"
@@ -372,81 +378,67 @@ if show_percentiles:
             display_cols_with_pct.append(pct_col)
     display_cols = display_cols_with_pct
 
-# Filter to display columns that exist
+# Filter to existing columns
 display_cols = [col for col in display_cols if col in df_filtered.columns]
 
 df_display = df_filtered[display_cols].copy()
 
-# Sort by first stat column (descending)
-if len(selected_stats) > 0:
+# Sort by first stat (descending)
+if selected_stats:
     df_display = df_display.sort_values(selected_stats[0], ascending=False)
 
-# Display the table
-st.subheader(f"📊 {POSITION_TEMPLATES[position_code]} Stats{table_suffix}")
-
-# Style and display
-styled_df = style_dataframe(df_display, selected_stats, show_percentiles)
-
-# Convert to HTML with custom CSS
-html = styled_df.to_html(index=False, escape=False)
-
-# Add custom CSS for table styling
-table_css = """
-<style>
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 13px;
-    }
-    th {
-        background-color: #1e40af;
-        color: white;
-        padding: 12px 8px;
-        text-align: left;
-        font-weight: 600;
-        position: sticky;
-        top: 0;
-        z-index: 10;
-    }
-    td {
-        padding: 10px 8px;
-        border-bottom: 1px solid #e5e7eb;
-    }
-    tr:hover {
-        background-color: #f9fafb;
-    }
-    tr:nth-child(even) {
-        background-color: #f3f4f6;
-    }
-    tr:nth-child(even):hover {
-        background-color: #f9fafb;
-    }
-</style>
-"""
-
 # Display table
-st.markdown(table_css + html, unsafe_allow_html=True)
+st.subheader(f"📊 Stats Table{table_suffix}")
 
-# Stats summary
+# Apply styling with color coding
+styled_df = df_display.style
+
+for stat in selected_stats:
+    if stat in df_display.columns:
+        styled_df = styled_df.apply(
+            lambda _: create_color_map(df_display, stat),
+            subset=[stat],
+            axis=0
+        )
+
+# Format numbers
+format_dict = {}
+for stat in selected_stats:
+    if stat in df_display.columns:
+        # Check if values are generally small (< 1) for more decimals
+        max_val = df_display[stat].max()
+        if pd.notna(max_val) and max_val < 1:
+            format_dict[stat] = '{:.3f}'
+        elif pd.notna(max_val) and max_val < 10:
+            format_dict[stat] = '{:.2f}'
+        else:
+            format_dict[stat] = '{:.1f}'
+
+if format_dict:
+    styled_df = styled_df.format(format_dict, na_rep="-")
+
+# Display
+st.dataframe(styled_df, use_container_width=True, height=600)
+
+# Summary stats
 st.divider()
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Players shown", len(df_display))
+    st.metric("Players", len(df_display))
 with col2:
     avg_matches = df_display["matches"].mean()
-    st.metric("Avg matches", f"{avg_matches:.1f}")
+    st.metric("Avg Matches", f"{avg_matches:.1f}")
 with col3:
     if selected_stats:
-        avg_first_stat = df_display[selected_stats[0]].mean()
-        st.metric(f"Avg {selected_stats[0][:20]}", f"{avg_first_stat:.2f}")
+        first_stat_avg = df_display[selected_stats[0]].mean()
+        st.metric(f"Avg {selected_stats[0][:25]}", f"{first_stat_avg:.2f}")
 with col4:
     if len(selected_stats) > 1:
-        avg_second_stat = df_display[selected_stats[1]].mean()
-        st.metric(f"Avg {selected_stats[1][:20]}", f"{avg_second_stat:.2f}")
+        second_stat_avg = df_display[selected_stats[1]].mean()
+        st.metric(f"Avg {selected_stats[1][:25]}", f"{second_stat_avg:.2f}")
 
-# Export options
+# Export
 st.divider()
 st.subheader("💾 Export")
 
@@ -457,14 +449,12 @@ with col1:
     st.download_button(
         "📥 Download CSV",
         data=csv,
-        file_name=f"{position_code}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+        file_name=f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
         mime="text/csv",
         use_container_width=True
     )
 
 with col2:
-    # Excel export with styling
-    from io import BytesIO
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         df_display.to_excel(writer, index=False, sheet_name='Stats')
@@ -472,27 +462,22 @@ with col2:
     st.download_button(
         "📥 Download Excel",
         data=buffer.getvalue(),
-        file_name=f"{position_code}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+        file_name=f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
 
-# Show legend
+# Legend
 with st.expander("🎨 Color Scale Legend"):
     st.markdown("""
     **Percentile Color Scale** (Baseball Savant style)
     
-    - 🟦 **90-100th**: Elite (Dark Blue)
-    - 🟦 **75-89th**: Excellent (Blue)
-    - 🟦 **60-74th**: Above Average (Light Blue)
-    - 🟦 **40-59th**: Average (Very Light Blue)
-    - ⬜ **25-39th**: Below Average (Pale Blue)
-    - ⬜ **10-24th**: Poor (Almost White)
-    - ⬜ **0-9th**: Very Poor (White)
+    - 🟦 **90-100th**: Elite (Dark Blue) `#08519c`
+    - 🟦 **75-89th**: Excellent (Blue) `#3182bd`
+    - 🟦 **60-74th**: Above Average (Light Blue) `#6baed6`
+    - 🟦 **40-59th**: Average (Very Light Blue) `#9ecae1`
+    - ⬜ **25-39th**: Below Average (Pale Blue) `#c6dbef`
+    - ⬜ **0-24th**: Poor (Almost White) `#eff3ff`
     
-    *For metrics where lower is better (fouls, turnovers), the scale is inverted.*
+    *For "bad" metrics (fouls, turnovers, unsuccessful passes), the scale is automatically inverted.*
     """)
-
-# Data preview tab
-with st.expander("📊 Full Dataset Preview"):
-    st.dataframe(df_filtered, use_container_width=True, height=400)
