@@ -22,7 +22,7 @@ from io import BytesIO
 st.set_page_config(page_title="IMPECT Stats", page_icon="⚽", layout="wide")
 
 # Hard-coded file path - change this to your actual file location
-DATA_FILE = "/Users/user/IMPECT/season_25-26_leagues/Keuken Kampioen Divisie.xlsx"
+DATA_FILE = "Keuken Kampioen Divisie.xlsx"
 
 # Color scales for percentile rankings (Baseball Savant style)
 def percentile_color(pct):
