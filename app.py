@@ -1,9 +1,12 @@
 """
-IMPECT Stats Table — Multi-League with ALWAYS-VISIBLE LEFT FILTER PANEL
-======================================================================
+IMPECT Stats Table — Multi-League + Player Profiles (ALWAYS-VISIBLE LEFT FILTER PANEL)
+====================================================================================
 ✅ League switch buttons on top (from ./data filenames)
-✅ REAL left menu (not Streamlit sidebar) => always visible
-✅ Filters: League, Club, Position group, Position abbreviations, Player search, Stat category, Stats selection
+✅ Real left menu (not Streamlit sidebar) => always visible
+✅ Filters: Club, Position group, Position abbreviations, Player search, Stat category, Stats selection
+✅ Two views:
+   1) Table
+   2) Player Profile (cards + top attributes + similar players)
 ✅ Percentile / Z-score mode toggle
 ✅ Subtle distribution bars
 ✅ Dark StatsBomb-esque palette
@@ -20,6 +23,7 @@ Each file must contain sheets: "Standard" and "xG"
 """
 
 import os
+from datetime import date
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -32,7 +36,7 @@ st.set_page_config(
     page_title="IMPECT Stats | Multi-League",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="collapsed",  # not used (we're not using sidebar)
+    initial_sidebar_state="collapsed",
 )
 
 DATA_DIR = "data"
@@ -70,6 +74,30 @@ def clamp(v: float, lo: float, hi: float) -> float:
 def clean_stat_name(stat: str) -> str:
     return stat.split(" (")[0] if " (" in stat else stat
 
+def safe_dt(x):
+    try:
+        return pd.to_datetime(x, errors="coerce")
+    except Exception:
+        return pd.NaT
+
+def calc_age(birthdate) -> str:
+    bd = safe_dt(birthdate)
+    if pd.isna(bd):
+        return ""
+    bd = bd.date()
+    today = date.today()
+    years = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+    return str(years)
+
+def html_escape(s: str) -> str:
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
 
 # ─────────────────────────────────────────────
 # Position abbreviations
@@ -215,8 +243,8 @@ def load_data(file_path: str) -> pd.DataFrame:
         + merged.get("lastname", "").fillna("").astype(str).str.strip()
     ).str.strip()
     merged["displayName"] = np.where(cn == "", fallback, cn)
-
     merged["posAbbr"] = merged.get("positions", "").apply(abbreviate_positions) if "positions" in merged.columns else ""
+
     return merged
 
 def get_kpis(df: pd.DataFrame) -> list[str]:
@@ -248,7 +276,7 @@ def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────
-# Cell styles
+# Cell styles for table bars
 # ─────────────────────────────────────────────
 def pct_cell_style(val):
     if pd.isna(val):
@@ -310,7 +338,6 @@ def z_cell_style(val):
         """
 
     track = "linear-gradient(to right, rgba(255,255,255,.06) 0%, rgba(255,255,255,.06) 100%)"
-
     return f"""
       background-color: transparent;
       background-image: {center}, {track}, {bar};
@@ -321,7 +348,46 @@ def z_cell_style(val):
 
 
 # ─────────────────────────────────────────────
-# CSS (left panel + table + controls)
+# Profile UI helpers (cards + bars)
+# ─────────────────────────────────────────────
+def pct_bar(pct: float) -> str:
+    if pd.isna(pct):
+        return f"<div class='barwrap'><div class='barbg'></div><div class='bartext dim'>-</div></div>"
+    p = clamp(float(pct), 0, 100)
+    if p >= 85:
+        col = PCT_HIGH
+    elif p <= 25:
+        col = PCT_LOW
+    else:
+        col = PCT_MID
+    return f"""
+    <div class="barwrap">
+      <div class="barbg"></div>
+      <div class="barfill" style="width:{p:.1f}%; background:{col};"></div>
+      <div class="bartext">{p:.0f}</div>
+    </div>
+    """
+
+def z_bar(z: float) -> str:
+    if pd.isna(z):
+        return f"<div class='zwrap'><div class='zcenter'></div><div class='bartext dim'>-</div></div>"
+    z = clamp(float(z), -3, 3)
+    pos = (z + 3) / 6 * 100
+    col = PCT_HIGH if z >= 0 else PCT_LOW
+    # bar from center (50) to pos
+    left = min(50, pos)
+    width = abs(pos - 50)
+    return f"""
+    <div class="zwrap">
+      <div class="zcenter"></div>
+      <div class="zfill" style="left:{left:.2f}%; width:{width:.2f}%; background:{col};"></div>
+      <div class="bartext">{z:+.2f}</div>
+    </div>
+    """
+
+
+# ─────────────────────────────────────────────
+# CSS (left panel + table + profile)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -333,7 +399,7 @@ html, body, [data-testid="stAppViewContainer"] {{
 #MainMenu, footer, header, .stDeployButton {{ visibility:hidden !important; display:none !important; }}
 
 .block-container {{
-  max-width: 1650px !important;
+  max-width: 1680px !important;
   padding-top: 1.0rem !important;
   padding-bottom: 2.0rem !important;
 }}
@@ -379,20 +445,12 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
   margin-bottom: 8px;
 }}
 
-div[data-testid="stSelectbox"] > div,
-div[data-testid="stMultiSelect"] > div,
-div[data-testid="stTextInput"] > div {{
-  background: transparent !important;
-}}
-
 [data-baseweb="select"] > div {{
   background: {BG} !important;
   border: 1px solid {TABLE_BORDER} !important;
   border-radius: 12px !important;
 }}
-[data-baseweb="select"] * {{
-  color: {TEXT_LIGHT} !important;
-}}
+[data-baseweb="select"] * {{ color: {TEXT_LIGHT} !important; }}
 
 input {{
   background: {BG} !important;
@@ -410,9 +468,7 @@ div[data-baseweb="menu"] {{
   border: 1px solid {TABLE_BORDER} !important;
   border-radius: 12px !important;
 }}
-div[data-baseweb="menu"] li:hover {{
-  background: {GRID_COLOR} !important;
-}}
+div[data-baseweb="menu"] li:hover {{ background: {GRID_COLOR} !important; }}
 
 [data-baseweb="tag"] {{
   background: {BG} !important;
@@ -500,9 +556,76 @@ table.dataframe thead th:nth-child(3),
 table.dataframe tbody td:nth-child(3) {{ position: sticky; left: 250px; z-index: 9; background: inherit !important; }}
 table.dataframe thead th:nth-child(4),
 table.dataframe tbody td:nth-child(4) {{ position: sticky; left: 420px; z-index: 9; background: inherit !important; }}
-
 table.dataframe tbody td:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.25); }}
 table.dataframe thead th:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.35); }}
+
+/* Profile bars */
+.barwrap {{
+  position: relative;
+  height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.06);
+  border: 1px solid {TABLE_BORDER};
+}}
+.barbg {{
+  position:absolute; inset:0;
+  background: rgba(255,255,255,.06);
+}}
+.barfill {{
+  position:absolute; left:0; top:0; bottom:0;
+  opacity: .85;
+}}
+.zwrap {{
+  position: relative;
+  height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.06);
+  border: 1px solid {TABLE_BORDER};
+}}
+.zcenter {{
+  position:absolute; top:0; bottom:0; left:50%;
+  width:2px;
+  background: {LEAGUE_COL};
+  opacity: .9;
+}}
+.zfill {{
+  position:absolute; top:0; bottom:0;
+  opacity: .85;
+}}
+.bartext {{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size: 11px;
+  font-weight: 900;
+  color: {TEXT_LIGHT};
+}}
+.dim {{ color: {TEXT_DIM} !important; }}
+.profile-grid {{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}}
+.metric-row {{
+  display:grid;
+  grid-template-columns: 1.2fr 1.0fr;
+  gap: 10px;
+  align-items:center;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(255,255,255,.10);
+}}
+.metric-row:last-child {{ border-bottom: none; }}
+.metric-name {{
+  font-weight: 850;
+  font-size: 12.5px;
+  color: {TEXT_LIGHT};
+}}
+.metric-sub {{
+  font-size: 11px;
+  color: {TEXT_DIM};
+  margin-top: 2px;
+}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -517,7 +640,7 @@ st.markdown(
   <div>
     <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Multi-League</span></div>
     <h1 style="margin:.45rem 0 0 0; font-size: 1.9rem;">Player Stats Explorer</h1>
-    <div class="small-muted">Left menu = filters • Top buttons = leagues • per 90 • percentiles + z-scores • distribution bars</div>
+    <div class="small-muted">Left menu = filters • Top buttons = leagues • Table + Player Profiles</div>
   </div>
   <div class="badge"><span class="dim">Leagues</span> {len(league_names)}</div>
 </div>
@@ -577,14 +700,11 @@ with left:
         unsafe_allow_html=True,
     )
 
-    # Player search
     name_filter = st.text_input("Player", placeholder="Search player name…", key=f"name_{league_name}")
 
-    # Club/Squad filter
     squads = ["All Clubs"] + sorted(df["squadName"].dropna().unique().tolist())
     squad = st.selectbox("Club", squads, key=f"club_{league_name}")
 
-    # Position group + specific positions
     pos_group = st.selectbox(
         "Position Group",
         ["All Positions", "Defenders", "Midfielders", "Forwards", "Goalkeepers"],
@@ -602,7 +722,6 @@ with left:
 
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # Stat category + stat selection
     categories = {
         "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
         "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
@@ -627,7 +746,6 @@ with left:
 
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # Modes
     metric_mode = st.selectbox("Metric Mode", ["Percentile", "Z-score"], index=0, key=f"metric_{league_name}")
     display_mode = st.selectbox("Display", ["Metrics only", "Raw only", "Raw + Metrics"], index=0, key=f"display_{league_name}")
     show_bars = st.toggle("Distribution bars", value=True, key=f"bars_{league_name}")
@@ -662,15 +780,15 @@ if pos_group != "All Positions":
     df_filtered = df_filtered[mask]
 
 if selected_posabbr:
-    # keep players whose posAbbr contains ANY selected token
     pos_mask = pd.Series(False, index=df_filtered.index)
     s = df_filtered.get("posAbbr", "").fillna("").astype(str)
     for p in selected_posabbr:
         pos_mask |= s.str.contains(rf"\b{p}\b", case=False, na=False)
     df_filtered = df_filtered[pos_mask]
 
+
 # ─────────────────────────────────────────────
-# Build display dataframe
+# Build display dataframe (for TABLE view)
 # ─────────────────────────────────────────────
 base_cols = ["displayName", "squadName", "posAbbr"]
 cols = base_cols.copy()
@@ -690,7 +808,7 @@ elif display_mode == "Raw only":
     for stat in selected_stats:
         if stat in df_filtered.columns:
             cols.append(stat)
-else:  # Raw + Metrics
+else:
     for stat in selected_stats:
         if stat in df_filtered.columns:
             cols.append(stat)
@@ -701,7 +819,6 @@ else:  # Raw + Metrics
 cols = [c for c in cols if c in df_filtered.columns]
 df_display = df_filtered[cols].copy()
 
-# Rename
 rename_map = {"posAbbr": "positions"}
 seen = set()
 for col in df_display.columns:
@@ -735,11 +852,10 @@ if sort_col is None and len(df_display.columns) > 3:
 if sort_col:
     df_display = df_display.sort_values(sort_col, ascending=False, na_position="last")
 
-# Rank
 if show_rank and sort_col:
     df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
 
-# Style
+# Style table
 styled = df_display.style.hide(axis="index")
 
 fmt = {}
@@ -755,7 +871,10 @@ for c in df_display.columns:
 styled = styled.format(fmt, na_rep="-")
 
 if "Rank" in df_display.columns:
-    styled = styled.applymap(lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;", subset=["Rank"])
+    styled = styled.applymap(
+        lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;",
+        subset=["Rank"],
+    )
 
 if show_bars:
     for c in df_display.columns:
@@ -765,11 +884,15 @@ if show_bars:
             styled = styled.applymap(z_cell_style, subset=[c])
 
 # ─────────────────────────────────────────────
-# RIGHT: Table + exports
+# RIGHT: Tabs (Table / Player Profile)
 # ─────────────────────────────────────────────
 with right:
-    st.markdown(
-        f"""
+    tabs = st.tabs(["📊 Table", "👤 Player Profile"])
+
+    # ---------- TABLE TAB ----------
+    with tabs[0]:
+        st.markdown(
+            f"""
 <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.2rem; margin-bottom:.4rem;">
   <div class="badge"><span class="dim">League</span> {league_name}</div>
   <div class="badge"><span class="dim">Players</span> {len(df_filtered)}</div>
@@ -778,31 +901,205 @@ with right:
   <div class="badge"><span class="dim">Mode</span> {metric_mode}</div>
 </div>
 """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
-
-    # Export
-    csv = df_display.to_csv(index=False).encode("utf-8")
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_display.to_excel(writer, index=False)
-
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='card'><h3 style='margin:0 0 .35rem 0;'>Export</h3>"
-        "<div class='small-muted'>Exports the current view (filters + columns shown).</div></div>",
-        unsafe_allow_html=True,
-    )
-    e1, e2 = st.columns([1, 1])
-    with e1:
-        st.download_button("⬇ CSV", csv, f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
-    with e2:
-        st.download_button(
-            "⬇ Excel",
-            buffer.getvalue(),
-            f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+            unsafe_allow_html=True,
         )
+
+        st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
+
+        # Export
+        csv = df_display.to_csv(index=False).encode("utf-8")
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_display.to_excel(writer, index=False)
+
+        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='card'><h3 style='margin:0 0 .35rem 0;'>Export</h3>"
+            "<div class='small-muted'>Exports the current view (filters + columns shown).</div></div>",
+            unsafe_allow_html=True,
+        )
+        e1, e2 = st.columns([1, 1])
+        with e1:
+            st.download_button(
+                "⬇ CSV",
+                csv,
+                f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True,
+            )
+        with e2:
+            st.download_button(
+                "⬇ Excel",
+                buffer.getvalue(),
+                f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
+    # ---------- PROFILE TAB ----------
+    with tabs[1]:
+        if len(df_filtered) == 0:
+            st.warning("No players match your current filters.")
+            st.stop()
+
+        # Player picker respects filters
+        player_list = df_filtered["displayName"].dropna().astype(str).sort_values().unique().tolist()
+        default_player = player_list[0]
+        player = st.selectbox("Select player", player_list, index=0, key=f"profile_player_{league_name}")
+
+        row = df_filtered[df_filtered["displayName"] == player].iloc[0]
+
+        player_club = row.get("squadName", "")
+        player_pos = row.get("posAbbr", row.get("positions", ""))
+        player_age = calc_age(row.get("birthdate", pd.NaT))
+        foot = row.get("leg", "")
+
+        # Header card
+        st.markdown(
+            f"""
+<div class="card">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+    <div>
+      <div class="badge"><span style="color:{PLAYER_COL}; font-weight:950;">{html_escape(player)}</span></div>
+      <div style="margin-top:.55rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+        <div class="badge"><span class="dim">Club</span> {html_escape(player_club)}</div>
+        <div class="badge"><span class="dim">Pos</span> {html_escape(player_pos)}</div>
+        {"<div class='badge'><span class='dim'>Age</span> " + html_escape(player_age) + "</div>" if player_age else ""}
+        {"<div class='badge'><span class='dim'>Foot</span> " + html_escape(foot) + "</div>" if str(foot).strip() else ""}
+      </div>
+      <div class="small-muted" style="margin-top:.55rem;">
+        Profile shows selected stats + top attributes + similar players (based on z-scores of selected stats).
+      </div>
+    </div>
+    <div class="badge"><span class="dim">League</span> {html_escape(league_name)}</div>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+        # Prepare metric columns for selected stats
+        metric_suffix = "_pct" if metric_mode == "Percentile" else "_z"
+        metric_is_pct = (metric_mode == "Percentile")
+
+        # Cards: Selected stats snapshot
+        # We will display: Stat name + bar (pct or z) + raw value underneath (always)
+        rows_html = []
+        for stat in selected_stats[:14]:  # keep readable; you can increase
+            raw = row.get(stat, np.nan)
+            m = row.get(f"{stat}{metric_suffix}", np.nan)
+
+            stat_label = html_escape(clean_stat_name(stat))
+            raw_txt = "-" if pd.isna(raw) else (f"{raw:.2f}" if isinstance(raw, (int, float, np.floating)) else html_escape(raw))
+
+            bar = pct_bar(m) if metric_is_pct else z_bar(m)
+            sub = f"<div class='metric-sub'>Raw: {raw_txt}</div>"
+
+            rows_html.append(
+                f"""
+<div class="metric-row">
+  <div>
+    <div class="metric-name">{stat_label}</div>
+    {sub}
+  </div>
+  <div>{bar}</div>
+</div>
+"""
+            )
+
+        snapshot_html = "\n".join(rows_html) if rows_html else "<div class='small-muted'>No stats selected.</div>"
+
+        # Top attributes (best percentiles across ALL KPIs)
+        # Always uses percentiles for "top attributes" (even if you view z-score)
+        pct_cols = [f"{k}_pct" for k in kpis if f"{k}_pct" in df_filtered.columns]
+        top_attrs = []
+        for k in kpis:
+            pc = f"{k}_pct"
+            if pc in df_filtered.columns:
+                top_attrs.append((k, row.get(pc, np.nan)))
+        top_attrs = [x for x in top_attrs if not pd.isna(x[1])]
+        top_attrs.sort(key=lambda x: x[1], reverse=True)
+        top_attrs = top_attrs[:10]
+
+        top_html_rows = []
+        for k, p in top_attrs:
+            top_html_rows.append(
+                f"""
+<div class="metric-row">
+  <div>
+    <div class="metric-name">{html_escape(clean_stat_name(k))}</div>
+    <div class="metric-sub">Percentile</div>
+  </div>
+  <div>{pct_bar(p)}</div>
+</div>
+"""
+            )
+        top_html = "\n".join(top_html_rows) if top_html_rows else "<div class='small-muted'>No percentile data available.</div>"
+
+        # Similar players (cosine similarity on selected stats z-scores)
+        sim_table = None
+        z_cols = []
+        for s in selected_stats:
+            zc = f"{s}_z"
+            if zc in df_filtered.columns:
+                z_cols.append(zc)
+
+        if len(z_cols) >= 2:
+            mat = df_filtered[["displayName", "squadName", "posAbbr"] + z_cols].copy()
+            X = mat[z_cols].to_numpy(dtype=float)
+            # impute NaNs with column means
+            col_means = np.nanmean(X, axis=0)
+            inds = np.where(np.isnan(X))
+            X[inds] = np.take(col_means, inds[1])
+            # normalize
+            norms = np.linalg.norm(X, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            Xn = X / norms
+
+            # target index
+            target_idx = mat.index[mat["displayName"] == player]
+            if len(target_idx) > 0:
+                ti = mat.index.get_loc(target_idx[0])
+                sims = Xn @ Xn[ti].reshape(-1, 1)
+                sims = sims.ravel()
+
+                mat2 = mat[["displayName", "squadName", "posAbbr"]].copy()
+                mat2["similarity"] = sims
+                mat2 = mat2.sort_values("similarity", ascending=False)
+                mat2 = mat2[mat2["displayName"] != player].head(12)
+                mat2["similarity"] = (mat2["similarity"] * 100).round(1)
+                sim_table = mat2.rename(
+                    columns={"displayName": "Player", "squadName": "Club", "posAbbr": "Pos", "similarity": "Similarity %"}
+                )
+
+        # Layout: two columns of profile content
+        cA, cB = st.columns([1, 1], gap="large")
+
+        with cA:
+            st.markdown(
+                "<div class='card'><h3 style='margin:0 0 .4rem 0;'>Selected stats snapshot</h3>"
+                "<div class='small-muted'>Bars reflect your current metric mode (Percentile or Z-score).</div>"
+                f"<div style='margin-top:.6rem;'>{snapshot_html}</div></div>",
+                unsafe_allow_html=True,
+            )
+
+        with cB:
+            st.markdown(
+                "<div class='card'><h3 style='margin:0 0 .4rem 0;'>Top attributes (percentiles)</h3>"
+                "<div class='small-muted'>Best percentiles across all available KPIs.</div>"
+                f"<div style='margin-top:.6rem;'>{top_html}</div></div>",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
+
+        # Similar players table
+        st.markdown(
+            "<div class='card'><h3 style='margin:0 0 .4rem 0;'>Similar players</h3>"
+            "<div class='small-muted'>Cosine similarity using z-scores of your selected stats (within current filters).</div></div>",
+            unsafe_allow_html=True,
+        )
+        if sim_table is None:
+            st.info("Select at least 2 stats (with z-scores available) to compute similar players.")
+        else:
+            st.dataframe(sim_table, use_container_width=True, hide_index=True)
