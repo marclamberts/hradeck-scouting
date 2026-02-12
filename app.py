@@ -1,15 +1,25 @@
 """
-IMPECT Stats Table — StatsBomb Edition (Improved + Position Abbreviations)
-=========================================================================
-Adds:
-- Positions shown as abbreviations (e.g., LB, RCB, CM, RW, ST)
-- Keeps everything else: dark palette, filters, pct/z toggles, subtle bars,
-  sticky first columns, hidden index, HTML rendering.
+IMPECT Stats Table — Multi-League (StatsBomb Edition)
+=====================================================
+What this version adds:
+- Reads ALL Excel files from ./data folder
+- Each Excel filename (without .xlsx) becomes a LEAGUE name
+- Tabs across the top to switch leagues
+- Same UI/filters/table styling per league
+- Positions abbreviated (LB/CB/CM/RW/ST etc.)
+- Percentile + Z-score mode + subtle distribution bars
+- Uses HTML rendering (Styler.to_html) so dark theme applies properly
 
-NOTE: Abbreviation is rule-based (works well for most strings like
-LEFT_WINGBACK_DEFENDER, CENTRAL_MIDFIELD, RIGHT_WINGER, CENTER_FORWARD, etc.)
+Folder structure expected:
+./data/
+  Keuken Kampioen Divisie.xlsx
+  Eredivisie.xlsx
+  Premier League.xlsx
+  ...
+Each file should contain sheets: "Standard" and "xG"
 """
 
+import os
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -19,13 +29,13 @@ from io import BytesIO
 # Config
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="IMPECT Stats | KKD",
+    page_title="IMPECT Stats | Multi-League",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-DATA_FILE = "Keuken Kampioen Divisie.xlsx"
+DATA_DIR = "data"  # <— put your league excels here
 
 # ─────────────────────────────────────────────
 # COLOUR PALETTE (StatsBomb-esque)
@@ -46,15 +56,15 @@ ACCENT_LINE = "#F5C518"
 
 INVERTED = ["foul", "lost", "unsuccessful", "failed", "off target", "red", "yellow"]
 
-
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
 def is_inverted(col: str) -> bool:
     c = (col or "").lower()
     return any(x in c for x in INVERTED)
 
-
 def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
-
 
 def clean_stat_name(stat: str) -> str:
     return stat.split(" (")[0] if " (" in stat else stat
@@ -64,25 +74,12 @@ def clean_stat_name(stat: str) -> str:
 # Position abbreviations
 # ─────────────────────────────────────────────
 def _abbr_single(token: str) -> str:
-    """
-    Convert a single IMPECT-like token to an abbreviation.
-    Examples:
-      LEFT_WINGBACK_DEFENDER -> LWB
-      RIGHT_WINGER -> RW
-      CENTER_FORWARD -> CF
-      CENTRAL_DEFENDER -> CB
-      DEFENSE_MIDFIELD -> DM
-      ATTACKING_MIDFIELD -> AM
-      CENTRAL_MIDFIELD -> CM
-    """
     t = (token or "").strip().upper()
     if not t:
         return ""
 
-    # Normalize some variants
     t = t.replace("CENTRE", "CENTER")
 
-    # Common direct mappings (if your dataset has exact tokens like these)
     direct = {
         "GOALKEEPER": "GK",
         "KEEPER": "GK",
@@ -103,7 +100,6 @@ def _abbr_single(token: str) -> str:
     if t in direct:
         return direct[t]
 
-    # Side
     side = ""
     if t.startswith("LEFT_"):
         side = "L"
@@ -112,27 +108,22 @@ def _abbr_single(token: str) -> str:
         side = "R"
         t = t[len("RIGHT_") :]
 
-    # Wingback / fullback / winger / wide
     if "WINGBACK" in t:
         return f"{side}WB" if side else "WB"
-    if "FULLBACK" in t or "BACK" == t:
+    if "FULLBACK" in t or t == "BACK":
         return f"{side}B" if side else "FB"
     if "WINGER" in t:
         return f"{side}W" if side else "W"
     if "WIDE" in t and "MIDFIELD" in t:
         return f"{side}M" if side else "WM"
 
-    # Defender types
     if "DEFENDER" in t or "DEFENCE" in t or "DEFENSE" in t:
-        # Central defenders
         if "CENTRAL" in t or "CENTER" in t:
             return "CB"
-        # If sided defender (e.g., LEFT_DEFENDER)
         if side:
             return f"{side}B"
         return "DEF"
 
-    # Midfield types
     if "MIDFIELD" in t:
         if "ATTACK" in t:
             return "AM"
@@ -140,12 +131,10 @@ def _abbr_single(token: str) -> str:
             return "DM"
         if "CENTRAL" in t or "CENTER" in t:
             return "CM"
-        # sided midfield if available
         if side:
             return f"{side}M"
         return "MF"
 
-    # Forward types
     if "FORWARD" in t:
         if "CENTER" in t or "CENTRAL" in t:
             return "CF"
@@ -153,23 +142,15 @@ def _abbr_single(token: str) -> str:
             return f"{side}F"
         return "F"
 
-    # Fallback: compress words to initials (e.g., ATTACKING_WINGER -> AW)
     parts = [p for p in token.split("_") if p]
     initials = "".join(p[0] for p in parts[:3]).upper()
     return initials or token[:3].upper()
 
-
 def abbreviate_positions(pos_str: str) -> str:
-    """
-    Convert a comma-separated positions string into short abbreviations.
-    Removes duplicates while preserving order.
-    """
     if pd.isna(pos_str) or not str(pos_str).strip():
         return ""
-
     tokens = [p.strip() for p in str(pos_str).split(",") if p.strip()]
-    out = []
-    seen = set()
+    out, seen = [], set()
     for tok in tokens:
         ab = _abbr_single(tok)
         if ab and ab not in seen:
@@ -179,7 +160,7 @@ def abbreviate_positions(pos_str: str) -> str:
 
 
 # ─────────────────────────────────────────────
-# Data loading
+# Data loading + transforms
 # ─────────────────────────────────────────────
 @st.cache_data
 def load_data(file_path: str) -> pd.DataFrame:
@@ -204,14 +185,8 @@ def load_data(file_path: str) -> pd.DataFrame:
     ).str.strip()
     merged["displayName"] = np.where(cn == "", fallback, cn)
 
-    # Create abbreviated positions column (keep original too)
-    if "positions" in merged.columns:
-        merged["posAbbr"] = merged["positions"].apply(abbreviate_positions)
-    else:
-        merged["posAbbr"] = ""
-
+    merged["posAbbr"] = merged.get("positions", "").apply(abbreviate_positions) if "positions" in merged.columns else ""
     return merged
-
 
 def get_kpis(df: pd.DataFrame) -> list[str]:
     base = {
@@ -223,14 +198,12 @@ def get_kpis(df: pd.DataFrame) -> list[str]:
     }
     return [c for c in df.columns if c not in base and pd.api.types.is_numeric_dtype(df[c])]
 
-
 def calc_percentiles(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
     for col in kpis:
         v = pd.to_numeric(df[col], errors="coerce")
         pct = v.rank(pct=True, method="average") * 100
         df[f"{col}_pct"] = 100 - pct if is_inverted(col) else pct
     return df
-
 
 def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
     for col in kpis:
@@ -251,19 +224,12 @@ def pct_cell_style(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
     v = clamp(float(val), 0.0, 100.0)
-
     if v >= 85:
-        col = PCT_HIGH
-        weight = 900
-        glow = "rgba(76,175,80,.10)"
+        col, weight, glow = PCT_HIGH, 900, "rgba(76,175,80,.10)"
     elif v <= 25:
-        col = PCT_LOW
-        weight = 900
-        glow = "rgba(229,57,53,.10)"
+        col, weight, glow = PCT_LOW, 900, "rgba(229,57,53,.10)"
     else:
-        col = PCT_MID
-        weight = 850
-        glow = "rgba(245,197,24,.10)"
+        col, weight, glow = PCT_MID, 850, "rgba(245,197,24,.10)"
 
     return f"""
       background-color: transparent;
@@ -274,7 +240,6 @@ def pct_cell_style(val):
       color: {TEXT_LIGHT};
       font-weight: {weight};
     """
-
 
 def z_cell_style(val):
     if pd.isna(val):
@@ -329,7 +294,7 @@ def z_cell_style(val):
 
 
 # ─────────────────────────────────────────────
-# Global CSS
+# Global CSS (applies to HTML table + controls)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -346,8 +311,8 @@ html, body, [class*="css"], .stMarkdown, .stText, .stCaption {{
 
 .block-container {{
   max-width: 1550px !important;
-  padding-top: 1.1rem !important;
-  padding-bottom: 2.2rem !important;
+  padding-top: 1.0rem !important;
+  padding-bottom: 2.0rem !important;
 }}
 
 section[data-testid="stSidebar"] {{
@@ -398,6 +363,23 @@ section[data-testid="stSidebar"] [data-baseweb="tag"] {{
 .badge .dim {{ color: {TEXT_DIM}; font-weight: 700; }}
 .small-muted {{ color: {TEXT_DIM} !important; }}
 hr {{ border-color: {TABLE_BORDER} !important; }}
+
+/* Tabs: make them match theme */
+.stTabs [data-baseweb="tab-list"] {{
+  gap: .5rem;
+}}
+.stTabs [data-baseweb="tab"] {{
+  background: {RADAR_BG};
+  border: 1px solid {TABLE_BORDER};
+  border-radius: 12px;
+  padding: .4rem .75rem;
+  color: {TEXT_LIGHT};
+}}
+.stTabs [aria-selected="true"] {{
+  background: {BG};
+  border-color: {ACCENT_LINE};
+  color: {ACCENT_LINE};
+}}
 
 /* Downloads */
 .stDownloadButton button {{
@@ -471,33 +453,21 @@ table.dataframe thead th:nth-child(3),
 table.dataframe tbody td:nth-child(3) {{ width: 170px; text-align:left; color:{TEXT_DIM} !important; font-weight: 750; }} /* Squad */
 table.dataframe thead th:nth-child(4),
 table.dataframe tbody td:nth-child(4) {{
-  width: 170px;              /* Positions abbreviations fit here */
-  text-align:left;
-  color:{TEXT_LIGHT} !important;
-  white-space: nowrap;
+  width: 160px; text-align:left; font-weight: 850;
 }}
 table.dataframe thead th:nth-child(n+5),
-table.dataframe tbody td:nth-child(n+5) {{ width: 110px; }}
+table.dataframe tbody td:nth-child(n+5) {{ width: 115px; }}
 
 /* Sticky first 4 columns */
 table.dataframe thead th:nth-child(1),
-table.dataframe tbody td:nth-child(1) {{
-  position: sticky; left: 0; z-index: 9; background: inherit !important;
-}}
+table.dataframe tbody td:nth-child(1) {{ position: sticky; left: 0; z-index: 9; background: inherit !important; }}
 table.dataframe thead th:nth-child(2),
-table.dataframe tbody td:nth-child(2) {{
-  position: sticky; left: 60px; z-index: 9; background: inherit !important;
-}}
+table.dataframe tbody td:nth-child(2) {{ position: sticky; left: 60px; z-index: 9; background: inherit !important; }}
 table.dataframe thead th:nth-child(3),
-table.dataframe tbody td:nth-child(3) {{
-  position: sticky; left: 250px; z-index: 9; background: inherit !important;
-}}
+table.dataframe tbody td:nth-child(3) {{ position: sticky; left: 250px; z-index: 9; background: inherit !important; }}
 table.dataframe thead th:nth-child(4),
-table.dataframe tbody td:nth-child(4) {{
-  position: sticky; left: 420px; z-index: 9; background: inherit !important;
-}}
+table.dataframe tbody td:nth-child(4) {{ position: sticky; left: 420px; z-index: 9; background: inherit !important; }}
 
-/* Shadow edge after sticky block */
 table.dataframe tbody td:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.25); }}
 table.dataframe thead th:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.35); }}
 </style>
@@ -506,276 +476,299 @@ table.dataframe thead th:nth-child(4) {{ box-shadow: 8px 0 12px rgba(0,0,0,.35);
 )
 
 # ─────────────────────────────────────────────
-# Header
+# Discover leagues from ./data folder
+# ─────────────────────────────────────────────
+def list_league_files(data_dir: str) -> list[tuple[str, str]]:
+    """
+    Returns list of (league_name, file_path) sorted by league_name.
+    """
+    if not os.path.isdir(data_dir):
+        return []
+    out = []
+    for fn in os.listdir(data_dir):
+        if fn.lower().endswith((".xlsx", ".xls")) and not fn.startswith("~$"):
+            league = os.path.splitext(fn)[0]
+            out.append((league, os.path.join(data_dir, fn)))
+    return sorted(out, key=lambda x: x[0].lower())
+
+
+league_files = list_league_files(DATA_DIR)
+if not league_files:
+    st.error(f"No Excel files found in '{DATA_DIR}/'. Add league files there (e.g., '{DATA_DIR}/Keuken Kampioen Divisie.xlsx').")
+    st.stop()
+
+league_names = [lf[0] for lf in league_files]
+league_to_path = {lg: path for lg, path in league_files}
+
+# ─────────────────────────────────────────────
+# Header + League Tabs
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
 <div class="card" style="display:flex; align-items:flex-end; justify-content:space-between; gap:1rem;">
   <div>
-    <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Keuken Kampioen Divisie</span></div>
+    <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Multi-League</span></div>
     <h1 style="margin:.45rem 0 0 0; font-size: 1.9rem;">Player Stats Explorer</h1>
-    <div class="small-muted">StatsBomb-style table • per 90 • percentiles + z-scores • subtle bars • positions abbreviated</div>
+    <div class="small-muted">Switch leagues with tabs • per 90 • percentiles + z-scores • subtle bars • positions abbreviated</div>
   </div>
-  <div class="badge"><span class="dim">Season</span> 25/26</div>
+  <div class="badge"><span class="dim">Leagues</span> {len(league_names)}</div>
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-# ─────────────────────────────────────────────
-# Load + compute
-# ─────────────────────────────────────────────
-try:
-    df = load_data(DATA_FILE)
-    kpis = get_kpis(df)
-    df = calc_percentiles(df, kpis)
-    df = calc_zscores(df, kpis)
-except Exception as e:
-    st.error(f"Failed to load: {e}")
-    st.stop()
+tabs = st.tabs(league_names)
 
 # ─────────────────────────────────────────────
-# Sidebar filters
+# App body per league tab
 # ─────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## Filters")
+for league_name, tab in zip(league_names, tabs):
+    with tab:
+        # Load league data
+        file_path = league_to_path[league_name]
+        try:
+            df = load_data(file_path)
+            kpis = get_kpis(df)
+            df = calc_percentiles(df, kpis)
+            df = calc_zscores(df, kpis)
+        except Exception as e:
+            st.error(f"Failed to load '{league_name}': {e}")
+            continue
 
-    name_filter = st.text_input("Player search", placeholder="Type player name…")
-    st.divider()
+        # Sidebar filters should apply globally; make them league-specific using unique keys
+        with st.sidebar:
+            st.markdown(f"## Filters — {league_name}")
 
-    squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
-    squad = st.selectbox("Squad", squads)
-    st.divider()
+            name_filter = st.text_input("Player search", placeholder="Type player name…", key=f"name_{league_name}")
+            st.divider()
 
-    pos_group = st.selectbox("Position group", ["All Positions", "Defenders", "Midfielders", "Forwards"])
-    st.divider()
+            squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
+            squad = st.selectbox("Squad", squads, key=f"squad_{league_name}")
+            st.divider()
 
-    categories = {
-        "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
-        "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
-        "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
-        "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
-        "📈 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
-    }
-    selected_cat = st.selectbox("Stat category", list(categories.keys()))
-    keywords = categories[selected_cat]
-    st.divider()
+            pos_group = st.selectbox(
+                "Position group",
+                ["All Positions", "Defenders", "Midfielders", "Forwards"],
+                key=f"posgrp_{league_name}",
+            )
+            st.divider()
 
-    display_mode = st.selectbox("Display mode", ["Percentiles", "Raw values", "Both"], index=0)
-    metric_mode = st.selectbox("Metric mode", ["Percentile", "Z-score"], index=0)
+            categories = {
+                "⚽ Goals & Assists": ["Goals", "Assists", "Pre Assist", "Shot-Creating Actions", "Shot xG from Passes"],
+                "🎯 Shooting": ["Total Shots", "Total Shots On Target", "Shot-based xG", "Post-Shot xG"],
+                "📤 Passing": ["Successful Passes", "Unsuccessful Passes", "Progressive passes", "Pass Accuracy"],
+                "🤼 Duels": ["Won Ground Duels", "Lost Ground Duels", "Won Aerial Duels", "Lost Aerial Duels"],
+                "📈 xG Metrics": ["Shot-based xG", "Post-Shot xG", "Expected Goal Assists", "Expected Shot Assists", "Packing non-shot-based xG"],
+            }
+            selected_cat = st.selectbox("Stat category", list(categories.keys()), key=f"cat_{league_name}")
+            keywords = categories[selected_cat]
+            st.divider()
 
-    show_bars = st.toggle("Show distribution bars", value=True)
-    show_rank = st.toggle("Show rank", value=True)
+            display_mode = st.selectbox("Display mode", ["Percentiles", "Raw values", "Both"], index=0, key=f"display_{league_name}")
+            metric_mode = st.selectbox("Metric mode", ["Percentile", "Z-score"], index=0, key=f"metric_{league_name}")
 
-    st.divider()
+            show_bars = st.toggle("Show distribution bars", value=True, key=f"bars_{league_name}")
+            show_rank = st.toggle("Show rank", value=True, key=f"rank_{league_name}")
 
-    matching = [k for k in kpis if any(kw in k for kw in keywords)]
-    if not matching:
-        matching = kpis[:]
-    stats_options = matching[:40] if len(matching) > 40 else matching
+            st.divider()
 
-    selected_stats = st.multiselect(
-        "Select stats",
-        options=stats_options,
-        default=stats_options[:8] if len(stats_options) >= 8 else stats_options,
-    )
+            matching = [k for k in kpis if any(kw in k for kw in keywords)]
+            if not matching:
+                matching = kpis[:]
+            stats_options = matching[:40] if len(matching) > 40 else matching
 
-    if not selected_stats:
-        st.warning("Select at least one stat.")
-        st.stop()
+            selected_stats = st.multiselect(
+                "Select stats",
+                options=stats_options,
+                default=stats_options[:8] if len(stats_options) >= 8 else stats_options,
+                key=f"stats_{league_name}",
+            )
 
-# ─────────────────────────────────────────────
-# Apply filters
-# ─────────────────────────────────────────────
-df_filtered = df.copy()
+            if not selected_stats:
+                st.warning("Select at least one stat.")
+                st.stop()
 
-if name_filter:
-    df_filtered = df_filtered[df_filtered["displayName"].str.contains(name_filter, case=False, na=False)]
+        # Apply filters
+        df_filtered = df.copy()
+        if name_filter:
+            df_filtered = df_filtered[df_filtered["displayName"].str.contains(name_filter, case=False, na=False)]
+        if squad != "All Squads":
+            df_filtered = df_filtered[df_filtered["squadName"] == squad]
+        if pos_group != "All Positions":
+            pos_map = {
+                "Defenders": ["DEFENDER", "BACK"],
+                "Midfielders": ["MIDFIELD"],
+                "Forwards": ["FORWARD", "WINGER"],
+            }
+            tokens = pos_map[pos_group]
+            mask = pd.Series(False, index=df_filtered.index)
+            for t in tokens:
+                mask |= df_filtered["positions"].str.contains(t, case=False, na=False)
+            df_filtered = df_filtered[mask]
 
-if squad != "All Squads":
-    df_filtered = df_filtered[df_filtered["squadName"] == squad]
-
-if pos_group != "All Positions":
-    pos_map = {
-        "Defenders": ["DEFENDER", "BACK"],
-        "Midfielders": ["MIDFIELD"],
-        "Forwards": ["FORWARD", "WINGER"],
-    }
-    tokens = pos_map[pos_group]
-    mask = pd.Series(False, index=df_filtered.index)
-    for t in tokens:
-        mask |= df_filtered["positions"].str.contains(t, case=False, na=False)
-    df_filtered = df_filtered[mask]
-
-# ─────────────────────────────────────────────
-# Badges
-# ─────────────────────────────────────────────
-st.markdown(
-    f"""
+        # Badges row
+        st.markdown(
+            f"""
 <div style="margin-top: 1rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+  <div class="badge"><span class="dim">League</span> {league_name}</div>
   <div class="badge"><span class="dim">Players</span> {len(df_filtered)}</div>
-  <div class="badge"><span class="dim">Stats</span> {len(selected_stats)}</div>
   <div class="badge"><span class="dim">Teams</span> {df_filtered["squadName"].nunique()}</div>
-  <div class="badge"><span class="dim">Display</span> {display_mode}</div>
-  <div class="badge"><span class="dim">Metric</span> {metric_mode}</div>
+  <div class="badge"><span class="dim">Stats</span> {len(selected_stats)}</div>
 </div>
 """,
-    unsafe_allow_html=True,
-)
+            unsafe_allow_html=True,
+        )
 
-# ─────────────────────────────────────────────
-# Build display dataframe
-# ─────────────────────────────────────────────
-# Use abbreviated positions column
-base_cols = ["displayName", "squadName", "posAbbr"]
-cols = base_cols.copy()
+        # Build display dataframe (use abbreviated positions)
+        base_cols = ["displayName", "squadName", "posAbbr"]
+        cols = base_cols.copy()
 
-metric_suffix = "_pct" if metric_mode == "Percentile" else "_z"
-metric_label = "(PCT)" if metric_mode == "Percentile" else "(Z)"
+        metric_suffix = "_pct" if metric_mode == "Percentile" else "_z"
+        metric_label = "(PCT)" if metric_mode == "Percentile" else "(Z)"
 
-if display_mode == "Percentiles":
-    for stat in selected_stats:
-        mcol = f"{stat}{metric_suffix}"
-        if mcol in df_filtered.columns:
-            cols.append(mcol)
-elif display_mode == "Raw values":
-    for stat in selected_stats:
-        if stat in df_filtered.columns:
-            cols.append(stat)
-else:  # Both
-    for stat in selected_stats:
-        if stat in df_filtered.columns:
-            cols.append(stat)
-        mcol = f"{stat}{metric_suffix}"
-        if mcol in df_filtered.columns:
-            cols.append(mcol)
+        if display_mode == "Percentiles":
+            for stat in selected_stats:
+                mcol = f"{stat}{metric_suffix}"
+                if mcol in df_filtered.columns:
+                    cols.append(mcol)
+        elif display_mode == "Raw values":
+            for stat in selected_stats:
+                if stat in df_filtered.columns:
+                    cols.append(stat)
+        else:  # Both
+            for stat in selected_stats:
+                if stat in df_filtered.columns:
+                    cols.append(stat)
+                mcol = f"{stat}{metric_suffix}"
+                if mcol in df_filtered.columns:
+                    cols.append(mcol)
 
-cols = [c for c in cols if c in df_filtered.columns]
-df_display = df_filtered[cols].copy()
+        cols = [c for c in cols if c in df_filtered.columns]
+        df_display = df_filtered[cols].copy()
 
-# Rename columns (nice headers)
-rename_map = {"posAbbr": "positions"}
-seen = set()
-for col in df_display.columns:
-    if col in base_cols:
-        continue
+        # Rename
+        rename_map = {"posAbbr": "positions"}
+        seen = set()
+        for col in df_display.columns:
+            if col in base_cols:
+                continue
+            if col.endswith("_pct"):
+                nice = f"{clean_stat_name(col[:-4])} {metric_label}"
+            elif col.endswith("_z"):
+                nice = f"{clean_stat_name(col[:-2])} {metric_label}"
+            else:
+                nice = clean_stat_name(col)
 
-    if col.endswith("_pct"):
-        nice = f"{clean_stat_name(col[:-4])} {metric_label}"
-    elif col.endswith("_z"):
-        nice = f"{clean_stat_name(col[:-2])} {metric_label}"
-    else:
-        nice = clean_stat_name(col)
+            original = nice
+            i = 1
+            while nice in seen:
+                i += 1
+                nice = f"{original} [{i}]"
+            seen.add(nice)
+            rename_map[col] = nice
 
-    original = nice
-    i = 1
-    while nice in seen:
-        i += 1
-        nice = f"{original} [{i}]"
-    seen.add(nice)
-    rename_map[col] = nice
+        df_display = df_display.rename(columns=rename_map)
 
-df_display = df_display.rename(columns=rename_map)
+        # Sort
+        sort_col = None
+        for c in df_display.columns:
+            if c.endswith(metric_label):
+                sort_col = c
+                break
+        if sort_col is None and len(df_display.columns) > 3:
+            sort_col = df_display.columns[3]
+        if sort_col:
+            df_display = df_display.sort_values(sort_col, ascending=False, na_position="last")
 
-# Sort by first metric column if present
-sort_col = None
-for c in df_display.columns:
-    if c.endswith(metric_label):
-        sort_col = c
-        break
-if sort_col is None and len(df_display.columns) > 3:
-    sort_col = df_display.columns[3]
+        # Rank
+        if show_rank and sort_col:
+            df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
 
-if sort_col:
-    df_display = df_display.sort_values(sort_col, ascending=False, na_position="last")
+        # Style
+        styled = df_display.style.hide(axis="index")
 
-# Rank
-if show_rank and sort_col:
-    df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
+        fmt = {}
+        for c in df_display.columns:
+            if c in ["Rank", "displayName", "squadName", "positions"]:
+                continue
+            if c.endswith("(PCT)"):
+                fmt[c] = "{:.0f}"
+            elif c.endswith("(Z)"):
+                fmt[c] = "{:+.2f}"
+            else:
+                fmt[c] = "{:.2f}"
+        styled = styled.format(fmt, na_rep="-")
 
-# ─────────────────────────────────────────────
-# Style
-# ─────────────────────────────────────────────
-styled = df_display.style
-styled = styled.hide(axis="index")  # remove index column
+        if "Rank" in df_display.columns:
+            styled = styled.applymap(
+                lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;",
+                subset=["Rank"],
+            )
 
-# Format numbers
-fmt = {}
-for c in df_display.columns:
-    if c in ["Rank", "displayName", "squadName", "positions"]:
-        continue
-    if c.endswith("(PCT)"):
-        fmt[c] = "{:.0f}"
-    elif c.endswith("(Z)"):
-        fmt[c] = "{:+.2f}"
-    else:
-        fmt[c] = "{:.2f}"
-styled = styled.format(fmt, na_rep="-")
+        if show_bars:
+            for c in df_display.columns:
+                if c.endswith("(PCT)"):
+                    styled = styled.applymap(pct_cell_style, subset=[c])
+                if c.endswith("(Z)"):
+                    styled = styled.applymap(z_cell_style, subset=[c])
 
-# Bars
-if show_bars:
-    for c in df_display.columns:
-        if c.endswith("(PCT)"):
-            styled = styled.applymap(pct_cell_style, subset=[c])
-        if c.endswith("(Z)"):
-            styled = styled.applymap(z_cell_style, subset=[c])
-
-# Rank style
-if "Rank" in df_display.columns:
-    styled = styled.applymap(
-        lambda v: f"color:{TEXT_DIM}; font-weight:950; background-color: transparent;",
-        subset=["Rank"],
-    )
-
-# ─────────────────────────────────────────────
-# Render
-# ─────────────────────────────────────────────
-st.markdown(
-    f"""
-<div style="margin-top: 1.1rem; margin-bottom: .5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+        # Render
+        st.markdown(
+            f"""
+<div style="margin-top: 1.0rem; margin-bottom: .5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
   <h3 style="margin:0;">Player Table</h3>
   <div class="badge"><span class="dim">Sorted by</span> {sort_col if sort_col else "—"}</div>
 </div>
 """,
-    unsafe_allow_html=True,
-)
+            unsafe_allow_html=True,
+        )
+        st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
 
-st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────
-# Export
-# ─────────────────────────────────────────────
-st.markdown(
-    """
+        # Export
+        st.markdown(
+            """
 <div class="card" style="margin-top: 1.2rem;">
   <h3 style="margin:0 0 .35rem 0;">Export</h3>
   <div class="small-muted">Exports the current view (filters + columns shown).</div>
 </div>
 """,
-    unsafe_allow_html=True,
-)
+            unsafe_allow_html=True,
+        )
 
-c1, c2, c3 = st.columns([1, 1, 2])
+        c1, c2, c3 = st.columns([1, 1, 2])
 
-with c1:
-    csv = df_display.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇ CSV", csv, f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+        with c1:
+            csv = df_display.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇ CSV",
+                csv,
+                f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True,
+                key=f"csv_{league_name}",
+            )
 
-with c2:
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_display.to_excel(writer, index=False)
-    st.download_button("⬇ Excel", buffer.getvalue(), f"kkd_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        with c2:
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                df_display.to_excel(writer, index=False)
+            st.download_button(
+                "⬇ Excel",
+                buffer.getvalue(),
+                f"{league_name}_stats_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"xlsx_{league_name}",
+            )
 
-with c3:
-    legend = (
-        "Percentiles: green=high, yellow=mid, red=low. Subtle bars fill 0→100."
-        if metric_mode == "Percentile"
-        else "Z-scores: green=positive, red=negative. Bars diverge from 0 (center line)."
-    )
-    st.markdown(
-        f"""
+        with c3:
+            legend = (
+                "Percentiles: green=high, yellow=mid, red=low. Bars fill 0→100."
+                if metric_mode == "Percentile"
+                else "Z-scores: green=positive, red=negative. Bars diverge from 0 (center line)."
+            )
+            st.markdown(
+                f"""
 <div class="card" style="height:100%; display:flex; flex-direction:column; justify-content:space-between;">
   <div>
     <div class="badge"><span class="dim">Legend</span> {metric_mode}</div>
@@ -786,5 +779,5 @@ with c3:
   </div>
 </div>
 """,
-        unsafe_allow_html=True,
-    )
+                unsafe_allow_html=True,
+            )
