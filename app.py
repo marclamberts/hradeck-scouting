@@ -1,18 +1,14 @@
 """
-IMPECT Stats Table — StatsBomb Edition (Full, Consistent, Readable)
-===================================================================
-IMPORTANT: Uses HTML table rendering (Styler.to_html) so your dark theme,
-fonts, and distribution bars actually apply. st.dataframe() will ignore a
-lot of CSS/styling in newer Streamlit versions.
+IMPECT Stats Table — StatsBomb Edition (Improved Table)
+======================================================
+Fixes based on your screenshot:
+- Hide dataframe index (removes the extra left number column)
+- Subtle distribution bars (no big blocks)
+- Better column sizing + wrapping
+- Sticky first columns (Rank, Player, Squad, Positions)
+- Consistent font + dark styling across filters + table
 
-Features
-- StatsBomb-esque palette (your exact colors) everywhere (sidebar + table)
-- Filters: player search, squad, position group, category, stat selection
-- Display mode: Percentiles / Raw values / Both
-- Metric mode: Percentile / Z-score (for the metric columns)
-- Distribution bars: Pct fill + Z diverging with center line
-- Assumes all stats are already per 90
-- Scrollable table container (sticky header)
+Uses HTML rendering via Styler.to_html() to ensure CSS applies.
 """
 
 import pandas as pd
@@ -38,18 +34,17 @@ DATA_FILE = "Keuken Kampioen Divisie.xlsx"
 BG = "#1A1A1A"
 RADAR_BG = "#222222"
 GRID_COLOR = "#333333"
-PLAYER_COL = "#F5C518"      # Gold for accents
-LEAGUE_COL = "#5A5A5A"      # Grey for baseline
+PLAYER_COL = "#F5C518"
+LEAGUE_COL = "#5A5A5A"
 TEXT_LIGHT = "#E0E0E0"
 TEXT_DIM = "#888888"
 TABLE_ROW_ALT = "#2A2A2A"
 TABLE_BORDER = "#3A3A3A"
-PCT_HIGH = "#4CAF50"        # Green
-PCT_MID = "#F5C518"         # Yellow
-PCT_LOW = "#E53935"         # Red
+PCT_HIGH = "#4CAF50"
+PCT_MID = "#F5C518"
+PCT_LOW = "#E53935"
 ACCENT_LINE = "#F5C518"
 
-# Metrics where lower is better
 INVERTED = ["foul", "lost", "unsuccessful", "failed", "off target", "red", "yellow"]
 
 
@@ -63,7 +58,6 @@ def clamp(v: float, lo: float, hi: float) -> float:
 
 
 def clean_stat_name(stat: str) -> str:
-    # Remove " (ID)" suffixes if present
     return stat.split(" (")[0] if " (" in stat else stat
 
 
@@ -127,9 +121,14 @@ def calc_zscores(df: pd.DataFrame, kpis: list[str]) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────
-# Cell styles (bars) — table-friendly
+# Cell styles (subtle bars)
 # ─────────────────────────────────────────────
 def pct_cell_style(val):
+    """
+    Subtle bar behind text (not a full block):
+    - bar uses rgba-ish effect by layering gradients
+    - adds a faint baseline track
+    """
     if pd.isna(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
@@ -138,22 +137,34 @@ def pct_cell_style(val):
     if v >= 85:
         col = PCT_HIGH
         weight = 900
+        glow = "rgba(76,175,80,.10)"
     elif v <= 25:
         col = PCT_LOW
         weight = 900
+        glow = "rgba(229,57,53,.10)"
     else:
         col = PCT_MID
-        weight = 800
+        weight = 850
+        glow = "rgba(245,197,24,.10)"
 
+    # Track + fill (fill is semi-transparent look by mixing with BG via an overlay)
     return f"""
       background-color: transparent;
-      background-image: linear-gradient(to right, {col} {v:.1f}%, transparent {v:.1f}%);
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,.06) 0%, rgba(255,255,255,.06) 100%),
+        linear-gradient(to right, {col} {v:.1f}%, transparent {v:.1f}%);
+      box-shadow: inset 0 0 0 9999px {glow};
       color: {TEXT_LIGHT};
       font-weight: {weight};
     """
 
 
 def z_cell_style(val):
+    """
+    Z-score diverging bar from center:
+    - subtle center line
+    - subtle fill with overlay glow
+    """
     if pd.isna(val):
         return f"color:{TEXT_DIM}; background-color: transparent;"
 
@@ -162,14 +173,15 @@ def z_cell_style(val):
     mid = 50.0
 
     col = PCT_HIGH if z >= 0 else PCT_LOW
-    weight = 900 if abs(z) >= 1.25 else 800
+    weight = 900 if abs(z) >= 1.25 else 850
+    glow = "rgba(76,175,80,.10)" if z >= 0 else "rgba(229,57,53,.10)"
 
     center = f"""
       linear-gradient(to right,
-        transparent 49.4%,
-        {LEAGUE_COL} 49.4%,
-        {LEAGUE_COL} 50.6%,
-        transparent 50.6%)
+        transparent 49.6%,
+        {LEAGUE_COL} 49.6%,
+        {LEAGUE_COL} 50.4%,
+        transparent 50.4%)
     """
 
     if pos >= mid:
@@ -193,16 +205,19 @@ def z_cell_style(val):
           transparent 100%)
         """
 
+    track = "linear-gradient(to right, rgba(255,255,255,.06) 0%, rgba(255,255,255,.06) 100%)"
+
     return f"""
       background-color: transparent;
-      background-image: {center}, {bar};
+      background-image: {center}, {track}, {bar};
+      box-shadow: inset 0 0 0 9999px {glow};
       color: {TEXT_LIGHT};
       font-weight: {weight};
     """
 
 
 # ─────────────────────────────────────────────
-# Global CSS (applies to HTML table + controls)
+# Global CSS (consistent + improved table layout)
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -211,15 +226,18 @@ html, body, [data-testid="stAppViewContainer"] {{
   background: {BG} !important;
   color: {TEXT_LIGHT} !important;
 }}
-#MainMenu, footer, header, .stDeployButton {{ visibility: hidden !important; display:none !important; }}
+#MainMenu, footer, header, .stDeployButton {{ visibility:hidden !important; display:none !important; }}
+
+html, body, [class*="css"], .stMarkdown, .stText, .stCaption {{
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial !important;
+}}
 
 .block-container {{
-  max-width: 1500px !important;
+  max-width: 1550px !important;
   padding-top: 1.1rem !important;
   padding-bottom: 2.2rem !important;
 }}
 
-/* Sidebar */
 section[data-testid="stSidebar"] {{
   background: {RADAR_BG} !important;
   border-right: 1px solid {TABLE_BORDER} !important;
@@ -228,12 +246,6 @@ section[data-testid="stSidebar"] * {{
   color: {TEXT_LIGHT} !important;
 }}
 
-/* Font everywhere */
-html, body, [class*="css"], .stMarkdown, .stText, .stCaption {{
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial !important;
-}}
-
-/* Inputs */
 section[data-testid="stSidebar"] input,
 section[data-testid="stSidebar"] select,
 section[data-testid="stSidebar"] textarea {{
@@ -244,20 +256,17 @@ section[data-testid="stSidebar"] textarea {{
   box-shadow: none !important;
 }}
 section[data-testid="stSidebar"] input:focus,
-section[data-testid="stSidebar"] select:focus,
-section[data-testid="stSidebar"] textarea:focus {{
+section[data-testid="stSidebar"] select:focus {{
   border-color: {ACCENT_LINE} !important;
   box-shadow: 0 0 0 3px rgba(245,197,24,.18) !important;
 }}
 
-/* Multiselect chips */
 section[data-testid="stSidebar"] [data-baseweb="tag"] {{
   background: {BG} !important;
   border: 1px solid {TABLE_BORDER} !important;
   color: {TEXT_LIGHT} !important;
 }}
 
-/* Card / badge */
 .card {{
   background: {RADAR_BG};
   border: 1px solid {TABLE_BORDER};
@@ -276,15 +285,11 @@ section[data-testid="stSidebar"] [data-baseweb="tag"] {{
   color: {TEXT_LIGHT};
   background: {BG};
 }}
-.badge .dim {{
-  color: {TEXT_DIM};
-  font-weight: 700;
-}}
+.badge .dim {{ color: {TEXT_DIM}; font-weight: 700; }}
 .small-muted {{ color: {TEXT_DIM} !important; }}
-
 hr {{ border-color: {TABLE_BORDER} !important; }}
 
-/* Download buttons */
+/* Downloads */
 .stDownloadButton button {{
   background: {ACCENT_LINE} !important;
   color: #000 !important;
@@ -296,7 +301,7 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
 .stDownloadButton button:hover {{ filter: brightness(0.95) !important; }}
 
 /* ─────────────────────────────
-   HTML TABLE STYLES (pandas Styler to_html)
+   HTML TABLE WRAP
    ───────────────────────────── */
 .table-wrap {{
   max-height: 720px;
@@ -306,9 +311,10 @@ hr {{ border-color: {TABLE_BORDER} !important; }}
   background: {BG};
 }}
 
-/* Make sure the table uses full width and keeps styling */
+/* Use fixed layout so columns behave */
 table.dataframe {{
   width: 100% !important;
+  table-layout: fixed;
   border-collapse: separate !important;
   border-spacing: 0 !important;
   background: transparent !important;
@@ -318,7 +324,7 @@ table.dataframe {{
 table.dataframe thead th {{
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 10;
   background: {RADAR_BG} !important;
   color: {TEXT_LIGHT} !important;
   border-bottom: 1px solid {TABLE_BORDER} !important;
@@ -326,23 +332,15 @@ table.dataframe thead th {{
   font-size: 11px !important;
   letter-spacing: .08em !important;
   text-transform: uppercase !important;
-  padding: 12px 12px !important;
+  padding: 12px 10px !important;
   text-align: left;
 }}
-table.dataframe thead th:last-child {{
-  border-right: none !important;
-}}
+table.dataframe thead th:last-child {{ border-right: none !important; }}
 
 /* Rows */
-table.dataframe tbody tr {{
-  background: {BG} !important;
-}}
-table.dataframe tbody tr:nth-child(even) {{
-  background: {TABLE_ROW_ALT} !important;
-}}
-table.dataframe tbody tr:hover {{
-  background: {GRID_COLOR} !important;
-}}
+table.dataframe tbody tr {{ background: {BG} !important; }}
+table.dataframe tbody tr:nth-child(even) {{ background: {TABLE_ROW_ALT} !important; }}
+table.dataframe tbody tr:hover {{ background: {GRID_COLOR} !important; }}
 
 /* Cells */
 table.dataframe tbody td {{
@@ -351,32 +349,71 @@ table.dataframe tbody td {{
   border-bottom: 1px solid {TABLE_BORDER} !important;
   border-right: 1px solid {TABLE_BORDER} !important;
   font-size: 13px !important;
-  padding: 10px 12px !important;
+  padding: 10px 10px !important;
   text-align: center;
   font-variant-numeric: tabular-nums !important;
-}}
-table.dataframe tbody td:last-child {{
-  border-right: none !important;
-}}
-
-/* Left columns */
-table.dataframe tbody td:nth-child(1) {{
-  text-align: left !important;
-  font-weight: 900 !important;
-}}
-table.dataframe tbody td:nth-child(2),
-table.dataframe tbody td:nth-child(3) {{
-  text-align: left !important;
-  font-weight: 750 !important;
-  color: {TEXT_DIM} !important;
-}}
-
-/* Optional: keep long position strings readable */
-table.dataframe tbody td:nth-child(3) {{
-  max-width: 320px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}}
+table.dataframe tbody td:last-child {{ border-right: none !important; }}
+
+/* Column sizing (works with table-layout: fixed) */
+table.dataframe thead th:nth-child(1),
+table.dataframe tbody td:nth-child(1) {{ width: 60px; }}   /* Rank */
+table.dataframe thead th:nth-child(2),
+table.dataframe tbody td:nth-child(2) {{ width: 190px; text-align:left; font-weight: 900; }} /* Player */
+table.dataframe thead th:nth-child(3),
+table.dataframe tbody td:nth-child(3) {{ width: 170px; text-align:left; color:{TEXT_DIM} !important; font-weight: 750; }} /* Squad */
+table.dataframe thead th:nth-child(4),
+table.dataframe tbody td:nth-child(4) {{
+  width: 360px;
+  text-align:left;
+  color:{TEXT_LIGHT} !important;
+  white-space: normal;        /* allow wrapping for positions */
+  line-height: 1.25;
+}}
+
+/* Metric columns */
+table.dataframe thead th:nth-child(n+5),
+table.dataframe tbody td:nth-child(n+5) {{ width: 110px; }}
+
+/* Sticky first 4 columns (Rank/Player/Squad/Positions) */
+table.dataframe thead th:nth-child(1),
+table.dataframe tbody td:nth-child(1) {{
+  position: sticky;
+  left: 0;
+  z-index: 9;
+  background: inherit !important;
+}}
+table.dataframe thead th:nth-child(2),
+table.dataframe tbody td:nth-child(2) {{
+  position: sticky;
+  left: 60px;
+  z-index: 9;
+  background: inherit !important;
+}}
+table.dataframe thead th:nth-child(3),
+table.dataframe tbody td:nth-child(3) {{
+  position: sticky;
+  left: 250px;
+  z-index: 9;
+  background: inherit !important;
+}}
+table.dataframe thead th:nth-child(4),
+table.dataframe tbody td:nth-child(4) {{
+  position: sticky;
+  left: 420px;
+  z-index: 9;
+  background: inherit !important;
+}}
+
+/* Subtle shadow edge after sticky block */
+table.dataframe tbody td:nth-child(4) {{
+  box-shadow: 8px 0 12px rgba(0,0,0,.25);
+}}
+table.dataframe thead th:nth-child(4) {{
+  box-shadow: 8px 0 12px rgba(0,0,0,.35);
 }}
 </style>
 """,
@@ -392,7 +429,7 @@ st.markdown(
   <div>
     <div class="badge"><span>IMPECT</span> <span class="dim">•</span> <span>Keuken Kampioen Divisie</span></div>
     <h1 style="margin:.45rem 0 0 0; font-size: 1.9rem;">Player Stats Explorer</h1>
-    <div class="small-muted">StatsBomb-style table • per 90 • percentiles + z-scores • bars</div>
+    <div class="small-muted">StatsBomb-style table • per 90 • percentiles + z-scores • subtle bars</div>
   </div>
   <div class="badge"><span class="dim">Season</span> 25/26</div>
 </div>
@@ -419,16 +456,13 @@ with st.sidebar:
     st.markdown("## Filters")
 
     name_filter = st.text_input("Player search", placeholder="Type player name…")
-
     st.divider()
 
     squads = ["All Squads"] + sorted(df["squadName"].dropna().unique().tolist())
     squad = st.selectbox("Squad", squads)
-
     st.divider()
 
     pos_group = st.selectbox("Position group", ["All Positions", "Defenders", "Midfielders", "Forwards"])
-
     st.divider()
 
     categories = {
@@ -440,7 +474,6 @@ with st.sidebar:
     }
     selected_cat = st.selectbox("Stat category", list(categories.keys()))
     keywords = categories[selected_cat]
-
     st.divider()
 
     display_mode = st.selectbox("Display mode", ["Percentiles", "Raw values", "Both"], index=0)
@@ -454,7 +487,6 @@ with st.sidebar:
     matching = [k for k in kpis if any(kw in k for kw in keywords)]
     if not matching:
         matching = kpis[:]
-
     stats_options = matching[:40] if len(matching) > 40 else matching
 
     selected_stats = st.multiselect(
@@ -491,7 +523,7 @@ if pos_group != "All Positions":
     df_filtered = df_filtered[mask]
 
 # ─────────────────────────────────────────────
-# Status badges
+# Badges
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -520,12 +552,10 @@ if display_mode == "Percentiles":
         mcol = f"{stat}{metric_suffix}"
         if mcol in df_filtered.columns:
             cols.append(mcol)
-
 elif display_mode == "Raw values":
     for stat in selected_stats:
         if stat in df_filtered.columns:
             cols.append(stat)
-
 else:  # Both
     for stat in selected_stats:
         if stat in df_filtered.columns:
@@ -537,13 +567,12 @@ else:  # Both
 cols = [c for c in cols if c in df_filtered.columns]
 df_display = df_filtered[cols].copy()
 
-# Rename columns to nice labels (avoid duplicates)
+# Rename columns cleanly + avoid duplicates
 rename_map = {}
 seen = set()
 for col in df_display.columns:
     if col in base_cols:
         continue
-
     if col.endswith("_pct"):
         nice = f"{clean_stat_name(col[:-4])} {metric_label}"
     elif col.endswith("_z"):
@@ -551,17 +580,17 @@ for col in df_display.columns:
     else:
         nice = clean_stat_name(col)
 
-    orig = nice
+    original = nice
     i = 1
     while nice in seen:
         i += 1
-        nice = f"{orig} [{i}]"
+        nice = f"{original} [{i}]"
     seen.add(nice)
     rename_map[col] = nice
 
 df_display = df_display.rename(columns=rename_map)
 
-# Sort: first metric column if present, else first stat column
+# Sort by first metric column if present, else first stat column
 sort_col = None
 for c in df_display.columns:
     if c.endswith(metric_label):
@@ -578,9 +607,12 @@ if show_rank and sort_col:
     df_display.insert(0, "Rank", df_display[sort_col].rank(ascending=False, method="min").astype("Int64"))
 
 # ─────────────────────────────────────────────
-# Style table
+# Style
 # ─────────────────────────────────────────────
 styled = df_display.style
+
+# IMPORTANT: hide index (removes the extra left index column)
+styled = styled.hide(axis="index")
 
 # Format numbers
 fmt = {}
@@ -602,30 +634,16 @@ if "Rank" in df_display.columns:
         subset=["Rank"],
     )
 
-# Apply metric styles
-for c in df_display.columns:
-    if c.endswith("(PCT)"):
-        if show_bars:
+# Metric bars
+if show_bars:
+    for c in df_display.columns:
+        if c.endswith("(PCT)"):
             styled = styled.applymap(pct_cell_style, subset=[c])
-        else:
-            styled = styled.applymap(
-                lambda v: f"color:{PCT_HIGH}; font-weight:950;" if pd.notna(v) and float(v) >= 85
-                else (f"color:{PCT_LOW}; font-weight:950;" if pd.notna(v) and float(v) <= 25 else f"color:{PCT_MID}; font-weight:900;"),
-                subset=[c],
-            )
-
-    if c.endswith("(Z)"):
-        if show_bars:
+        if c.endswith("(Z)"):
             styled = styled.applymap(z_cell_style, subset=[c])
-        else:
-            styled = styled.applymap(
-                lambda v: f"color:{PCT_HIGH}; font-weight:950;" if pd.notna(v) and float(v) >= 1.25
-                else (f"color:{PCT_LOW}; font-weight:950;" if pd.notna(v) and float(v) <= -1.25 else f"color:{PCT_MID}; font-weight:900;"),
-                subset=[c],
-            )
 
 # ─────────────────────────────────────────────
-# Render (HTML so styles apply correctly)
+# Render
 # ─────────────────────────────────────────────
 st.markdown(
     f"""
@@ -637,8 +655,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-html_table = styled.to_html()
-st.markdown(f'<div class="table-wrap">{html_table}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="table-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # Export
@@ -679,7 +696,7 @@ with c2:
 
 with c3:
     legend = (
-        "Percentiles: green=high, yellow=mid, red=low. Bars fill 0→100."
+        "Percentiles: green=high, yellow=mid, red=low. Subtle bars fill 0→100."
         if metric_mode == "Percentile"
         else "Z-scores: green=positive, red=negative. Bars diverge from 0 (center line)."
     )
