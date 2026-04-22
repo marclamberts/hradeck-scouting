@@ -6,7 +6,7 @@ from pathlib import Path
 from textwrap import shorten
 
 APP_DIR = Path(__file__).parent
-os.environ.setdefault("MPLCONFIGDIR", str(APP_DIR / ".matplotlib"))
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/hradeck_scouting_matplotlib")
 
 import numpy as np
 import pandas as pd
@@ -74,6 +74,16 @@ RISK_COLORS = {
     "Moderate": "#e9c46a",
     "Elevated": "#f4a261",
     "High": "#e76f51",
+}
+ROLE_SCORE_WEIGHTS = {
+    "GK": {"CompositeRecruitmentScore": 2.0, "DecisionScore": 2.5, "PerformanceReliabilityScore": 2.5, "BallSecurityScore": 1.5, "SecurityRisk_per90": -1.5},
+    "CB": {"CompositeRecruitmentScore": 2.2, "DecisionScore": 2.0, "DefensiveDisruptionScore": 2.5, "BallSecurityScore": 1.4, "PerformanceReliabilityScore": 1.8, "SecurityRisk_per90": -1.3},
+    "FB": {"CompositeRecruitmentScore": 2.0, "CreativeProgressionScore": 2.0, "DefensiveDisruptionScore": 1.8, "PressingScore": 1.4, "ExpectedThreatScore": 1.3, "SecurityRisk_per90": -1.0},
+    "DM": {"CompositeRecruitmentScore": 2.0, "DefensiveDisruptionScore": 2.2, "BallSecurityScore": 2.0, "CreativeProgressionScore": 1.6, "PerformanceReliabilityScore": 1.6, "SecurityRisk_per90": -1.2},
+    "CM": {"CompositeRecruitmentScore": 2.2, "CreativeProgressionScore": 2.4, "BallSecurityScore": 1.8, "ExpectedThreatScore": 1.4, "DecisionScore": 1.6, "SecurityRisk_per90": -1.0},
+    "AM": {"CompositeRecruitmentScore": 2.0, "CreativeProgressionScore": 2.8, "ExpectedThreatScore": 2.0, "ScoringThreatScore": 1.4, "ValueRecruitmentScore": 1.4, "SecurityRisk_per90": -0.8},
+    "W": {"CompositeRecruitmentScore": 1.8, "ScoringThreatScore": 2.4, "ExpectedThreatScore": 2.2, "CreativeProgressionScore": 1.8, "PressingScore": 1.2, "SecurityRisk_per90": -0.8},
+    "ST": {"CompositeRecruitmentScore": 2.0, "ScoringThreatScore": 3.0, "ExpectedThreatScore": 2.2, "DecisionScore": 1.4, "SuccessProbability": 1.6, "SecurityRisk_per90": -0.7},
 }
 PIZZA_METRICS = {
     "Decision": "DecisionScore",
@@ -171,6 +181,61 @@ def assign_archetypes(df: pd.DataFrame) -> pd.Series:
     return pd.Series(labels, index=df.index)
 
 
+def weighted_role_score(row: pd.Series) -> float:
+    weights = ROLE_SCORE_WEIGHTS.get(str(row.get("PositionGroup", "")), ROLE_SCORE_WEIGHTS["CM"])
+    positive_total = sum(v for v in weights.values() if v > 0)
+    raw = 0.0
+    for col, weight in weights.items():
+        value = pd.to_numeric(row.get(col, 0), errors="coerce")
+        value = 0 if pd.isna(value) else float(value)
+        if weight < 0:
+            raw += max(0, 100 - (value * 6)) * abs(weight)
+        else:
+            raw += value * weight
+    return float(np.clip(raw / max(positive_total + sum(abs(v) for v in weights.values() if v < 0), 1), 0, 100))
+
+
+def fit_drivers(row: pd.Series, limit: int = 3) -> str:
+    candidates = {
+        "Composite": row.get("CompositeRecruitmentScore", 0),
+        "Decision": row.get("DecisionScore", 0),
+        "Value": row.get("ValueRecruitmentScore", 0),
+        "Scoring": row.get("ScoringThreatScore", 0),
+        "Creation": row.get("CreativeProgressionScore", 0),
+        "Defense": row.get("DefensiveDisruptionScore", 0),
+        "Pressing": row.get("PressingScore", 0),
+        "Security": row.get("BallSecurityScore", 0),
+        "xThreat": row.get("ExpectedThreatScore", 0),
+        "Reliability": row.get("PerformanceReliabilityScore", 0),
+    }
+    top = sorted(candidates.items(), key=lambda item: pd.to_numeric(item[1], errors="coerce"), reverse=True)[:limit]
+    return ", ".join(f"{label} {float(score):.0f}" for label, score in top)
+
+
+def risk_flags(row: pd.Series) -> list[str]:
+    flags = []
+    if row.get("MinutesPlayed", 0) < 900:
+        flags.append("low minutes")
+    if row.get("PerformanceReliabilityScore", 100) < 55:
+        flags.append("low reliability")
+    if row.get("SecurityRisk_per90", 0) > 13:
+        flags.append("high security risk")
+    if row.get("OwnHalfLosses_per90", 0) > 3:
+        flags.append("own-half losses")
+    if row.get("DangerOwnHalfLosses_per90", 0) > 0.5:
+        flags.append("danger losses")
+    if row.get("TeamPossProxy", 1) > 1.25:
+        flags.append("high-possession context")
+    return flags or ["clean profile"]
+
+
+def tier_reason(row: pd.Series) -> str:
+    return (
+        f"{row.get('MarketTier', 'Watch')} because Scout Fit is {row.get('ScoutFitScore', 0):.1f}, "
+        f"driven by {fit_drivers(row)}. Main risk check: {', '.join(risk_flags(row)[:2])}."
+    )
+
+
 def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFrame:
     out = df.copy()
     out["Archetype"] = assign_archetypes(out)
@@ -183,7 +248,9 @@ def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFra
         - safe_col(out, "SecurityRisk_per90") * weights["Risk penalty"]
     )
     denominator = max(sum(v for k, v in weights.items() if k != "Risk penalty"), 1)
-    out["ScoutFitScore"] = (numerator / denominator).clip(0, 100)
+    out["ModelFitScore"] = (numerator / denominator).clip(0, 100)
+    out["RoleFitScore"] = out.apply(weighted_role_score, axis=1)
+    out["ScoutFitScore"] = ((out["ModelFitScore"] * 0.58) + (out["RoleFitScore"] * 0.42)).clip(0, 100)
     out["AgeYears"] = safe_col(out, "AgeYears").round(1)
     out["RiskBand"] = pd.cut(
         safe_col(out, "SecurityRisk_per90"),
@@ -206,6 +273,9 @@ def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFra
         + safe_col(out, "DefensiveDisruptionScore")
         + safe_col(out, "BallSecurityScore")
     ) / 4
+    out["FitDrivers"] = out.apply(fit_drivers, axis=1)
+    out["RiskFlags"] = out.apply(lambda row: ", ".join(risk_flags(row)), axis=1)
+    out["TierReason"] = out.apply(tier_reason, axis=1)
     return out
 
 
@@ -241,6 +311,45 @@ def percentile_values(df: pd.DataFrame, row: pd.Series, metrics: dict[str, str])
     for col in metrics.values():
         values.append(percentile_rank(df[col], float(row[col])) if col in df else 0.0)
     return values
+
+
+def similarity_features(df: pd.DataFrame) -> list[str]:
+    base = [
+        "ScoringThreatScore",
+        "CreativeProgressionScore",
+        "DefensiveDisruptionScore",
+        "PressingScore",
+        "BallSecurityScore",
+        "ExpectedThreatScore",
+        "ASA_GoalsAddedScore",
+        "xG_per90",
+        "xA_per90",
+        "Shots_per90",
+        "KeyPasses_per90",
+        "ProgressivePasses_per90",
+        "PassesToFinalThird_per90",
+        "PressingDuelsWon_per90",
+        "Imp_BypassedOpp_per90",
+        "Imp_BypassedDef_per90",
+        "Imp_BallWin_per90",
+        "Imp_BallLoss_per90",
+    ]
+    return [col for col in base if col in df.columns]
+
+
+def similar_players(df: pd.DataFrame, row: pd.Series, same_position: bool = True, n: int = 10) -> pd.DataFrame:
+    pool = df.copy()
+    if same_position:
+        pool = pool.loc[pool["PositionGroup"].eq(row["PositionGroup"])].copy()
+    features = similarity_features(pool)
+    matrix = pool[features].apply(pd.to_numeric, errors="coerce").fillna(0)
+    center = matrix.mean()
+    spread = matrix.std().replace(0, 1)
+    z = (matrix - center) / spread
+    target = (pd.to_numeric(row[features], errors="coerce").fillna(0) - center) / spread
+    pool["SimilarityScore"] = (100 - np.sqrt(((z - target) ** 2).sum(axis=1)) * 8).clip(0, 100)
+    pool = pool.loc[pool["PlayerName"].ne(row["PlayerName"])]
+    return pool.sort_values("SimilarityScore", ascending=False).head(n)
 
 
 def render_player_pizza(reference_df: pd.DataFrame, row: pd.Series):
@@ -474,6 +583,66 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
             ]
         )
 
+        top_u23 = sorted_df.loc[sorted_df.get("IsU23Target", False).astype(bool)].head(15)
+        if not top_u23.empty:
+            top_u23 = top_u23[
+                [
+                    "PlayerName",
+                    "TeamName",
+                    "PositionGroup",
+                    "AgeYears",
+                    "ScoutFitScore",
+                    "RoleFitScore",
+                    "MarketTier",
+                    "FitDrivers",
+                ]
+            ].rename(
+                columns={
+                    "PlayerName": "Player",
+                    "TeamName": "Team",
+                    "PositionGroup": "Pos",
+                    "AgeYears": "Age",
+                    "ScoutFitScore": "Fit",
+                    "RoleFitScore": "Role Fit",
+                }
+            )
+            story.extend(
+                [
+                    Paragraph("Top U23 Targets", styles["Heading2"]),
+                    _pdf_table(_format_pdf_frame(top_u23, max_text=32), header_color="#2a9d8f"),
+                    Spacer(1, 10),
+                ]
+            )
+
+        xi_order = ["GK", "CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
+        used_names = set()
+        xi_rows = []
+        for slot in xi_order:
+            candidates = sorted_df.loc[sorted_df["PositionGroup"].eq(slot) & ~sorted_df["PlayerName"].isin(used_names)]
+            if candidates.empty:
+                continue
+            pick = candidates.iloc[0]
+            used_names.add(pick["PlayerName"])
+            xi_rows.append(
+                {
+                    "Role": slot,
+                    "Player": pick["PlayerName"],
+                    "Team": pick["TeamName"],
+                    "Age": pick["AgeYears"],
+                    "Fit": pick["ScoutFitScore"],
+                    "Role Fit": pick.get("RoleFitScore", 0),
+                    "Drivers": pick.get("FitDrivers", ""),
+                }
+            )
+        if xi_rows:
+            story.extend(
+                [
+                    Paragraph("Best XI From Scope", styles["Heading2"]),
+                    _pdf_table(_format_pdf_frame(pd.DataFrame(xi_rows), max_text=32), header_color="#e76f51"),
+                    Spacer(1, 10),
+                ]
+            )
+
     table_cols = [
         "PlayerName",
         "TeamName",
@@ -486,6 +655,9 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
         "DecisionScore",
         "Readiness",
         "RiskBand",
+        "RoleFitScore",
+        "FitDrivers",
+        "RiskFlags",
     ]
     export = sorted_df.head(top_n)
     export = export[[c for c in table_cols if c in export.columns]].copy()
@@ -500,6 +672,9 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
             "ValueRecruitmentScore": "Value",
             "DecisionScore": "Decision",
             "RiskBand": "Risk",
+            "RoleFitScore": "Role Fit",
+            "FitDrivers": "Drivers",
+            "RiskFlags": "Risk Flags",
         }
     )
     story.extend(
@@ -532,6 +707,16 @@ def reset_filters() -> None:
     ]:
         st.session_state.pop(key, None)
     st.session_state["quick_mode"] = "Full board"
+
+
+def add_to_shortlist(player_name: str) -> None:
+    shortlist = set(st.session_state.get("shortlist_players", []))
+    shortlist.add(player_name)
+    st.session_state["shortlist_players"] = sorted(shortlist)
+
+
+def clear_shortlist() -> None:
+    st.session_state["shortlist_players"] = []
 
 
 def set_quick_mode(mode: str) -> None:
@@ -820,6 +1005,8 @@ st.markdown(
 
 if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
+if "shortlist_players" not in st.session_state:
+    st.session_state["shortlist_players"] = []
 
 mode_columns = st.columns([1, 1, 1, 1, 1.6])
 quick_modes = ["Full board", "U23 hunt", "Priority board", "Low-risk only"]
@@ -993,8 +1180,8 @@ with cols[4]:
         "priority or must-scout tier",
     )
 
-tab_overview, tab_shortlist, tab_player, tab_analytics, tab_market, tab_exports = st.tabs(
-    ["Overview", "Shortlist", "Player lab", "Analytics", "Market map", "Downloads"]
+tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_analytics, tab_market, tab_exports = st.tabs(
+    ["Overview", "Role boards", "Shortlist", "Compare", "Player lab", "Analytics", "Market map", "Downloads"]
 )
 
 with tab_overview:
@@ -1086,6 +1273,34 @@ with tab_overview:
                 width="stretch",
             )
 
+with tab_roles:
+    st.subheader("Position ranking boards")
+    role = st.segmented_control("Role board", position_groups, default=position_groups[0], width="stretch")
+    role_df = filtered.loc[filtered["PositionGroup"].eq(role)].sort_values("RoleFitScore", ascending=False)
+    if role_df.empty:
+        st.info("No players match this role and the active filters.")
+    else:
+        role_cols = [
+            "PlayerName",
+            "TeamName",
+            "BundleLabel",
+            "AgeYears",
+            "MinutesPlayed",
+            "RoleFitScore",
+            "ScoutFitScore",
+            "MarketTier",
+            "Archetype",
+            "FitDrivers",
+            "RiskFlags",
+            "TierReason",
+        ]
+        st.dataframe(role_df[[c for c in role_cols if c in role_df.columns]].head(75).round(2), width="stretch", hide_index=True)
+        left, right = st.columns([1, 1])
+        with left:
+            st.pyplot(render_score_distribution(role_df, "RoleFitScore"), clear_figure=True)
+        with right:
+            st.pyplot(render_score_distribution(role_df, "ScoutFitScore"), clear_figure=True)
+
 with tab_shortlist:
     st.subheader("Ranked shortlist")
     shortlist_cols = [
@@ -1106,8 +1321,51 @@ with tab_shortlist:
         "SuccessProbability",
         "PerformanceReliabilityScore",
         "SecurityRisk_per90",
+        "RoleFitScore",
+        "FitDrivers",
+        "RiskFlags",
+        "TierReason",
     ]
     view_cols = [c for c in shortlist_cols if c in filtered.columns]
+    add_pick = st.selectbox(
+        "Add player to shortlist basket",
+        filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"])
+        .sort_values("ScoutFitScore", ascending=False)["_label"]
+        .tolist(),
+    )
+    add_cols = st.columns([1, 1, 3])
+    with add_cols[0]:
+        if st.button("Add selected", type="primary", width="stretch"):
+            add_to_shortlist(add_pick.split(" | ")[0])
+    with add_cols[1]:
+        st.button("Clear basket", width="stretch", on_click=clear_shortlist)
+    with add_cols[2]:
+        st.caption(f"{len(st.session_state.get('shortlist_players', []))} players in shortlist basket")
+
+    shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("ScoutFitScore", ascending=False)
+    if not shortlist_df.empty:
+        st.subheader("Shortlist basket")
+        st.dataframe(shortlist_df[[c for c in view_cols if c in shortlist_df.columns]].round(2), width="stretch", hide_index=True)
+        basket_cols = st.columns([1, 1])
+        with basket_cols[0]:
+            st.download_button(
+                "Download shortlist CSV",
+                data=shortlist_df[[c for c in view_cols if c in shortlist_df.columns]].to_csv(index=False).encode("utf-8"),
+                file_name="fchk_shortlist_basket.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+        with basket_cols[1]:
+            st.download_button(
+                "Download shortlist PDF",
+                data=build_pdf(shortlist_df, "FCHK Shortlist Basket", scope_note=f"{len(shortlist_df):,} manually shortlisted players", top_n=100),
+                file_name="fchk_shortlist_basket.pdf",
+                mime="application/pdf",
+                type="primary",
+                width="stretch",
+            )
+
+    st.subheader("Ranked board")
     st.dataframe(
         filtered[view_cols].round(2),
         width="stretch",
@@ -1135,6 +1393,57 @@ with tab_shortlist:
         st.subheader("Risk bands")
         if not filtered.empty:
             st.bar_chart(filtered["RiskBand"].value_counts())
+
+with tab_compare:
+    st.subheader("Player comparison")
+    if filtered.empty:
+        st.info("No players match the active filters.")
+    else:
+        compare_options = (
+            filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"])
+            .sort_values("ScoutFitScore", ascending=False)["_label"]
+            .tolist()
+        )
+        selected_compare = st.multiselect("Select 2-4 players", compare_options, default=compare_options[: min(3, len(compare_options))], max_selections=4)
+        compare_names = [label.split(" | ")[0] for label in selected_compare]
+        compare_df = filtered.loc[filtered["PlayerName"].isin(compare_names)].sort_values("ScoutFitScore", ascending=False)
+        if len(compare_df) < 2:
+            st.info("Pick at least two players to compare.")
+        else:
+            summary_cols = [
+                "PlayerName",
+                "TeamName",
+                "PositionGroup",
+                "AgeYears",
+                "MinutesPlayed",
+                "ScoutFitScore",
+                "RoleFitScore",
+                "MarketTier",
+                "FitDrivers",
+                "RiskFlags",
+                "TierReason",
+            ]
+            st.dataframe(compare_df[[c for c in summary_cols if c in compare_df.columns]].round(2), width="stretch", hide_index=True)
+            pizza_cols = st.columns(len(compare_df))
+            for idx, (_, row) in enumerate(compare_df.iterrows()):
+                with pizza_cols[idx]:
+                    st.pyplot(render_player_pizza(df.loc[df["PositionGroup"].eq(row["PositionGroup"])], row), clear_figure=True)
+            compare_scores = compare_df[["PlayerName"] + [c for c in PIZZA_METRICS.values() if c in compare_df.columns]].melt(
+                id_vars="PlayerName", var_name="Metric", value_name="Score"
+            )
+            chart = (
+                alt.Chart(compare_scores)
+                .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                .encode(
+                    x=alt.X("Metric:N", title=None, axis=alt.Axis(labelAngle=-35)),
+                    y=alt.Y("Score:Q", scale=alt.Scale(domain=[0, 100])),
+                    color=alt.Color("PlayerName:N", title="Player"),
+                    xOffset="PlayerName:N",
+                    tooltip=["PlayerName", "Metric", alt.Tooltip("Score:Q", format=".1f")],
+                )
+                .properties(height=360)
+            )
+            st.altair_chart(chart, width="stretch")
 
 with tab_player:
     st.subheader("Player lab")
@@ -1170,6 +1479,13 @@ with tab_player:
         d.metric("Decision", f"{player['DecisionScore']:.1f}")
         e.metric("Position pctile", f"{percentile_rank(df.loc[df['PositionGroup'].eq(player['PositionGroup']), 'ScoutFitScore'], player['ScoutFitScore']):.0f}")
         st.markdown(f"<div class='note-box'>{profile_note(player)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='note-box'>{player['TierReason']}</div>", unsafe_allow_html=True)
+        action_cols = st.columns([1, 1, 3])
+        with action_cols[0]:
+            if st.button("Add to shortlist", type="primary", width="stretch"):
+                add_to_shortlist(player["PlayerName"])
+        with action_cols[1]:
+            st.metric("Role Fit", f"{player['RoleFitScore']:.1f}")
 
         player_scores = pd.DataFrame(
             {
@@ -1207,20 +1523,20 @@ with tab_player:
             st.dataframe(per90.round(3), width="stretch", hide_index=True)
 
         comparable = (
-            df.loc[df["PositionGroup"].eq(player["PositionGroup"])]
-            .assign(_gap=lambda x: (x["ScoutFitScore"] - player["ScoutFitScore"]).abs())
-            .sort_values(["_gap", "ScoutFitScore"], ascending=[True, False])
-            .head(12)
+            similar_players(df, player, same_position=True, n=12)
         )
-        st.subheader("Nearest positional comparables")
+        st.subheader("Similarity search")
         st.dataframe(
             comparable[
                 [
                     "PlayerName",
                     "TeamName",
+                    "PositionGroup",
                     "AgeYears",
                     "MinutesPlayed",
+                    "SimilarityScore",
                     "ScoutFitScore",
+                    "RoleFitScore",
                     "Archetype",
                     "CompositeRecruitmentScore",
                     "ValueRecruitmentScore",
@@ -1360,7 +1676,7 @@ with tab_exports:
     with report_left:
         report_scope = st.selectbox(
             "PDF report scope",
-            ["Current filtered board", "Single league / bundle", "Single position group", "Single player"],
+            ["Current filtered board", "Shortlist basket", "Single league / bundle", "Single position group", "Single player"],
         )
         top_n = st.slider("Targets to include", 10, 100, 50, step=10)
     with report_right:
@@ -1377,6 +1693,13 @@ with tab_exports:
             report_title = f"FCHK League Report: {selected_league}"
             scope_note = f"League report for {selected_league} · {len(report_df):,} players · weighted with {model_preset} model"
             file_stub = f"league_{selected_league}"
+        elif report_scope == "Shortlist basket":
+            report_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values(
+                ["ScoutFitScore", "CompositeRecruitmentScore"], ascending=False
+            )
+            report_title = "FCHK Shortlist Basket Report"
+            scope_note = f"Manual shortlist · {len(report_df):,} players · weighted with {model_preset} model"
+            file_stub = "shortlist_basket"
         elif report_scope == "Single position group":
             selected_position = st.selectbox("Position group", position_groups)
             report_df = df.loc[df["PositionGroup"].astype(str).eq(selected_position)].sort_values(
