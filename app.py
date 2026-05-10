@@ -20,7 +20,6 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
-DEFAULT_FILE = APP_DIR / "data" / "FCHK Scores Only.xlsx"
 DEFAULT_MODEL_OUTPUT_DIR = Path(
     os.environ.get(
         "FCHK_MODEL_OUTPUT_DIR",
@@ -243,13 +242,16 @@ def normalize_model_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def load_default_data() -> pd.DataFrame:
-    if _model_file("recruitment").exists():
-        df = _read_model_output("recruitment")
-        for name in ["player_scores", "player_styles", "smart_club"]:
-            if _model_file(name).exists():
-                df = _merge_missing_columns(df, _read_model_output(name))
-        return normalize_model_columns(df)
-    return normalize_model_columns(_clean_columns(pd.read_excel(DEFAULT_FILE)))
+    required_file = _model_file("recruitment")
+    if not required_file.exists():
+        st.error(f"Missing required model output: {required_file}")
+        st.stop()
+
+    df = _read_model_output("recruitment")
+    for name in ["player_scores", "player_styles", "smart_club"]:
+        if _model_file(name).exists():
+            df = _merge_missing_columns(df, _read_model_output(name))
+    return normalize_model_columns(df)
 
 
 @st.cache_data(show_spinner=False)
@@ -1159,19 +1161,18 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("<div class='menu-caption'>Use board modes for fast cuts, then refine the pool in the panels below.</div>", unsafe_allow_html=True)
-    source_label = "FCHK Model V3 outputs" if using_v3_outputs else "bundled workbook"
+    source_label = "FCHK Model V3 outputs"
     st.caption(f"Data source: {source_label}")
-    if using_v3_outputs:
-        with st.expander("Loaded model files", expanded=False):
-            st.caption(str(DEFAULT_MODEL_OUTPUT_DIR))
-            for name, file_name in MODEL_OUTPUT_FILES.items():
-                present = _model_file(name).exists()
-                label = name.replace("_", " ").title()
-                st.write(f"{'[x]' if present else '[ ]'} {label}: {file_name}")
-            if "summary" in model_metadata and not model_metadata["summary"].empty:
-                summary = model_metadata["summary"].copy()
-                if {"Item", "Value"}.issubset(summary.columns):
-                    st.dataframe(summary.head(12), hide_index=True, width="stretch")
+    with st.expander("Loaded model files", expanded=False):
+        st.caption(str(DEFAULT_MODEL_OUTPUT_DIR))
+        for name, file_name in MODEL_OUTPUT_FILES.items():
+            present = _model_file(name).exists()
+            label = name.replace("_", " ").title()
+            st.write(f"{'[x]' if present else '[ ]'} {label}: {file_name}")
+        if "summary" in model_metadata and not model_metadata["summary"].empty:
+            summary = model_metadata["summary"].copy()
+            if {"Item", "Value"}.issubset(summary.columns):
+                st.dataframe(summary.head(12), hide_index=True, width="stretch")
 
     preset_weights = {
         "Balanced": {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1},
@@ -1659,9 +1660,7 @@ with tab_player:
             ).sort_values("Value", ascending=False)
             st.dataframe(per90.round(3), width="stretch", hide_index=True)
 
-        comparable = (
-            similar_players(df, player, same_position=True, n=12)
-        )
+        comparable = similar_players(df, player, same_position=True, n=12)
         st.subheader("Similarity search")
         st.dataframe(
             comparable[
@@ -1693,7 +1692,7 @@ with tab_analytics:
             visual_metric = st.selectbox(
                 "Visual metric",
                 SCORE_COLUMNS,
-                index=SCORE_COLUMNS.index("ScoutFitScore") if "ScoutFitScore" in SCORE_COLUMNS else SCORE_COLUMNS.index("CompositeRecruitmentScore"),
+                index=SCORE_COLUMNS.index("CompositeRecruitmentScore"),
             )
         with visual_cols[1]:
             reference_scope = st.selectbox("Reference pool", ["Filtered board", "Full database", "Same position as selected player"])
