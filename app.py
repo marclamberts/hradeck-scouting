@@ -133,6 +133,65 @@ PIZZA_CATEGORY_COLORS = {
     "Resale": "#f4a261",
     "Reliability": "#102a43",
 }
+EUROPE_COUNTRY_COORDS = {
+    "Albania": (41.1533, 20.1683),
+    "Andorra": (42.5063, 1.5218),
+    "Armenia": (40.0691, 45.0382),
+    "Austria": (47.5162, 14.5501),
+    "Azerbaijan": (40.1431, 47.5769),
+    "Belarus": (53.7098, 27.9534),
+    "Belgium": (50.5039, 4.4699),
+    "Bosnia and Herzegovina": (43.9159, 17.6791),
+    "Bulgaria": (42.7339, 25.4858),
+    "Croatia": (45.1000, 15.2000),
+    "Cyprus": (35.1264, 33.4299),
+    "Czech Republic": (49.8175, 15.4730),
+    "Czechia": (49.8175, 15.4730),
+    "Denmark": (56.2639, 9.5018),
+    "England": (52.3555, -1.1743),
+    "Estonia": (58.5953, 25.0136),
+    "Faroe Islands": (61.8926, -6.9118),
+    "Finland": (61.9241, 25.7482),
+    "France": (46.2276, 2.2137),
+    "Georgia": (42.3154, 43.3569),
+    "Germany": (51.1657, 10.4515),
+    "Gibraltar": (36.1408, -5.3536),
+    "Greece": (39.0742, 21.8243),
+    "Hungary": (47.1625, 19.5033),
+    "Iceland": (64.9631, -19.0208),
+    "Ireland": (53.1424, -7.6921),
+    "Israel": (31.0461, 34.8516),
+    "Italy": (41.8719, 12.5674),
+    "Kazakhstan": (48.0196, 66.9237),
+    "Kosovo": (42.6026, 20.9030),
+    "Latvia": (56.8796, 24.6032),
+    "Liechtenstein": (47.1660, 9.5554),
+    "Lithuania": (55.1694, 23.8813),
+    "Luxembourg": (49.8153, 6.1296),
+    "Malta": (35.9375, 14.3754),
+    "Moldova": (47.4116, 28.3699),
+    "Montenegro": (42.7087, 19.3744),
+    "Netherlands": (52.1326, 5.2913),
+    "North Macedonia": (41.6086, 21.7453),
+    "Northern Ireland": (54.7877, -6.4923),
+    "Norway": (60.4720, 8.4689),
+    "Poland": (51.9194, 19.1451),
+    "Portugal": (39.3999, -8.2245),
+    "Romania": (45.9432, 24.9668),
+    "Russia": (55.7558, 37.6173),
+    "San Marino": (43.9424, 12.4578),
+    "Scotland": (56.4907, -4.2026),
+    "Serbia": (44.0165, 21.0059),
+    "Slovakia": (48.6690, 19.6990),
+    "Slovenia": (46.1512, 14.9955),
+    "Spain": (40.4637, -3.7492),
+    "Sweden": (60.1282, 18.6435),
+    "Switzerland": (46.8182, 8.2275),
+    "Turkey": (38.9637, 35.2433),
+    "Türkiye": (38.9637, 35.2433),
+    "Ukraine": (48.3794, 31.1656),
+    "Wales": (52.1307, -3.7837),
+}
 
 
 st.set_page_config(
@@ -311,6 +370,57 @@ def top_missing_columns(df: pd.DataFrame, limit: int = 15) -> pd.DataFrame:
     missing.columns = ["Column", "Missing share"]
     missing["Missing share"] = missing["Missing share"] * 100
     return missing
+
+
+def country_name_series(df: pd.DataFrame) -> pd.Series:
+    if "CountryLabel" in df.columns:
+        country = df["CountryLabel"].fillna("").astype(str).str.strip()
+    else:
+        country = pd.Series("", index=df.index)
+    if country.eq("").all() and "BundleLabel" in df.columns:
+        country = df["BundleLabel"].fillna("").astype(str).str.split(" · ").str[-1].str.strip()
+    aliases = {
+        "UK": "England",
+        "United Kingdom": "England",
+        "Czech Rep.": "Czechia",
+        "Czech Republic": "Czechia",
+        "Turkiye": "Türkiye",
+        "Macedonia": "North Macedonia",
+        "Bosnia": "Bosnia and Herzegovina",
+    }
+    return country.replace(aliases)
+
+
+def european_market_map_frame(df: pd.DataFrame, metric: str = "ScoutFitScore") -> pd.DataFrame:
+    if df.empty or metric not in df.columns:
+        return pd.DataFrame()
+    working = df.copy()
+    working["Country"] = country_name_series(working)
+    working = working.loc[working["Country"].isin(EUROPE_COUNTRY_COORDS)].copy()
+    if working.empty:
+        return pd.DataFrame()
+    market = (
+        working.groupby("Country")
+        .agg(
+            Players=("PlayerName", "count"),
+            MedianScore=(metric, "median"),
+            TopScore=(metric, "max"),
+            Priority=("MarketTier", lambda x: x.isin(["Priority", "Must scout"]).sum()),
+            MedianAge=("AgeYears", "median"),
+        )
+        .round(1)
+        .reset_index()
+    )
+    market["PriorityShare"] = np.where(market["Players"].gt(0), market["Priority"] / market["Players"] * 100, 0).round(1)
+    market["lat"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][0])
+    market["lon"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][1])
+    market["GoScore"] = (market["MedianScore"] * 0.65 + market["PriorityShare"] * 0.25 + np.minimum(market["Players"], 80) * 0.10).round(1)
+    market["Recommendation"] = pd.cut(
+        market["GoScore"],
+        bins=[-np.inf, 42, 52, 62, np.inf],
+        labels=["Monitor", "Watch trip", "Scout next", "Go now"],
+    ).astype(str)
+    return market.sort_values("GoScore", ascending=False)
 
 
 def safe_col(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
@@ -1370,9 +1480,142 @@ with cols[4]:
         "priority or must-scout tier",
     )
 
-tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_analytics, tab_market, tab_data_room, tab_exports = st.tabs(
-    ["Overview", "Role boards", "Shortlist", "Compare", "Player lab", "Analytics", "Market map", "Data room", "Downloads"]
+tab_home, tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_analytics, tab_market, tab_data_room, tab_exports = st.tabs(
+    ["Home", "Overview", "Role boards", "Shortlist", "Compare", "Player lab", "Analytics", "Market map", "Data room", "Downloads"]
 )
+
+with tab_home:
+    st.subheader("Recruitment dashboard")
+    st.markdown(
+        """
+        <div class="note-box">
+            Start here: see where the model says FCHK should go next, which roles are strongest, and where the highest-value player clusters are located.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    home_metric = st.selectbox(
+        "Map score",
+        [c for c in ["ScoutFitScore", "CompositeRecruitmentScore", "ValueRecruitmentScore", "DecisionScore", "PerformanceReliabilityScore"] if c in filtered.columns],
+        index=0,
+        help="Countries are colored by median score. Bigger bubbles mean more players in the current filter.",
+    )
+    market_map = european_market_map_frame(filtered, home_metric)
+
+    if market_map.empty:
+        st.info("No country coordinates were found. Check that CountryLabel exists in the Excel output, or that BundleLabel ends with a country name.")
+    else:
+        map_left, map_right = st.columns([1.55, 1])
+        with map_left:
+            europe = alt.Chart(alt.topo_feature("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json", "countries")).mark_geoshape(
+                fill="#eef3f6",
+                stroke="#cbd8de",
+                strokeWidth=0.6,
+            ).project(
+                type="mercator",
+                center=[12, 53],
+                scale=520,
+            ).properties(height=560)
+
+            points = (
+                alt.Chart(market_map)
+                .mark_circle(opacity=0.86, stroke="#10212b", strokeWidth=0.8)
+                .encode(
+                    longitude="lon:Q",
+                    latitude="lat:Q",
+                    size=alt.Size("Players:Q", title="Players", scale=alt.Scale(range=[90, 1700])),
+                    color=alt.Color(
+                        "MedianScore:Q",
+                        title=f"Median {home_metric}",
+                        scale=alt.Scale(scheme="redyellowgreen", domain=[35, 70]),
+                    ),
+                    tooltip=[
+                        "Country",
+                        "Recommendation",
+                        alt.Tooltip("Players:Q", format=","),
+                        alt.Tooltip("MedianScore:Q", title=f"Median {home_metric}", format=".1f"),
+                        alt.Tooltip("TopScore:Q", title="Top score", format=".1f"),
+                        alt.Tooltip("Priority:Q", title="Priority+ players", format=","),
+                        alt.Tooltip("PriorityShare:Q", title="Priority share", format=".1f"),
+                        alt.Tooltip("MedianAge:Q", title="Median age", format=".1f"),
+                        alt.Tooltip("GoScore:Q", title="GoScore", format=".1f"),
+                    ],
+                )
+            )
+
+            labels = (
+                alt.Chart(market_map.head(12))
+                .mark_text(dy=-16, fontSize=11, fontWeight="bold", color="#10212b")
+                .encode(longitude="lon:Q", latitude="lat:Q", text="Country:N")
+            )
+            st.altair_chart(europe + points + labels, width="stretch")
+
+        with map_right:
+            st.subheader("Where to go next")
+            top_markets = market_map.head(8).copy()
+            st.dataframe(
+                top_markets[["Country", "Recommendation", "Players", "MedianScore", "Priority", "PriorityShare", "GoScore"]],
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "MedianScore": st.column_config.ProgressColumn("Median score", min_value=0, max_value=100, format="%.1f"),
+                    "PriorityShare": st.column_config.ProgressColumn("Priority %", min_value=0, max_value=100, format="%.1f%%"),
+                    "GoScore": st.column_config.ProgressColumn("GoScore", min_value=0, max_value=100, format="%.1f"),
+                },
+            )
+
+            if not top_markets.empty:
+                best = top_markets.iloc[0]
+                st.markdown(
+                    f"""
+                    <div class="section-card">
+                        <div class="metric-label">Best trip signal</div>
+                        <div class="metric-value" style="font-size:1.55rem;">{best['Country']}</div>
+                        <div class="metric-caption">{best['Recommendation']} · GoScore {best['GoScore']:.1f} · {int(best['Players']):,} players in current scope</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    st.subheader("Board pulse")
+    pulse_cols = st.columns(4)
+    with pulse_cols[0]:
+        metric_card("Must scout", f"{filtered['MarketTier'].eq('Must scout').sum():,}" if not filtered.empty else "0", "highest model tier")
+    with pulse_cols[1]:
+        metric_card("Priority countries", f"{market_map['Recommendation'].isin(['Scout next', 'Go now']).sum():,}" if not market_map.empty else "0", "map signals")
+    with pulse_cols[2]:
+        metric_card("Best median role", filtered.groupby("PositionGroup")["ScoutFitScore"].median().sort_values(ascending=False).index[0] if not filtered.empty else "n/a", "by Scout Fit")
+    with pulse_cols[3]:
+        metric_card("Median value", "n/a" if filtered.empty else f"{filtered['ValueRecruitmentScore'].median():.1f}", "filtered pool")
+
+    dash_left, dash_right = st.columns([1, 1])
+    with dash_left:
+        st.subheader("Role strength")
+        if not filtered.empty:
+            role_strength = (
+                filtered.groupby("PositionGroup")
+                .agg(Players=("PlayerName", "count"), MedianFit=("ScoutFitScore", "median"), Priority=("MarketTier", lambda x: x.isin(["Priority", "Must scout"]).sum()))
+                .round(1)
+                .reset_index()
+                .sort_values("MedianFit", ascending=False)
+            )
+            role_chart = (
+                alt.Chart(role_strength)
+                .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+                .encode(
+                    x=alt.X("PositionGroup:N", title="Role"),
+                    y=alt.Y("MedianFit:Q", title="Median Scout Fit", scale=alt.Scale(domain=[0, 100])),
+                    color=alt.Color("PositionGroup:N", legend=None, scale=alt.Scale(domain=list(POSITION_COLORS), range=list(POSITION_COLORS.values()))),
+                    tooltip=["PositionGroup", "Players", alt.Tooltip("MedianFit:Q", format=".1f"), "Priority"],
+                )
+                .properties(height=300)
+            )
+            st.altair_chart(role_chart, width="stretch")
+    with dash_right:
+        st.subheader("Top immediate targets")
+        target_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "ScoutFitScore", "MarketTier", "FitDrivers"]
+        st.dataframe(filtered[[c for c in target_cols if c in filtered.columns]].head(10).round(2), width="stretch", hide_index=True)
 
 with tab_overview:
     st.subheader("Recruitment board")
