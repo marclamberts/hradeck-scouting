@@ -24,7 +24,7 @@ DEFAULT_FILE = APP_DIR / "data" / "FCHK Scores Only.xlsx"
 DEFAULT_MODEL_OUTPUT_DIR = Path(
     os.environ.get(
         "FCHK_MODEL_OUTPUT_DIR",
-        "/Users/user/Downloads/01_Football_Analytics/Data_and_Models/RModel/outputs",
+        "/data/",
     )
 )
 MODEL_OUTPUT_FILES = {
