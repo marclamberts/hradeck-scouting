@@ -252,10 +252,65 @@ def load_default_data() -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_model_metadata() -> dict[str, pd.DataFrame]:
     metadata: dict[str, pd.DataFrame] = {}
-    for name in ["loaded_leagues", "model_input", "summary", "exports"]:
+    for name in MODEL_OUTPUT_FILES:
         if _model_file(name).exists():
             metadata[name] = _read_model_output(name)
     return metadata
+
+
+def file_inventory_frame(metadata: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    rows = []
+    for name, file_name in MODEL_OUTPUT_FILES.items():
+        path = _model_file(name)
+        frame = metadata.get(name)
+        rows.append(
+            {
+                "File": file_name,
+                "Purpose": name.replace("_", " ").title(),
+                "Status": "Loaded" if frame is not None else "Missing",
+                "Rows": 0 if frame is None else len(frame),
+                "Columns": 0 if frame is None else len(frame.columns),
+                "Sheet": MODEL_SHEETS[name],
+                "Path": str(path),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def coverage_summary_frame(df: pd.DataFrame) -> pd.DataFrame:
+    checks = {
+        "Player identity": ["PlayerName", "TeamName", "PositionGroup"],
+        "League context": ["LeagueLabel", "CountryLabel", "TierLabel", "SeasonLabel"],
+        "Core recruitment scores": ["DecisionScore", "ValueRecruitmentScore", "CompositeRecruitmentScore", "SuccessProbability"],
+        "Style profile": ["PrimaryPlayerStyle", "SecondaryPlayerStyle", "PlayerStyleSummary", "ClosestArchetype"],
+        "Smart club fit": ["SmartClubScore", "SmartClubTop3", "SmartClubClosenessTier"],
+        "Performance value": ["GoalsAddedScore", "RAPMScore", "PVScore", "xThreatScore", "ActionValueScore"],
+        "Per-90 event detail": ["xG_model_per90", "xA_per90", "Shots_per90", "ProgressivePasses_per90", "CriticalBallLosses_per90"],
+        "Risk and confidence": ["SampleConfidence", "ConfidenceBand", "DataCoverageScore", "MinutesRiskFlag", "DataCoverageFlag"],
+        "Scouting workflow": ["VideoReviewed", "LiveReviewed", "ScoutGrade", "ScoutFitGrade", "ModelScoutAgreement"],
+    }
+    rows = []
+    for area, cols in checks.items():
+        present = [c for c in cols if c in df.columns]
+        populated = 0.0
+        if present:
+            populated = float(df[present].notna().mean().mean() * 100)
+        rows.append(
+            {
+                "Area": area,
+                "Columns present": f"{len(present)}/{len(cols)}",
+                "Population": populated,
+                "Available columns": ", ".join(present) if present else "None",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def top_missing_columns(df: pd.DataFrame, limit: int = 15) -> pd.DataFrame:
+    missing = df.isna().mean().sort_values(ascending=False).head(limit).reset_index()
+    missing.columns = ["Column", "Missing share"]
+    missing["Missing share"] = missing["Missing share"] * 100
+    return missing
 
 
 def safe_col(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
@@ -1163,7 +1218,9 @@ with st.sidebar:
         for name, file_name in MODEL_OUTPUT_FILES.items():
             present = _model_file(name).exists()
             label = name.replace("_", " ").title()
-            st.write(f"{'[x]' if present else '[ ]'} {label}: {file_name}")
+            frame = model_metadata.get(name)
+            size_note = "" if frame is None else f" · {len(frame):,} rows × {len(frame.columns):,} cols"
+            st.write(f"{'[x]' if present else '[ ]'} {label}: {file_name}{size_note}")
         if "summary" in model_metadata and not model_metadata["summary"].empty:
             summary = model_metadata["summary"].copy()
             if {"Item", "Value"}.issubset(summary.columns):
@@ -1313,8 +1370,8 @@ with cols[4]:
         "priority or must-scout tier",
     )
 
-tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_analytics, tab_market, tab_exports = st.tabs(
-    ["Overview", "Role boards", "Shortlist", "Compare", "Player lab", "Analytics", "Market map", "Downloads"]
+tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_analytics, tab_market, tab_data_room, tab_exports = st.tabs(
+    ["Overview", "Role boards", "Shortlist", "Compare", "Player lab", "Analytics", "Market map", "Data room", "Downloads"]
 )
 
 with tab_overview:
@@ -1790,6 +1847,165 @@ with tab_market:
             .sort_values("CompositeRecruitmentScore", ascending=False)
         )
         st.dataframe(score_summary, width="stretch", hide_index=True)
+
+with tab_data_room:
+    st.subheader("Model data room")
+    st.markdown(
+        """
+        <div class="note-box">
+            This section checks which V3 Excel outputs are loaded, how much model context is available, and where the current board has strong or weak data coverage.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    inventory = file_inventory_frame(model_metadata)
+    inv_cols = st.columns(4)
+    with inv_cols[0]:
+        metric_card("Excel files", f"{inventory['Status'].eq('Loaded').sum()}/{len(inventory)}", "loaded into the app")
+    with inv_cols[1]:
+        metric_card("Recruitment rows", f"{len(model_metadata.get('recruitment', df)):,}", "main board source")
+    with inv_cols[2]:
+        metric_card("Model input cols", f"{len(model_metadata.get('model_input', pd.DataFrame()).columns):,}", "raw feature depth")
+    with inv_cols[3]:
+        smart_rows = len(model_metadata.get("smart_club", pd.DataFrame()))
+        metric_card("Smart-club rows", f"{smart_rows:,}", "club-fit model links")
+
+    st.subheader("Excel inventory")
+    st.dataframe(
+        inventory,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Rows": st.column_config.NumberColumn("Rows", format="%d"),
+            "Columns": st.column_config.NumberColumn("Columns", format="%d"),
+        },
+    )
+
+    overview_left, overview_right = st.columns([1, 1])
+    with overview_left:
+        st.subheader("Run summary")
+        summary_df = model_metadata.get("summary", pd.DataFrame())
+        if not summary_df.empty:
+            st.dataframe(summary_df, width="stretch", hide_index=True)
+        else:
+            run_cols = [c for c in ["ModelVersion", "RunDate", "SeasonLabel"] if c in df.columns]
+            if run_cols:
+                st.dataframe(df[run_cols].drop_duplicates().head(10), width="stretch", hide_index=True)
+            else:
+                st.info("No summary workbook or run metadata columns found.")
+
+    with overview_right:
+        st.subheader("Loaded leagues")
+        leagues_df = model_metadata.get("loaded_leagues", pd.DataFrame())
+        if not leagues_df.empty:
+            st.dataframe(leagues_df, width="stretch", hide_index=True)
+        else:
+            league_cols = [c for c in ["LeagueLabel", "CountryLabel", "TierLabel", "SeasonLabel"] if c in df.columns]
+            st.dataframe(df[league_cols].drop_duplicates().head(50), width="stretch", hide_index=True)
+
+    st.subheader("Coverage by model area")
+    coverage = coverage_summary_frame(df)
+    coverage_chart = (
+        alt.Chart(coverage)
+        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+        .encode(
+            y=alt.Y("Area:N", sort="-x", title=None),
+            x=alt.X("Population:Q", title="Average populated cells (%)", scale=alt.Scale(domain=[0, 100])),
+            tooltip=["Area", "Columns present", alt.Tooltip("Population:Q", format=".1f"), "Available columns"],
+        )
+        .properties(height=320)
+    )
+    st.altair_chart(coverage_chart, width="stretch")
+    st.dataframe(
+        coverage.round({"Population": 1}),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Population": st.column_config.ProgressColumn("Population", min_value=0, max_value=100, format="%.1f%%"),
+        },
+    )
+
+    dq_left, dq_right = st.columns([1, 1])
+    with dq_left:
+        st.subheader("Confidence and flags")
+        flag_cols = [c for c in ["ConfidenceBand", "MinutesRiskFlag", "DataCoverageFlag", "AvailabilityFlag", "WageRisk", "FeeRisk"] if c in df.columns]
+        if flag_cols:
+            selected_flag = st.selectbox("Flag / band", flag_cols)
+            flag_counts = df[selected_flag].fillna("Unknown").astype(str).value_counts().head(20).reset_index()
+            flag_counts.columns = [selected_flag, "Players"]
+            st.dataframe(flag_counts, width="stretch", hide_index=True)
+            flag_chart = (
+                alt.Chart(flag_counts)
+                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                .encode(
+                    y=alt.Y(f"{selected_flag}:N", sort="-x", title=None),
+                    x=alt.X("Players:Q", title="Players"),
+                    tooltip=[selected_flag, "Players"],
+                )
+                .properties(height=260)
+            )
+            st.altair_chart(flag_chart, width="stretch")
+        else:
+            st.info("No confidence or risk-flag columns found in the recruitment output.")
+
+    with dq_right:
+        st.subheader("Most incomplete columns")
+        missing_df = top_missing_columns(df)
+        st.dataframe(
+            missing_df.round({"Missing share": 1}),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Missing share": st.column_config.ProgressColumn("Missing", min_value=0, max_value=100, format="%.1f%%"),
+            },
+        )
+
+    style_df = model_metadata.get("player_styles", pd.DataFrame())
+    smart_df = model_metadata.get("smart_club", pd.DataFrame())
+    score_df = model_metadata.get("player_scores", pd.DataFrame())
+
+    detail_left, detail_right = st.columns([1, 1])
+    with detail_left:
+        st.subheader("Style model outputs")
+        if not style_df.empty:
+            style_cols = [c for c in ["PrimaryPlayerStyle", "SecondaryPlayerStyle", "ClosestArchetype", "SmartClubClosenessTier"] if c in style_df.columns]
+            if style_cols:
+                style_choice = st.selectbox("Style dimension", style_cols)
+                style_counts = style_df[style_choice].fillna("Unknown").astype(str).value_counts().head(15).reset_index()
+                style_counts.columns = [style_choice, "Players"]
+                st.dataframe(style_counts, width="stretch", hide_index=True)
+            st.dataframe(style_df.head(25), width="stretch", hide_index=True)
+        else:
+            st.info("Player Styles workbook not loaded.")
+
+    with detail_right:
+        st.subheader("Smart club closeness")
+        if not smart_df.empty:
+            club_summary = (
+                smart_df.groupby("SmartClubModel")
+                .agg(
+                    Links=("PlayerName", "count"),
+                    MedianCloseness=("SmartClubClosenessScore", "median"),
+                    BestCloseness=("SmartClubClosenessScore", "max"),
+                )
+                .round(1)
+                .reset_index()
+                .sort_values("MedianCloseness", ascending=False)
+            )
+            st.dataframe(club_summary, width="stretch", hide_index=True)
+            selected_club_model = st.selectbox("Inspect club model", club_summary["SmartClubModel"].tolist())
+            top_club_matches = smart_df.loc[smart_df["SmartClubModel"].eq(selected_club_model)].sort_values("SmartClubClosenessScore", ascending=False).head(25)
+            st.dataframe(top_club_matches, width="stretch", hide_index=True)
+        else:
+            st.info("Smart Club Closeness workbook not loaded.")
+
+    st.subheader("Raw score workbook preview")
+    if not score_df.empty:
+        st.dataframe(score_df.head(50), width="stretch", hide_index=True)
+    else:
+        st.info("Player Scores workbook not loaded.")
+
 
 with tab_exports:
     st.subheader("Report builder")
