@@ -1036,7 +1036,7 @@ st.markdown(
         --wash: #f4f7f9;
     }
     .stApp { background: var(--wash); color: var(--ink); }
-    .block-container { padding-top: 1.2rem; padding-bottom: 2.5rem; }
+    .block-container { padding-top: .75rem; padding-bottom: 2rem; }
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
         border-right: 1px solid var(--line);
@@ -1109,30 +1109,30 @@ st.markdown(
         border-radius: 8px;
     }
     .hero {
-        border: 1px solid #cfdde4;
-        border-radius: 8px;
-        padding: 24px 26px;
+        border: 1px solid #d8e1e6;
+        border-radius: 6px;
+        padding: 18px 20px;
         background:
-            linear-gradient(135deg, rgba(16, 42, 67, .96) 0%, rgba(42, 157, 143, .92) 58%, rgba(231, 111, 81, .82) 100%),
-            radial-gradient(circle at top right, rgba(244, 162, 97, .7), transparent 36%);
+            linear-gradient(135deg, rgba(8, 18, 28, .98) 0%, rgba(15, 60, 73, .96) 62%, rgba(42, 157, 143, .86) 100%);
         color: white;
-        margin-bottom: 18px;
-        box-shadow: 0 14px 34px rgba(16, 42, 67, .16);
+        margin-bottom: 12px;
+        box-shadow: 0 8px 22px rgba(16, 42, 67, .12);
     }
     .hero-kicker {
-        color: #d8f7f1;
-        font-size: .78rem;
-        font-weight: 800;
+        color: #9ee7dc;
+        font-size: .68rem;
+        font-weight: 900;
         text-transform: uppercase;
-        letter-spacing: .08em;
+        letter-spacing: .12em;
     }
     .hero h1 {
         color: white;
-        margin: 6px 0 4px 0;
-        font-size: 2.35rem;
-        line-height: 1.1;
+        margin: 4px 0 3px 0;
+        font-size: 1.85rem;
+        line-height: 1.05;
+        letter-spacing: -.02em;
     }
-    .hero p { margin: 0; max-width: 900px; color: #eef7f3; }
+    .hero p { margin: 0; max-width: 960px; color: #d9e7eb; font-size:.92rem; }
     .sidebar-brand {
         border: 1px solid #d7e4e9;
         border-radius: 8px;
@@ -1175,11 +1175,11 @@ st.markdown(
         font-weight: 800;
     }
     .section-card {
-        border: 1px solid var(--line);
-        border-radius: 8px;
+        border: 1px solid #d8e1e6;
+        border-radius: 6px;
         background: white;
-        padding: 14px 16px;
-        box-shadow: 0 1px 2px rgba(16, 33, 43, .04);
+        padding: 11px 12px;
+        box-shadow: none;
     }
     .mode-strip {
         display: flex;
@@ -1202,63 +1202,143 @@ st.markdown(
         border-color: var(--ink);
     }
     .metric-card {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 16px 18px;
-        background: var(--panel);
-        min-height: 112px;
-        box-shadow: 0 1px 2px rgba(16, 33, 43, .05);
+        border: 1px solid #d8e1e6;
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: #ffffff;
+        min-height: 82px;
+        box-shadow: none;
+        position: relative;
+    }
+    .metric-card:before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--teal);
+        border-radius: 6px 0 0 6px;
     }
     .metric-label {
-        color: var(--muted);
-        font-size: 0.78rem;
+        color: #536471;
+        font-size: 0.64rem;
         text-transform: uppercase;
-        letter-spacing: .04em;
-        font-weight: 700;
+        letter-spacing: .09em;
+        font-weight: 900;
     }
     .metric-value {
-        margin-top: 4px;
-        color: var(--ink);
-        font-size: 1.75rem;
-        font-weight: 800;
-        line-height: 1.1;
+        margin-top: 3px;
+        color: #08121c;
+        font-size: 1.35rem;
+        font-weight: 900;
+        line-height: 1.02;
+        letter-spacing: -.02em;
     }
     .metric-caption {
-        color: var(--muted);
-        font-size: .82rem;
-        margin-top: 6px;
+        color: #667085;
+        font-size: .72rem;
+        margin-top: 5px;
+        line-height: 1.25;
     }
     .profile-card {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 16px 18px;
+        border: 1px solid #d8e1e6;
+        border-radius: 6px;
+        padding: 12px 13px;
         background: white;
-        min-height: 140px;
-        box-shadow: 0 1px 2px rgba(16, 33, 43, .05);
+        min-height: 118px;
+        box-shadow: none;
     }
     .profile-name {
-        color: var(--ink);
-        font-weight: 850;
-        font-size: 1.12rem;
-        line-height: 1.2;
+        color: #08121c;
+        font-weight: 950;
+        font-size: 1rem;
+        line-height: 1.15;
+        letter-spacing: -.01em;
     }
-    .profile-meta { color: var(--muted); font-size: .88rem; margin-top: 3px; }
-    .pill-row { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .profile-meta { color: #667085; font-size: .78rem; margin-top: 3px; line-height: 1.3; }
+    .pill-row { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 5px; }
     .pill {
-        border: 1px solid #d8e4e8;
-        border-radius: 999px;
-        color: var(--ink);
-        background: #f6fafb;
-        padding: 4px 9px;
-        font-size: .78rem;
-        font-weight: 750;
+        border: 1px solid #cfdde4;
+        border-radius: 4px;
+        color: #08121c;
+        background: #f7fafb;
+        padding: 3px 7px;
+        font-size: .67rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .045em;
+    }
+    .tag-hot {
+        background: #111827;
+        border-color: #111827;
+        color: white;
+    }
+    .tag-go {
+        background: #eaf8f5;
+        border-color: #2a9d8f;
+        color: #10675d;
+    }
+    .tag-warn {
+        background: #fff3e7;
+        border-color: #f4a261;
+        color: #9a4f00;
     }
     .note-box {
-        border-left: 4px solid var(--teal);
+        border-left: 3px solid var(--teal);
         background: #ffffff;
-        padding: 12px 14px;
+        padding: 9px 11px;
+        border-radius: 4px;
+        color: #10212b;
+        font-size: .86rem;
+        line-height: 1.35;
+    }
+    .analysis-panel {
+        border: 1px solid #1f2d3a;
         border-radius: 6px;
-        color: var(--ink);
+        background: #08121c;
+        color: #d9e7eb;
+        padding: 12px 13px;
+    }
+    .analysis-panel .panel-kicker {
+        color: #9ee7dc;
+        font-size: .64rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .11em;
+        margin-bottom: 5px;
+    }
+    .analysis-panel .panel-title {
+        color: white;
+        font-size: 1.15rem;
+        font-weight: 950;
+        line-height: 1.05;
+        letter-spacing: -.02em;
+    }
+    .analysis-panel .panel-copy {
+        color: #b8c6cc;
+        font-size: .78rem;
+        line-height: 1.35;
+        margin-top: 6px;
+    }
+    .scout-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #cfdde4;
+        border-radius: 4px;
+        background: #ffffff;
+        padding: 4px 7px;
+        margin: 2px 4px 2px 0;
+        font-size: .68rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .055em;
+        color: #10212b;
+    }
+    .scout-label strong {
+        font-size: .78rem;
+        color: #08121c;
     }
     .table-hint {
         color: var(--muted);
@@ -1485,11 +1565,12 @@ tab_home, tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_a
 )
 
 with tab_home:
-    st.subheader("Recruitment dashboard")
     st.markdown(
         """
-        <div class="note-box">
-            Start here: see where the model says FCHK should go next, which roles are strongest, and where the highest-value player clusters are located.
+        <div class="analysis-panel">
+            <div class="panel-kicker">Market command view</div>
+            <div class="panel-title">Where should FCHK send eyes next?</div>
+            <div class="panel-copy">Country bubbles combine model quality, player depth, and priority-player density. Use the score selector to switch between fit, value, readiness, and decision quality.</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1552,7 +1633,7 @@ with tab_home:
             st.altair_chart(europe + points + labels, width="stretch")
 
         with map_right:
-            st.subheader("Where to go next")
+            st.subheader("Go / watch list")
             top_markets = market_map.head(8).copy()
             st.dataframe(
                 top_markets[["Country", "Recommendation", "Players", "MedianScore", "Priority", "PriorityShare", "GoScore"]],
@@ -1569,16 +1650,24 @@ with tab_home:
                 best = top_markets.iloc[0]
                 st.markdown(
                     f"""
-                    <div class="section-card">
-                        <div class="metric-label">Best trip signal</div>
-                        <div class="metric-value" style="font-size:1.55rem;">{best['Country']}</div>
-                        <div class="metric-caption">{best['Recommendation']} · GoScore {best['GoScore']:.1f} · {int(best['Players']):,} players in current scope</div>
+                    <div class="analysis-panel">
+                        <div class="panel-kicker">Best trip signal</div>
+                        <div class="panel-title">{best['Country']}</div>
+                        <div class="panel-copy">{best['Recommendation']} · GoScore {best['GoScore']:.1f} · {int(best['Players']):,} players in current scope</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
     st.subheader("Board pulse")
+    st.markdown(
+        """
+        <span class="scout-label">Signal <strong>Model-led</strong></span>
+        <span class="scout-label">Lens <strong>Value + Fit</strong></span>
+        <span class="scout-label">Action <strong>Trip planning</strong></span>
+        """,
+        unsafe_allow_html=True,
+    )
     pulse_cols = st.columns(4)
     with pulse_cols[0]:
         metric_card("Must scout", f"{filtered['MarketTier'].eq('Must scout').sum():,}" if not filtered.empty else "0", "highest model tier")
@@ -1613,7 +1702,7 @@ with tab_home:
             )
             st.altair_chart(role_chart, width="stretch")
     with dash_right:
-        st.subheader("Top immediate targets")
+        st.subheader("Immediate targets")
         target_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "ScoutFitScore", "MarketTier", "FitDrivers"]
         st.dataframe(filtered[[c for c in target_cols if c in filtered.columns]].head(10).round(2), width="stretch", hide_index=True)
 
