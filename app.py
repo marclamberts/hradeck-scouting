@@ -20,12 +20,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
-DEFAULT_MODEL_OUTPUT_DIR = Path(
-    os.environ.get(
-        "FCHK_MODEL_OUTPUT_DIR",
-        "/data/",
-    )
-)
+DEFAULT_MODEL_OUTPUT_DIR = APP_DIR / "data"
+
 MODEL_OUTPUT_FILES = {
     "recruitment": "FCHK Model V3 - Recruitment Scores.xlsx",
     "player_scores": "FCHK Model V3 - Player Scores.xlsx",
