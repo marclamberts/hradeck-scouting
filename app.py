@@ -21,6 +21,32 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 
 DEFAULT_FILE = APP_DIR / "data" / "FCHK Scores Only.xlsx"
+DEFAULT_MODEL_OUTPUT_DIR = Path(
+    os.environ.get(
+        "FCHK_MODEL_OUTPUT_DIR",
+        "/Users/user/Downloads/01_Football_Analytics/Data_and_Models/RModel/outputs",
+    )
+)
+MODEL_OUTPUT_FILES = {
+    "recruitment": "FCHK Model V3 - Recruitment Scores.xlsx",
+    "player_scores": "FCHK Model V3 - Player Scores.xlsx",
+    "player_styles": "FCHK Model V3 - Player Styles.xlsx",
+    "smart_club": "FCHK Model V3 - Smart Club Closeness.xlsx",
+    "loaded_leagues": "FCHK Model V3 - Loaded Leagues.xlsx",
+    "model_input": "FCHK Model V3 - Model Input.xlsx",
+    "summary": "FCHK Model V3 - Summary.xlsx",
+    "exports": "FCHK Model V3 Scores.xlsx",
+}
+MODEL_SHEETS = {
+    "recruitment": "Recruitment Scores",
+    "player_scores": "Player Scores",
+    "player_styles": "Player Styles",
+    "smart_club": "Smart Club Closeness",
+    "loaded_leagues": "Loaded Leagues",
+    "model_input": "Model Input",
+    "summary": "Summary",
+    "exports": "Export Files",
+}
 SCORE_COLUMNS = [
     "DecisionScore",
     "ValueRecruitmentScore",
@@ -126,17 +152,113 @@ st.set_page_config(
 def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
+    text_columns = {
+        "PlayerName",
+        "TeamName",
+        "PositionGroup",
+        "BundleLabel",
+        "LeagueLabel",
+        "CountryLabel",
+        "TierLabel",
+        "PrimaryPlayerStyle",
+        "SecondaryPlayerStyle",
+        "PlayerStyleSummary",
+        "PlayerStyleDrivers",
+        "ClosestArchetype",
+        "WhyThisClubStyle",
+        "SmartClubTop3",
+        "SmartClubClosenessTier",
+    }
     for col in df.columns:
-        if col not in {"PlayerName", "TeamName", "PositionGroup", "BundleLabel"}:
+        if col not in text_columns:
             converted = pd.to_numeric(df[col], errors="coerce")
             if converted.notna().any():
                 df[col] = converted
     return df
 
 
+def _model_file(name: str) -> Path:
+    return DEFAULT_MODEL_OUTPUT_DIR / MODEL_OUTPUT_FILES[name]
+
+
+def _read_model_output(name: str) -> pd.DataFrame:
+    return _clean_columns(pd.read_excel(_model_file(name), sheet_name=MODEL_SHEETS[name]))
+
+
+def _merge_missing_columns(base: pd.DataFrame, other: pd.DataFrame) -> pd.DataFrame:
+    keys = [col for col in ["PlayerName", "TeamName", "PositionGroup"] if col in base.columns and col in other.columns]
+    if not keys:
+        return base
+    add_cols = [col for col in other.columns if col not in base.columns and col not in keys]
+    if not add_cols:
+        return base
+    return base.merge(other[keys + add_cols].drop_duplicates(keys), on=keys, how="left")
+
+
+def normalize_model_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    aliases = {
+        "BundleLabel": ["BundleLabel", "LeagueLabel", "LeagueSlug"],
+        "MatchesPlayed": ["MatchesPlayed", "matches"],
+        "ScoringThreatScore": ["ScoringThreatScore", "AttackingScore", "UnderlyingThreatScore", "BoxThreatScore"],
+        "CreativeProgressionScore": ["CreativeProgressionScore", "CreationScore", "CreativeAMScore"],
+        "DefensiveDisruptionScore": ["DefensiveDisruptionScore", "DefendingScore", "BallWinningDMScore"],
+        "PressingScore": ["PressingScore", "PressTransitionScore", "PressingForwardScore"],
+        "ExpectedThreatScore": ["ExpectedThreatScore", "xThreatScore"],
+        "ASA_GoalsAddedScore": ["ASA_GoalsAddedScore", "GoalsAddedScore"],
+        "PerformanceReliabilityScore": ["PerformanceReliabilityScore", "ReliabilityScore", "SampleConfidence"],
+        "SecurityRisk_per90": ["SecurityRisk_per90", "CriticalBallLosses_per90", "Losses_evt_per90", "BallLosses_per90"],
+        "OwnHalfLosses_per90": ["OwnHalfLosses_per90", "Losses_evt_per90", "BallLosses_per90"],
+        "DangerOwnHalfLosses_per90": ["DangerOwnHalfLosses_per90", "CriticalBallLosses_per90"],
+        "xG_per90": ["xG_per90", "xG_model_per90", "xG_evt_per90"],
+        "xA_per90": ["xA_per90"],
+        "KeyPasses_per90": ["KeyPasses_per90"],
+        "ProgressivePasses_per90": ["ProgressivePasses_per90"],
+        "PressingDuelsWon_per90": ["PressingDuelsWon_per90"],
+        "CounterpressRecovs_per90": ["CounterpressRecovs_per90"],
+        "Imp_BypassedOpp_per90": ["Imp_BypassedOpp_per90", "BypassedOpp_per90"],
+        "Imp_BypassedDef_per90": ["Imp_BypassedDef_per90", "BypassedDef_per90"],
+        "Imp_BallWin_per90": ["Imp_BallWin_per90", "BallWins_per90"],
+        "Imp_BallLoss_per90": ["Imp_BallLoss_per90", "BallLosses_per90", "Losses_evt_per90"],
+    }
+    for target, candidates in aliases.items():
+        if target not in df:
+            for candidate in candidates:
+                if candidate in df:
+                    df[target] = df[candidate]
+                    break
+    if "BundleLabel" in df:
+        bundle = df["BundleLabel"].fillna("").astype(str)
+        if "CountryLabel" in df:
+            country = df["CountryLabel"].fillna("").astype(str)
+            bundle = np.where(country.ne(""), bundle + " · " + country, bundle)
+        if "TierLabel" in df:
+            tier = df["TierLabel"].fillna("").astype(str)
+            bundle = np.where(tier.ne(""), pd.Series(bundle, index=df.index) + " · " + tier, bundle)
+        df["BundleLabel"] = pd.Series(bundle, index=df.index).replace("", "Unknown league")
+    if "IsU23Target" not in df and "AgeYears" in df:
+        df["IsU23Target"] = safe_col(df, "AgeYears").le(23)
+    return df
+
+
 @st.cache_data(show_spinner=False)
 def load_default_data() -> pd.DataFrame:
-    return _clean_columns(pd.read_excel(DEFAULT_FILE))
+    if _model_file("recruitment").exists():
+        df = _read_model_output("recruitment")
+        for name in ["player_scores", "player_styles", "smart_club"]:
+            if _model_file(name).exists():
+                df = _merge_missing_columns(df, _read_model_output(name))
+        return normalize_model_columns(df)
+    return normalize_model_columns(_clean_columns(pd.read_excel(DEFAULT_FILE)))
+
+
+@st.cache_data(show_spinner=False)
+def load_model_metadata() -> dict[str, pd.DataFrame]:
+    metadata: dict[str, pd.DataFrame] = {}
+    for name in ["loaded_leagues", "model_input", "summary", "exports"]:
+        if _model_file(name).exists():
+            metadata[name] = _read_model_output(name)
+    return metadata
 
 
 def safe_col(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
@@ -1025,6 +1147,8 @@ with mode_columns[-1]:
 
 with st.sidebar:
     data = load_default_data()
+    model_metadata = load_model_metadata()
+    using_v3_outputs = _model_file("recruitment").exists()
     st.markdown(
         f"""
         <div class="sidebar-brand">
@@ -1035,6 +1159,19 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("<div class='menu-caption'>Use board modes for fast cuts, then refine the pool in the panels below.</div>", unsafe_allow_html=True)
+    source_label = "FCHK Model V3 outputs" if using_v3_outputs else "bundled workbook"
+    st.caption(f"Data source: {source_label}")
+    if using_v3_outputs:
+        with st.expander("Loaded model files", expanded=False):
+            st.caption(str(DEFAULT_MODEL_OUTPUT_DIR))
+            for name, file_name in MODEL_OUTPUT_FILES.items():
+                present = _model_file(name).exists()
+                label = name.replace("_", " ").title()
+                st.write(f"{'[x]' if present else '[ ]'} {label}: {file_name}")
+            if "summary" in model_metadata and not model_metadata["summary"].empty:
+                summary = model_metadata["summary"].copy()
+                if {"Item", "Value"}.issubset(summary.columns):
+                    st.dataframe(summary.head(12), hide_index=True, width="stretch")
 
     preset_weights = {
         "Balanced": {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1},

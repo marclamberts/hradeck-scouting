@@ -1,6 +1,6 @@
 # FCHK Scouting Streamlit App
 
-Local scouting workbench for `FCHK Scores Only.xlsx`.
+Local scouting workbench for the FCHK Model V3 Excel outputs.
 
 ## Run
 
@@ -9,7 +9,24 @@ python3 -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app opens with the bundled workbook in `data/FCHK Scores Only.xlsx`.
+The app opens with the FCHK Model V3 output folder:
+
+```text
+/Users/user/Downloads/01_Football_Analytics/Data_and_Models/RModel/outputs
+```
+
+It reads the following workbooks when present:
+
+- `FCHK Model V3 - Recruitment Scores.xlsx`
+- `FCHK Model V3 - Player Scores.xlsx`
+- `FCHK Model V3 - Player Styles.xlsx`
+- `FCHK Model V3 - Loaded Leagues.xlsx`
+- `FCHK Model V3 - Model Input.xlsx`
+- `FCHK Model V3 - Smart Club Closeness.xlsx`
+- `FCHK Model V3 - Summary.xlsx`
+- `FCHK Model V3 Scores.xlsx`
+
+To point the app at a different output folder, set `FCHK_MODEL_OUTPUT_DIR` before launching Streamlit. If the V3 recruitment workbook is unavailable, the app falls back to the bundled workbook in `data/FCHK Scores Only.xlsx`.
 
 ## Included
 
