@@ -21,7 +21,6 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 
 DEFAULT_MODEL_OUTPUT_DIR = APP_DIR / "data"
-
 MODEL_OUTPUT_FILES = {
     "recruitment": "FCHK Model V3 - Recruitment Scores.xlsx",
     "player_scores": "FCHK Model V3 - Player Scores.xlsx",
@@ -1158,7 +1157,7 @@ with st.sidebar:
     )
     st.markdown("<div class='menu-caption'>Use board modes for fast cuts, then refine the pool in the panels below.</div>", unsafe_allow_html=True)
     source_label = "FCHK Model V3 outputs"
-    st.caption(f"Data source: {source_label}")
+    st.caption(f"Data source: {source_label} · {DEFAULT_MODEL_OUTPUT_DIR}")
     with st.expander("Loaded model files", expanded=False):
         st.caption(str(DEFAULT_MODEL_OUTPUT_DIR))
         for name, file_name in MODEL_OUTPUT_FILES.items():
