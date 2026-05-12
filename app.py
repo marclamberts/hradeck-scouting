@@ -198,7 +198,7 @@ st.set_page_config(
     page_title="FCHK Scouting",
     page_icon="",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -1072,11 +1072,40 @@ st.markdown(
     .hero {
         border: 1px solid #182733;
         border-radius: 2px;
-        padding: 18px 20px;
-        background: linear-gradient(180deg, #07111a 0%, #10212b 100%);
+        padding: 26px 28px;
+        background:
+            linear-gradient(135deg, rgba(46, 196, 166, .18) 0%, rgba(46, 196, 166, 0) 38%),
+            linear-gradient(180deg, #07111a 0%, #10212b 100%);
         color: white;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
         box-shadow: none;
+        min-height: 520px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+        gap: 24px;
+        align-items: center;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .hero:after {
+        content: "";
+        position: absolute;
+        right: -80px;
+        bottom: -72px;
+        width: 540px;
+        height: 300px;
+        border: 1px solid rgba(124, 234, 213, .14);
+        background:
+            linear-gradient(90deg, transparent 0 18%, rgba(255,255,255,.06) 18% 19%, transparent 19% 39%, rgba(255,255,255,.06) 39% 40%, transparent 40% 60%, rgba(255,255,255,.06) 60% 61%, transparent 61% 82%, rgba(255,255,255,.06) 82% 83%, transparent 83%),
+            linear-gradient(0deg, transparent 0 22%, rgba(255,255,255,.05) 22% 23%, transparent 23% 48%, rgba(255,255,255,.05) 48% 49%, transparent 49% 74%, rgba(255,255,255,.05) 74% 75%, transparent 75%);
+        transform: rotate(-8deg);
+    }
+
+    .hero-content,
+    .hero-panel {
+        position: relative;
+        z-index: 1;
     }
 
     .hero-kicker {
@@ -1089,18 +1118,19 @@ st.markdown(
 
     .hero h1 {
         color: white;
-        margin: 4px 0 4px 0;
-        font-size: 1.85rem;
-        line-height: 1;
+        margin: 10px 0 10px 0;
+        max-width: 900px;
+        font-size: clamp(3rem, 7vw, 6.8rem);
+        line-height: .88;
         letter-spacing: -.05em;
     }
 
     .hero p {
         margin: 0;
-        max-width: 1200px;
+        max-width: 720px;
         color: #c4d0d6;
-        font-size: .82rem;
-        line-height: 1.35;
+        font-size: 1rem;
+        line-height: 1.48;
     }
 
     .home-nav {
@@ -1120,6 +1150,101 @@ st.markdown(
         font-weight: 950;
         letter-spacing: .12em;
         text-transform: uppercase;
+    }
+
+    .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 20px;
+    }
+
+    .hero-action-primary,
+    .hero-action-secondary {
+        border-radius: 2px;
+        padding: 9px 12px;
+        font-size: .68rem;
+        font-weight: 950;
+        letter-spacing: .11em;
+        text-transform: uppercase;
+    }
+
+    .hero-action-primary {
+        background: #7cead5;
+        border: 1px solid #7cead5;
+        color: #07111a;
+    }
+
+    .hero-action-secondary {
+        border: 1px solid rgba(255, 255, 255, .24);
+        color: #effffc;
+    }
+
+    .hero-panel {
+        border: 1px solid rgba(255, 255, 255, .16);
+        background: rgba(255, 255, 255, .06);
+        padding: 14px;
+    }
+
+    .hero-panel-title {
+        color: white;
+        font-size: 1.18rem;
+        font-weight: 950;
+        letter-spacing: -.04em;
+        line-height: 1.05;
+    }
+
+    .hero-panel-copy {
+        color: #b7c5cd;
+        font-size: .76rem;
+        line-height: 1.38;
+        margin-top: 7px;
+    }
+
+    .landing-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+        margin-top: 14px;
+    }
+
+    .landing-card {
+        border: 1px solid rgba(255, 255, 255, .14);
+        background: rgba(7, 17, 26, .72);
+        padding: 11px;
+        min-height: 118px;
+    }
+
+    .landing-card-label {
+        color: #7cead5;
+        font-size: .56rem;
+        font-weight: 950;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+    }
+
+    .landing-card-title {
+        color: white;
+        font-size: 1rem;
+        font-weight: 950;
+        letter-spacing: -.03em;
+        margin-top: 4px;
+    }
+
+    .landing-card-copy {
+        color: #aebfc8;
+        font-size: .68rem;
+        line-height: 1.32;
+        margin-top: 5px;
+    }
+
+    .workspace-label {
+        color: #66737d;
+        font-size: .62rem;
+        font-weight: 950;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        margin: 6px 0 8px 0;
     }
 
     .analysis-panel {
@@ -1406,11 +1531,18 @@ st.markdown(
     }
 
     @media (max-width: 900px) {
+        .hero,
         .homepage,
         .home-pillar-grid,
         .home-focus-strip,
-        .home-stat-row {
+        .home-stat-row,
+        .landing-grid {
             grid-template-columns: 1fr;
+        }
+
+        .hero {
+            min-height: auto;
+            padding: 22px;
         }
 
         .home-title {
@@ -1459,16 +1591,49 @@ st.markdown(
 st.markdown(
     """
     <div class="hero">
-        <div class="hero-kicker">FCHK recruitment intelligence</div>
-        <h1>Scouting | Recruitment | Goalkeepers | Team</h1>
-        <p>A focused workspace for identifying transfer targets, comparing player profiles, isolating goalkeeper value, and building team-level recruitment evidence.</p>
-        <div class="home-nav">
-            <span>Scouting</span>
-            <span>Recruitment</span>
-            <span>Goalkeepers</span>
-            <span>Team</span>
+        <div class="hero-content">
+            <div class="hero-kicker">Hradeck scouting</div>
+            <h1>Scouting | Recruitment | Goalkeepers | Team</h1>
+            <p>Football recruitment intelligence for turning model outputs into clearer scouting priorities, sharper goalkeeper decisions, and practical team-building evidence.</p>
+            <div class="hero-actions">
+                <span class="hero-action-primary">Enter scout room</span>
+                <span class="hero-action-secondary">Explore target pool</span>
+            </div>
+            <div class="home-nav">
+                <span>Player discovery</span>
+                <span>Shortlist building</span>
+                <span>GK profiling</span>
+                <span>Team planning</span>
+            </div>
+        </div>
+        <div class="hero-panel">
+            <div class="hero-panel-title">From raw player data to recruitment decisions.</div>
+            <div class="hero-panel-copy">Use the workspace below to filter the market, compare players, inspect role boards, build reports, and translate the model into scouting action.</div>
+            <div class="landing-grid">
+                <div class="landing-card">
+                    <div class="landing-card-label">Scouting</div>
+                    <div class="landing-card-title">Find the next watchlist.</div>
+                    <div class="landing-card-copy">Role, age, league, minutes, risk, and archetype filters for fast player discovery.</div>
+                </div>
+                <div class="landing-card">
+                    <div class="landing-card-label">Recruitment</div>
+                    <div class="landing-card-title">Rank the market.</div>
+                    <div class="landing-card-copy">Scout Fit, value, decision score, readiness, and custom model weights.</div>
+                </div>
+                <div class="landing-card">
+                    <div class="landing-card-label">Goalkeepers</div>
+                    <div class="landing-card-title">Isolate GK value.</div>
+                    <div class="landing-card-copy">Dedicated goalkeeper board and comparisons against the full reference pool.</div>
+                </div>
+                <div class="landing-card">
+                    <div class="landing-card-label">Team</div>
+                    <div class="landing-card-title">Plan the build.</div>
+                    <div class="landing-card-copy">League maps, role strength, shortlist exports, and report-ready evidence.</div>
+                </div>
+            </div>
         </div>
     </div>
+    <div class="workspace-label">Scouting workspace</div>
     """,
     unsafe_allow_html=True,
 )
