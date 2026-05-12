@@ -1020,6 +1020,15 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
+def enter_scouting_workspace() -> None:
+    st.session_state["show_scouting_workspace"] = True
+    st.session_state.pop("landing_notice", None)
+
+
+def show_under_development(section: str) -> None:
+    st.session_state["landing_notice"] = f"{section} is still under development."
+
+
 st.markdown(
     """
     <style>
@@ -1079,9 +1088,9 @@ st.markdown(
         color: white;
         margin-bottom: 14px;
         box-shadow: none;
-        min-height: 520px;
+        min-height: 430px;
         display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+        grid-template-columns: minmax(0, 1fr);
         gap: 24px;
         align-items: center;
         overflow: hidden;
@@ -1588,55 +1597,37 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    """
-    <div class="hero">
-        <div class="hero-content">
-            <div class="hero-kicker">Hradeck scouting</div>
-            <h1>Scouting | Recruitment | Goalkeepers | Team</h1>
-            <p>Football recruitment intelligence for turning model outputs into clearer scouting priorities, sharper goalkeeper decisions, and practical team-building evidence.</p>
-            <div class="hero-actions">
-                <span class="hero-action-primary">Enter scout room</span>
-                <span class="hero-action-secondary">Explore target pool</span>
-            </div>
-            <div class="home-nav">
-                <span>Player discovery</span>
-                <span>Shortlist building</span>
-                <span>GK profiling</span>
-                <span>Team planning</span>
+if "show_scouting_workspace" not in st.session_state:
+    st.session_state["show_scouting_workspace"] = False
+
+if not st.session_state["show_scouting_workspace"]:
+    st.markdown(
+        """
+        <div class="hero">
+            <div class="hero-content">
+                <div class="hero-kicker">Hradeck scouting</div>
+                <h1>Scouting | Recruitment | Goalkeepers | Team</h1>
+                <p>Football recruitment intelligence for turning model outputs into clearer priorities. Start with the scouting room today; recruitment, goalkeepers, and team tools are being built next.</p>
             </div>
         </div>
-        <div class="hero-panel">
-            <div class="hero-panel-title">From raw player data to recruitment decisions.</div>
-            <div class="hero-panel-copy">Use the workspace below to filter the market, compare players, inspect role boards, build reports, and translate the model into scouting action.</div>
-            <div class="landing-grid">
-                <div class="landing-card">
-                    <div class="landing-card-label">Scouting</div>
-                    <div class="landing-card-title">Find the next watchlist.</div>
-                    <div class="landing-card-copy">Role, age, league, minutes, risk, and archetype filters for fast player discovery.</div>
-                </div>
-                <div class="landing-card">
-                    <div class="landing-card-label">Recruitment</div>
-                    <div class="landing-card-title">Rank the market.</div>
-                    <div class="landing-card-copy">Scout Fit, value, decision score, readiness, and custom model weights.</div>
-                </div>
-                <div class="landing-card">
-                    <div class="landing-card-label">Goalkeepers</div>
-                    <div class="landing-card-title">Isolate GK value.</div>
-                    <div class="landing-card-copy">Dedicated goalkeeper board and comparisons against the full reference pool.</div>
-                </div>
-                <div class="landing-card">
-                    <div class="landing-card-label">Team</div>
-                    <div class="landing-card-title">Plan the build.</div>
-                    <div class="landing-card-copy">League maps, role strength, shortlist exports, and report-ready evidence.</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="workspace-label">Scouting workspace</div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
+    landing_cols = st.columns(4)
+    with landing_cols[0]:
+        st.button("Scouting", type="primary", width="stretch", on_click=enter_scouting_workspace)
+    with landing_cols[1]:
+        st.button("Recruitment", width="stretch", on_click=show_under_development, args=("Recruitment",))
+    with landing_cols[2]:
+        st.button("Goalkeepers", width="stretch", on_click=show_under_development, args=("Goalkeepers",))
+    with landing_cols[3]:
+        st.button("Team", width="stretch", on_click=show_under_development, args=("Team",))
+
+    if st.session_state.get("landing_notice"):
+        st.info(st.session_state["landing_notice"])
+    st.stop()
+
+st.markdown("<div class='workspace-label'>Scouting workspace</div>", unsafe_allow_html=True)
 
 if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
