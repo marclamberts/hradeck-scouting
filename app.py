@@ -11,6 +11,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/hradeck_scouting_matplotlib")
 import numpy as np
 import pandas as pd
 import altair as alt
+import pydeck as pdk
 import matplotlib.pyplot as plt
 import streamlit as st
 from mplsoccer import PyPizza
@@ -391,6 +392,84 @@ def country_name_series(df: pd.DataFrame) -> pd.Series:
     return country.replace(aliases)
 
 
+def score_to_hex(score: float, low: float = 35, mid: float = 52.5, high: float = 70) -> str:
+    """Convert a score to the red-yellow-green palette used by the market map."""
+    stops = [
+        (low, np.array([215, 48, 39])),
+        (mid, np.array([254, 224, 139])),
+        (high, np.array([26, 152, 80])),
+    ]
+    numeric_score = pd.to_numeric(score, errors="coerce")
+    value = mid if pd.isna(numeric_score) else float(np.clip(numeric_score, low, high))
+    if value <= mid:
+        start_score, start_color = stops[0]
+        end_score, end_color = stops[1]
+    else:
+        start_score, start_color = stops[1]
+        end_score, end_color = stops[2]
+    ratio = (value - start_score) / max(end_score - start_score, 1)
+    rgb = np.rint(start_color + (end_color - start_color) * ratio).astype(int)
+    return "#" + "".join(f"{channel:02x}" for channel in rgb)
+
+
+def hex_to_rgb(hex_color: str) -> list[int]:
+    """Convert #rrggbb colors to pydeck-compatible RGB lists."""
+    color = hex_color.lstrip("#")
+    return [int(color[index : index + 2], 16) for index in (0, 2, 4)]
+
+
+def add_market_marker_columns(market: pd.DataFrame) -> pd.DataFrame:
+    """Add display-only marker columns for the pydeck latitude/longitude Europe map."""
+    marked = market.copy()
+    player_scale = np.sqrt(marked["Players"].clip(lower=1))
+    max_scale = max(float(player_scale.max()), 1.0)
+    marked["BubbleRadius"] = (18_000 + (player_scale / max_scale) * 46_000).round(0)
+    marked["BubbleColor"] = marked["MedianScore"].map(score_to_hex)
+    marked["BubbleColorRgba"] = marked["BubbleColor"].map(lambda color: hex_to_rgb(color) + [190])
+    return marked
+
+
+def render_europe_market_map(market_map: pd.DataFrame) -> None:
+    """Render country bubbles on a real Web Mercator basemap using lon/lat coordinates."""
+    layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=market_map,
+        get_position="[lon, lat]",
+        get_radius="BubbleRadius",
+        get_fill_color="BubbleColorRgba",
+        get_line_color=[9, 19, 28, 230],
+        line_width_min_pixels=1,
+        pickable=True,
+        stroked=True,
+        filled=True,
+        radius_min_pixels=6,
+        radius_max_pixels=34,
+    )
+    label_layer = pdk.Layer(
+        "TextLayer",
+        data=market_map.head(12),
+        get_position="[lon, lat]",
+        get_text="Country",
+        get_color=[9, 19, 28, 230],
+        get_size=13,
+        get_alignment_baseline="bottom",
+        get_pixel_offset=[0, -18],
+        pickable=False,
+    )
+    tooltip = {
+        "html": "<b>{Country}</b><br/>{Recommendation}<br/>Players: {Players}<br/>Median score: {MedianScore}<br/>Priority+: {Priority}<br/>GoScore: {GoScore}",
+        "style": {"backgroundColor": "#07111a", "color": "white", "fontFamily": "Inter, sans-serif"},
+    }
+    deck = pdk.Deck(
+        layers=[layer, label_layer],
+        initial_view_state=pdk.ViewState(latitude=52.0, longitude=14.0, zoom=3.1, pitch=0, bearing=0),
+        tooltip=tooltip,
+        map_style="light",
+    )
+    st.pydeck_chart(deck, height=560)
+    st.caption("Country bubbles are plotted with real longitude/latitude on the basemap; color follows median score and radius follows player count.")
+
+
 def european_market_map_frame(df: pd.DataFrame, metric: str = "ScoutFitScore") -> pd.DataFrame:
     if df.empty or metric not in df.columns:
         return pd.DataFrame()
@@ -414,6 +493,7 @@ def european_market_map_frame(df: pd.DataFrame, metric: str = "ScoutFitScore") -
     market["PriorityShare"] = np.where(market["Players"].gt(0), market["Priority"] / market["Players"] * 100, 0).round(1)
     market["lat"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][0])
     market["lon"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][1])
+    market = add_market_marker_columns(market)
     market["GoScore"] = (market["MedianScore"] * 0.65 + market["PriorityShare"] * 0.25 + np.minimum(market["Players"], 80) * 0.10).round(1)
     market["Recommendation"] = pd.cut(
         market["GoScore"],
@@ -1020,6 +1100,10 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
+def set_home_section(section: str) -> None:
+    st.session_state["home_section"] = section
+
+
 st.markdown(
     """
     <style>
@@ -1270,6 +1354,38 @@ st.markdown(
         font-size: .64rem;
     }
 
+    .home-option-card {
+        border: 1px solid var(--line);
+        border-radius: 2px;
+        background: white;
+        padding: 10px 10px 8px 10px;
+        min-height: 112px;
+        margin-bottom: 6px;
+    }
+
+    .home-option-kicker {
+        color: var(--teal);
+        font-size: .56rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .14em;
+    }
+
+    .home-option-title {
+        color: var(--ink);
+        font-size: 1.02rem;
+        font-weight: 950;
+        letter-spacing: -.04em;
+        margin-top: 3px;
+    }
+
+    .home-option-copy {
+        color: var(--muted);
+        font-size: .7rem;
+        line-height: 1.35;
+        margin-top: 4px;
+    }
+
     [data-testid="stDataFrame"] {
         border: 1px solid var(--line);
         border-radius: 2px;
@@ -1290,6 +1406,76 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+HOME_OPTIONS = {
+    "Scouting": {
+        "kicker": "Recruitment",
+        "copy": "Player boards, shortlist workflow, role fit, comparisons, and export packs.",
+    },
+    "Analysis": {
+        "kicker": "Insights",
+        "copy": "Market strength, role trends, league heatmaps, and model diagnostics.",
+    },
+    "Set pieces": {
+        "kicker": "Restarts",
+        "copy": "Dedicated set-piece scouting workspace for routines, takers, targets, and delivery profiles.",
+    },
+    "Methodology": {
+        "kicker": "Model logic",
+        "copy": "How the score stack, risk flags, confidence checks, and market recommendations are built.",
+    },
+}
+
+if "home_section" not in st.session_state:
+    st.session_state["home_section"] = "Scouting"
+
+home_cols = st.columns(4)
+for option_index, (option, details) in enumerate(HOME_OPTIONS.items()):
+    with home_cols[option_index]:
+        st.markdown(
+            f"""
+            <div class="home-option-card">
+                <div class="home-option-kicker">{details['kicker']}</div>
+                <div class="home-option-title">{option}</div>
+                <div class="home-option-copy">{details['copy']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button(
+            f"Open {option}",
+            key=f"home_{option}",
+            type="primary" if st.session_state["home_section"] == option else "secondary",
+            width="stretch",
+            on_click=set_home_section,
+            args=(option,),
+        )
+
+if st.session_state["home_section"] != "Scouting":
+    selected_details = HOME_OPTIONS[st.session_state["home_section"]]
+    st.markdown(
+        f"""
+        <div class="analysis-panel">
+            <div class="panel-kicker">{selected_details['kicker']}</div>
+            <div class="panel-title">{st.session_state['home_section']}</div>
+            <div class="panel-copy">{selected_details['copy']}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.session_state["home_section"] == "Analysis":
+        st.info("Analysis is the model-insight entry point. Use Scouting for the live player board while this page is reserved for standalone analysis views.")
+    elif st.session_state["home_section"] == "Set pieces":
+        st.info("Set-piece routines, taker profiles, and target tracking will live here without mixing them into open-play scouting boards.")
+    else:
+        st.markdown(
+            """
+            - **Composite score** combines model quality, decision readiness, value, success probability, reliability, and risk.
+            - **Market tiers** translate the score stack into watch, depth, shortlist, priority, and must-scout actions.
+            - **Map recommendations** combine country median quality, player depth, and priority-player share.
+            """
+        )
+    st.stop()
 
 if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
@@ -1513,48 +1699,7 @@ with tab_home:
     else:
         map_left, map_right = st.columns([1.55, 1])
         with map_left:
-            europe = alt.Chart(alt.topo_feature("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json", "countries")).mark_geoshape(
-                fill="#eef3f6",
-                stroke="#cbd8de",
-                strokeWidth=0.6,
-            ).project(
-                type="mercator",
-                center=[12, 53],
-                scale=520,
-            ).properties(height=560)
-
-            points = (
-                alt.Chart(market_map)
-                .mark_circle(opacity=0.86, stroke="#10212b", strokeWidth=0.8)
-                .encode(
-                    longitude="lon:Q",
-                    latitude="lat:Q",
-                    size=alt.Size("Players:Q", title="Players", scale=alt.Scale(range=[90, 1700])),
-                    color=alt.Color(
-                        "MedianScore:Q",
-                        title=f"Median {home_metric}",
-                        scale=alt.Scale(scheme="redyellowgreen", domain=[35, 70]),
-                    ),
-                    tooltip=[
-                        "Country",
-                        "Recommendation",
-                        alt.Tooltip("Players:Q", format=","),
-                        alt.Tooltip("MedianScore:Q", title=f"Median {home_metric}", format=".1f"),
-                        alt.Tooltip("TopScore:Q", title="Top score", format=".1f"),
-                        alt.Tooltip("Priority:Q", title="Priority+ players", format=","),
-                        alt.Tooltip("PriorityShare:Q", title="Priority share", format=".1f"),
-                        alt.Tooltip("MedianAge:Q", title="Median age", format=".1f"),
-                        alt.Tooltip("GoScore:Q", title="GoScore", format=".1f"),
-                    ],
-                )
-            )
-
-            labels = (
-                alt.Chart(market_map.head(12))
-                .mark_text(dy=-16, fontSize=11, fontWeight="bold", color="#10212b")
-                .encode(longitude="lon:Q", latitude="lat:Q", text="Country:N")
-            )
-            st.altair_chart(europe + points + labels, width="stretch")
+            render_europe_market_map(market_map)
 
         with map_right:
             st.subheader("Go / watch list")
