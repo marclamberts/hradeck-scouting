@@ -1072,7 +1072,7 @@ st.markdown(
     .hero {
         border: 1px solid #182733;
         border-radius: 2px;
-        padding: 14px 16px;
+        padding: 18px 20px;
         background: linear-gradient(180deg, #07111a 0%, #10212b 100%);
         color: white;
         margin-bottom: 10px;
@@ -1089,8 +1089,8 @@ st.markdown(
 
     .hero h1 {
         color: white;
-        margin: 2px 0 1px 0;
-        font-size: 1.55rem;
+        margin: 4px 0 4px 0;
+        font-size: 1.85rem;
         line-height: 1;
         letter-spacing: -.05em;
     }
@@ -1099,8 +1099,27 @@ st.markdown(
         margin: 0;
         max-width: 1200px;
         color: #c4d0d6;
-        font-size: .8rem;
+        font-size: .82rem;
         line-height: 1.35;
+    }
+
+    .home-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+    }
+
+    .home-nav span {
+        border: 1px solid rgba(124, 234, 213, .42);
+        background: rgba(255, 255, 255, .055);
+        color: #effffc;
+        border-radius: 2px;
+        padding: 5px 8px;
+        font-size: .62rem;
+        font-weight: 950;
+        letter-spacing: .12em;
+        text-transform: uppercase;
     }
 
     .analysis-panel {
@@ -1242,6 +1261,163 @@ st.markdown(
         padding: 9px;
     }
 
+    .homepage {
+        display: grid;
+        grid-template-columns: 1.35fr .95fr;
+        gap: 12px;
+        align-items: stretch;
+        margin-bottom: 12px;
+    }
+
+    .home-feature {
+        border: 1px solid #1b2b38;
+        border-radius: 2px;
+        background:
+            linear-gradient(135deg, rgba(46, 196, 166, .16) 0%, rgba(46, 196, 166, 0) 42%),
+            linear-gradient(180deg, #07111a 0%, #0f1e2b 100%);
+        color: white;
+        min-height: 356px;
+        padding: 18px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .home-feature:after {
+        content: "";
+        position: absolute;
+        inset: auto -10% -18% 38%;
+        height: 220px;
+        border: 1px solid rgba(124, 234, 213, .16);
+        background:
+            linear-gradient(90deg, transparent 0 18%, rgba(255,255,255,.06) 18% 19%, transparent 19% 39%, rgba(255,255,255,.06) 39% 40%, transparent 40% 60%, rgba(255,255,255,.06) 60% 61%, transparent 61% 82%, rgba(255,255,255,.06) 82% 83%, transparent 83%),
+            linear-gradient(0deg, transparent 0 22%, rgba(255,255,255,.05) 22% 23%, transparent 23% 48%, rgba(255,255,255,.05) 48% 49%, transparent 49% 74%, rgba(255,255,255,.05) 74% 75%, transparent 75%);
+        transform: rotate(-8deg);
+        opacity: .9;
+    }
+
+    .home-kicker {
+        color: #7cead5;
+        font-size: .62rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .16em;
+        position: relative;
+        z-index: 1;
+    }
+
+    .home-title {
+        color: white;
+        font-size: 2.8rem;
+        font-weight: 950;
+        letter-spacing: -.05em;
+        line-height: .95;
+        max-width: 760px;
+        margin-top: 8px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .home-copy {
+        color: #c4d0d6;
+        font-size: .88rem;
+        line-height: 1.45;
+        max-width: 680px;
+        margin-top: 12px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .home-stat-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 22px;
+        max-width: 640px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .home-stat {
+        border: 1px solid rgba(255, 255, 255, .16);
+        background: rgba(255, 255, 255, .06);
+        border-radius: 2px;
+        padding: 9px;
+    }
+
+    .home-stat-value {
+        font-size: 1.32rem;
+        font-weight: 950;
+        letter-spacing: -.04em;
+        line-height: 1;
+    }
+
+    .home-stat-label {
+        color: #aebfc8;
+        font-size: .58rem;
+        font-weight: 950;
+        letter-spacing: .11em;
+        text-transform: uppercase;
+        margin-top: 5px;
+    }
+
+    .home-pillar-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .home-pillar {
+        border: 1px solid var(--line);
+        border-radius: 2px;
+        background: #ffffff;
+        padding: 12px;
+        min-height: 172px;
+    }
+
+    .home-pillar-label {
+        color: #2a9d8f;
+        font-size: .58rem;
+        font-weight: 950;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+    }
+
+    .home-pillar-title {
+        color: #09131c;
+        font-size: 1.18rem;
+        font-weight: 950;
+        letter-spacing: -.04em;
+        line-height: 1.05;
+        margin-top: 5px;
+    }
+
+    .home-pillar-copy {
+        color: #5f6b76;
+        font-size: .72rem;
+        line-height: 1.35;
+        margin-top: 8px;
+    }
+
+    .home-focus-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    @media (max-width: 900px) {
+        .homepage,
+        .home-pillar-grid,
+        .home-focus-strip,
+        .home-stat-row {
+            grid-template-columns: 1fr;
+        }
+
+        .home-title {
+            font-size: 2.05rem;
+        }
+    }
+
     .stButton > button,
     .stDownloadButton > button {
         border-radius: 2px;
@@ -1284,8 +1460,14 @@ st.markdown(
     """
     <div class="hero">
         <div class="hero-kicker">FCHK recruitment intelligence</div>
-        <h1>Scouting Command Center</h1>
-        <p>Rank, filter, compare, and export the player pool with configurable recruitment weights, archetypes, risk flags, and detailed player profiles.</p>
+        <h1>Scouting | Recruitment | Goalkeepers | Team</h1>
+        <p>A focused workspace for identifying transfer targets, comparing player profiles, isolating goalkeeper value, and building team-level recruitment evidence.</p>
+        <div class="home-nav">
+            <span>Scouting</span>
+            <span>Recruitment</span>
+            <span>Goalkeepers</span>
+            <span>Team</span>
+        </div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -1489,6 +1671,70 @@ tab_home, tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_a
 )
 
 with tab_home:
+    top_gk = filtered.loc[filtered["PositionGroup"].eq("GK")].head(1)
+    top_team = filtered.head(1)
+    st.markdown(
+        f"""
+        <div class="homepage">
+            <div class="home-feature">
+                <div class="home-kicker">Hradeck scouting homepage</div>
+                <div class="home-title">Scouting, recruitment, goalkeepers, and team intelligence in one board.</div>
+                <div class="home-copy">
+                    Start from a filtered player pool, move quickly into ranked recruitment targets, isolate goalkeeper profiles,
+                    and use team-level context to decide where the next scouting attention should go.
+                </div>
+                <div class="home-stat-row">
+                    <div class="home-stat">
+                        <div class="home-stat-value">{len(filtered):,}</div>
+                        <div class="home-stat-label">Players in scope</div>
+                    </div>
+                    <div class="home-stat">
+                        <div class="home-stat-value">{filtered['MarketTier'].isin(['Priority', 'Must scout']).sum() if not filtered.empty else 0:,}</div>
+                        <div class="home-stat-label">Priority targets</div>
+                    </div>
+                    <div class="home-stat">
+                        <div class="home-stat-value">{filtered['PositionGroup'].nunique() if not filtered.empty else 0}</div>
+                        <div class="home-stat-label">Role groups</div>
+                    </div>
+                </div>
+            </div>
+            <div class="home-pillar-grid">
+                <div class="home-pillar">
+                    <div class="home-pillar-label">01</div>
+                    <div class="home-pillar-title">Scouting</div>
+                    <div class="home-pillar-copy">Shortlist players by role, age, minutes, risk, reliability, league, and archetype before moving into detailed profile checks.</div>
+                </div>
+                <div class="home-pillar">
+                    <div class="home-pillar-label">02</div>
+                    <div class="home-pillar-title">Recruitment</div>
+                    <div class="home-pillar-copy">Rank targets by Scout Fit, value, decision score, success probability, and readiness using adjustable model weights.</div>
+                </div>
+                <div class="home-pillar">
+                    <div class="home-pillar-label">03</div>
+                    <div class="home-pillar-title">Goalkeepers</div>
+                    <div class="home-pillar-copy">Jump into the GK role board and compare the highest-rated goalkeeper profiles against the broader player database.</div>
+                </div>
+                <div class="home-pillar">
+                    <div class="home-pillar-label">04</div>
+                    <div class="home-pillar-title">Team</div>
+                    <div class="home-pillar-copy">Use market maps, league depth, role strength, and shortlist exports to turn player evidence into team planning.</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    home_focus_cols = st.columns(4)
+    with home_focus_cols[0]:
+        metric_card("Scouting lead", "n/a" if top_team.empty else str(top_team.iloc[0]["PlayerName"]), "highest Scout Fit")
+    with home_focus_cols[1]:
+        metric_card("Recruitment score", "n/a" if top_team.empty else f"{top_team.iloc[0]['ScoutFitScore']:.1f}", "current top target")
+    with home_focus_cols[2]:
+        metric_card("Top goalkeeper", "n/a" if top_gk.empty else str(top_gk.iloc[0]["PlayerName"]), "filtered GK board")
+    with home_focus_cols[3]:
+        metric_card("Team signal", "n/a" if filtered.empty else filtered.groupby("PositionGroup")["ScoutFitScore"].median().sort_values(ascending=False).index[0], "strongest role")
+
     st.markdown(
         """
         <div class="analysis-panel">
