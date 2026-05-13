@@ -2785,3 +2785,63 @@ with tab_exports:
         width="stretch",
         hide_index=True,
     )
+
+def render_transfer_market_dashboard(df: pd.DataFrame):
+    st.header("🌐 Transfer Market Intelligence")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # 1. Market Inventory Metrics
+    total_targets = len(df[df["MarketTier"].isin(["Must scout", "Priority"])])
+    u23_count = len(df[df["AgeYears"] <= 23])
+    
+    with col1:
+        metric_card("High Priority Targets", f"{total_targets}", "Must Scout / Priority Tiers")
+    with col2:
+        metric_card("U23 Talent Pool", f"{u23_count}", f"{(u23_count/len(df)*100):.1f}% of Database")
+    with col3:
+        avg_fit = df["ScoutFitScore"].mean()
+        metric_card("Avg. Scout Fit", f"{avg_fit:.1f}", "Database Mean")
+    with col4:
+        top_league = df.groupby("BundleLabel")["ScoutFitScore"].mean().idxmax()
+        metric_card("Top Value League", shorten(top_league, 20), "Highest Avg Fit Score")
+
+    st.divider()
+
+    left_inner, right_inner = st.columns([2, 1])
+
+    with left_inner:
+        st.subheader("Age vs. Market Value Potential")
+        # Scatter plot showing Age vs ScoutFitScore, sized by Success Probability
+        chart = alt.Chart(df).mark_circle(size=60).encode(
+            x=alt.X("AgeYears:Q", title="Age"),
+            y=alt.Y("ScoutFitScore:Q", title="Scout Fit Score"),
+            color=alt.Color("PositionGroup:N", scale=alt.Scale(domain=list(POSITION_COLORS.keys()), range=list(POSITION_COLORS.values()))),
+            tooltip=["PlayerName", "TeamName", "AgeYears", "ScoutFitScore", "MarketTier"]
+        ).properties(height=400).interactive()
+        st.altair_chart(chart, use_container_width=True)
+
+    with right_inner:
+        st.subheader("Market Tier Breakdown")
+        tier_counts = df["MarketTier"].value_counts().reset_index()
+        tier_chart = alt.Chart(tier_counts).mark_arc(innerRadius=50).encode(
+            theta=alt.Theta("count:Q"),
+            color=alt.Color("MarketTier:N", scale=alt.Scale(domain=list(TIER_COLORS.keys()), range=list(TIER_COLORS.values()))),
+            tooltip=["MarketTier", "count"]
+        ).properties(height=400)
+        st.altair_chart(tier_chart, use_container_width=True)
+
+    # 2. Targeted "Buy" List Table
+    st.subheader("Priority Acquisition List")
+    priority_df = df[df["MarketTier"] == "Must scout"].sort_values("ScoutFitScore", ascending=False)
+    
+    st.dataframe(
+        priority_df[CORE_COLUMNS + ["RiskBand", "Readiness"]],
+        column_config={
+            "SuccessProbability": st.column_config.ProgressColumn("Success Prob", format="%.0f%%", min_value=0, max_value=100),
+            "ScoutFitScore": st.column_config.NumberColumn("Fit", format="%.1f"),
+            "AgeYears": "Age"
+        },
+        hide_index=True,
+        use_container_width=True
+    )
