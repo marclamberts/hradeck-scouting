@@ -2845,3 +2845,17 @@ def render_transfer_market_dashboard(df: pd.DataFrame):
         hide_index=True,
         use_container_width=True
     )
+st.markdown("""
+    <style>
+    .metric-card {
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #2a9d8f;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .metric-label { color: #667085; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+    .metric-value { color: #10212b; font-size: 1.5rem; font-weight: 700; }
+    </style>
+""", unsafe_allow_html=True)
