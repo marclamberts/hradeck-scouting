@@ -1200,6 +1200,96 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
             st.dataframe(related_styles[style_cols].head(50), width="stretch", hide_index=True)
 
 
+def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
+    keeper_df = add_scouting_fields(data, BALANCED_WEIGHTS)
+    keeper_df = keeper_df.loc[keeper_df["PositionGroup"].astype(str).eq("GK")].sort_values(
+        ["ScoutFitScore", "PerformanceReliabilityScore"],
+        ascending=False,
+    )
+
+    st.markdown("<div class='workspace-label'>Goalkeepers workspace</div>", unsafe_allow_html=True)
+    st.subheader("Goalkeeper board")
+
+    if keeper_df.empty:
+        st.info("No goalkeeper rows were found in the loaded model outputs.")
+        return
+
+    top_keeper = keeper_df.head(1)
+    metric_cols = st.columns(4)
+    with metric_cols[0]:
+        metric_card("Goalkeepers", f"{len(keeper_df):,}", "dedicated GK pool")
+    with metric_cols[1]:
+        metric_card("Best fit", f"{top_keeper.iloc[0]['ScoutFitScore']:.1f}", str(top_keeper.iloc[0]["PlayerName"]))
+    with metric_cols[2]:
+        metric_card("Median reliability", f"{keeper_df['PerformanceReliabilityScore'].median():.1f}", "sample confidence")
+    with metric_cols[3]:
+        metric_card("U23 keepers", f"{keeper_df['IsU23Target'].fillna(False).sum():,}", "age upside")
+
+    st.markdown(
+        """
+        <div class="note-box">
+            Goalkeepers are kept out of the Scouting workspace and collected here so the board only compares GK profiles with other GK profiles.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    league_options = sorted(keeper_df["BundleLabel"].dropna().astype(str).unique())
+    selected_leagues = st.multiselect("Leagues / bundles", league_options, default=league_options, key="gk_bundles_filter")
+    age_min = float(np.floor(keeper_df["AgeYears"].min()))
+    age_max = float(np.ceil(keeper_df["AgeYears"].max()))
+    age_range = st.slider("Age range", age_min, age_max, (age_min, age_max), step=0.5, key="gk_age_filter")
+
+    gk_filtered = keeper_df.loc[
+        keeper_df["BundleLabel"].astype(str).isin(selected_leagues)
+        & keeper_df["AgeYears"].between(age_range[0], age_range[1])
+    ].copy()
+
+    board_cols = [
+        "PlayerName",
+        "TeamName",
+        "BundleLabel",
+        "AgeYears",
+        "MinutesPlayed",
+        "ScoutFitScore",
+        "CompositeRecruitmentScore",
+        "DecisionScore",
+        "PerformanceReliabilityScore",
+        "BallSecurityScore",
+        "SecurityRisk_per90",
+        "Readiness",
+        "RiskBand",
+        "FitDrivers",
+    ]
+    board = gk_filtered[[c for c in board_cols if c in gk_filtered.columns]].rename(
+        columns={
+            "PlayerName": "Player",
+            "TeamName": "Team",
+            "BundleLabel": "League",
+            "AgeYears": "Age",
+            "MinutesPlayed": "Minutes",
+            "ScoutFitScore": "Fit",
+            "CompositeRecruitmentScore": "Model",
+            "DecisionScore": "Decision",
+            "PerformanceReliabilityScore": "Reliability",
+            "BallSecurityScore": "Security",
+            "SecurityRisk_per90": "Risk/90",
+            "FitDrivers": "Drivers",
+        }
+    )
+    st.dataframe(
+        board.round(2),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
+            "Model": st.column_config.ProgressColumn("Model", min_value=0, max_value=100, format="%.1f"),
+            "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f"),
+            "Reliability": st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
+        },
+    )
+
+
 def render_team_workspace(data: pd.DataFrame) -> None:
     team_df = add_scouting_fields(data, BALANCED_WEIGHTS)
     czech_df = czech_market(team_df)
@@ -2000,6 +2090,8 @@ model_metadata = load_model_metadata()
 if active_workspace != "Scouting":
     if active_workspace == "Model":
         render_model_workspace(data, model_metadata)
+    elif active_workspace == "Goalkeepers":
+        render_goalkeepers_workspace(data)
     elif active_workspace == "Team":
         render_team_workspace(data)
     else:
@@ -2023,6 +2115,8 @@ if "quick_mode" not in st.session_state:
 if "shortlist_players" not in st.session_state:
     st.session_state["shortlist_players"] = []
 
+outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
+
 mode_columns = st.columns([1, 1, 1, 1, 1.6])
 quick_modes = ["Full board", "U23 hunt", "Priority board", "Low-risk only"]
 for idx, mode in enumerate(quick_modes):
@@ -2044,7 +2138,7 @@ with st.sidebar:
         f"""
         <div class="sidebar-brand">
             <div class="sidebar-brand-title">FCHK Scout Room</div>
-            <div class="sidebar-brand-meta">{len(data):,} players · {data['BundleLabel'].nunique()} leagues · {data['PositionGroup'].nunique()} roles</div>
+            <div class="sidebar-brand-meta">{len(outfield_data):,} outfield players · {outfield_data['BundleLabel'].nunique()} leagues · {outfield_data['PositionGroup'].nunique()} roles</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2089,19 +2183,21 @@ with st.sidebar:
             "Risk penalty": st.slider("Risk penalty", 0, 5, defaults["Risk penalty"]),
         }
 
-df = add_scouting_fields(data, weights)
+df = add_scouting_fields(outfield_data, weights)
 
 st.subheader("Filters")
 with st.container(border=True):
     position_groups = sorted(df["PositionGroup"].dropna().astype(str).unique())
+    saved_positions = st.session_state.get("positions_filter")
+    if saved_positions and any(position not in position_groups for position in saved_positions):
+        st.session_state["positions_filter"] = position_groups
     bundle_groups = sorted(df["BundleLabel"].dropna().astype(str).unique())
     archetype_groups = sorted(df["Archetype"].dropna().astype(str).unique())
     with st.expander("Search and roles", expanded=True):
         search = st.text_input("Search player or team", key="search_filter", placeholder="Type a name or club")
         st.markdown("<div class='menu-caption'>Role shortcuts</div>", unsafe_allow_html=True)
-        pos_cols = st.columns(4)
+        pos_cols = st.columns(3)
         quick_positions = [
-            ("GK", ["GK"]),
             ("DEF", ["CB", "FB"]),
             ("MID", ["DM", "CM", "AM"]),
             ("ATT", ["W", "ST"]),
@@ -2234,8 +2330,8 @@ tab_overview, tab_board, tab_player, tab_compare, tab_reports, tab_data = st.tab
 )
 
 with tab_overview:
-    top_gk = filtered.loc[filtered["PositionGroup"].eq("GK")].head(1)
     top_team = filtered.head(1)
+    top_u23 = filtered.loc[filtered.get("IsU23Target", pd.Series(False, index=filtered.index)).fillna(False).astype(bool)].head(1)
     st.markdown(
         f"""
         <div class="homepage">
@@ -2294,7 +2390,7 @@ with tab_overview:
     with home_focus_cols[1]:
         metric_card("Recruitment score", "n/a" if top_team.empty else f"{top_team.iloc[0]['ScoutFitScore']:.1f}", "current top target")
     with home_focus_cols[2]:
-        metric_card("Top goalkeeper", "n/a" if top_gk.empty else str(top_gk.iloc[0]["PlayerName"]), "filtered GK board")
+        metric_card("Top U23", "n/a" if top_u23.empty else str(top_u23.iloc[0]["PlayerName"]), "highest young outfield fit")
     with home_focus_cols[3]:
         metric_card("Team signal", "n/a" if filtered.empty else filtered.groupby("PositionGroup")["ScoutFitScore"].median().sort_values(ascending=False).index[0], "strongest role")
 
