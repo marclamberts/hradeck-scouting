@@ -1036,6 +1036,7 @@ def enter_scouting_workspace() -> None:
 
 
 def render_workspace_nav(location: str = "top") -> None:
+    st.markdown("<div class='workspace-nav-spacer'></div>", unsafe_allow_html=True)
     nav_cols = st.columns(len(WORKSPACES))
     active = st.session_state.get("active_workspace", "Scouting")
     for idx, section in enumerate(WORKSPACES):
@@ -1419,6 +1420,10 @@ st.markdown(
 
     section[data-testid="stSidebar"] .block-container {
         padding-top: .8rem;
+    }
+
+    .workspace-nav-spacer {
+        height: 24px;
     }
 
     .hero {
@@ -1903,6 +1908,10 @@ st.markdown(
         .hero {
             min-height: auto;
             padding: 22px;
+        }
+
+        .workspace-nav-spacer {
+            height: 18px;
         }
 
         .home-title {
