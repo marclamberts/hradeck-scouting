@@ -1022,13 +1022,32 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-def enter_scouting_workspace() -> None:
+WORKSPACES = ["Scouting", "Recruitment", "Goalkeepers", "Team"]
+
+
+def set_workspace(section: str) -> None:
+    st.session_state["active_workspace"] = section
     st.session_state["show_scouting_workspace"] = True
     st.session_state.pop("landing_notice", None)
 
 
-def show_under_development(section: str) -> None:
-    st.session_state["landing_notice"] = f"{section} is still under development."
+def enter_scouting_workspace() -> None:
+    set_workspace("Scouting")
+
+
+def render_workspace_nav(location: str = "top") -> None:
+    nav_cols = st.columns(4)
+    active = st.session_state.get("active_workspace", "Scouting")
+    for idx, section in enumerate(WORKSPACES):
+        with nav_cols[idx]:
+            st.button(
+                section,
+                key=f"workspace_{location}_{section}",
+                type="primary" if active == section else "secondary",
+                width="stretch",
+                on_click=set_workspace,
+                args=(section,),
+            )
 
 
 st.markdown(
@@ -1609,6 +1628,8 @@ st.markdown(
 
 if "show_scouting_workspace" not in st.session_state:
     st.session_state["show_scouting_workspace"] = False
+if "active_workspace" not in st.session_state:
+    st.session_state["active_workspace"] = "Scouting"
 
 if not st.session_state["show_scouting_workspace"]:
     st.markdown(
@@ -1626,20 +1647,37 @@ if not st.session_state["show_scouting_workspace"]:
     st.markdown("<div class='landing-grid'>", unsafe_allow_html=True)
     landing_cols = st.columns(4)
     with landing_cols[0]:
-        st.button("Scouting", type="primary", width="stretch", on_click=enter_scouting_workspace)
+        st.button("Scouting", type="primary", width="stretch", on_click=set_workspace, args=("Scouting",))
     with landing_cols[1]:
-        st.button("Recruitment", width="stretch", on_click=show_under_development, args=("Recruitment",))
+        st.button("Recruitment", width="stretch", on_click=set_workspace, args=("Recruitment",))
     with landing_cols[2]:
-        st.button("Goalkeepers", width="stretch", on_click=show_under_development, args=("Goalkeepers",))
+        st.button("Goalkeepers", width="stretch", on_click=set_workspace, args=("Goalkeepers",))
     with landing_cols[3]:
-        st.button("Team", width="stretch", on_click=show_under_development, args=("Team",))
+        st.button("Team", width="stretch", on_click=set_workspace, args=("Team",))
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.session_state.get("landing_notice"):
         st.info(st.session_state["landing_notice"])
     st.stop()
 
-st.markdown("<div class='workspace-label'>FCHK scouting workspace</div>", unsafe_allow_html=True)
+render_workspace_nav("main")
+
+active_workspace = st.session_state.get("active_workspace", "Scouting")
+if active_workspace != "Scouting":
+    st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="section-card">
+            <div class="metric-label">Coming next</div>
+            <div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>
+            <div class="metric-caption">This workspace is ready in the navigation, but the detailed tools are still being shaped. Use the buttons above to switch back to Scouting or move between workspaces.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+st.markdown("<div class='workspace-label'>Scouting workspace</div>", unsafe_allow_html=True)
 
 if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
@@ -1853,22 +1891,22 @@ with cols[4]:
         "priority or must-scout tier",
     )
 
-tab_dashboard, tab_find, tab_profile, tab_compare, tab_reports, tab_data = st.tabs(
-    ["Dashboard", "Find players", "Player profile", "Compare", "Reports", "Data health"]
+tab_overview, tab_board, tab_player, tab_compare, tab_reports, tab_data = st.tabs(
+    ["Overview", "Board", "Player", "Compare", "Reports", "Data"]
 )
 
-with tab_dashboard:
+with tab_overview:
     top_gk = filtered.loc[filtered["PositionGroup"].eq("GK")].head(1)
     top_team = filtered.head(1)
     st.markdown(
         f"""
         <div class="homepage">
             <div class="home-feature">
-                <div class="home-kicker">Hradeck scouting homepage</div>
-                <div class="home-title">Scouting, recruitment, goalkeepers, and team intelligence in one board.</div>
+                <div class="home-kicker">Scouting overview</div>
+                <div class="home-title">Start with the shortlist decision.</div>
                 <div class="home-copy">
-                    Start from a filtered player pool, move quickly into ranked recruitment targets, isolate goalkeeper profiles,
-                    and use team-level context to decide where the next scouting attention should go.
+                    Use the filters and quick modes to narrow the pool, then move through Board, Player, Compare, and Reports.
+                    The overview only shows the signals needed to decide where to look next.
                 </div>
                 <div class="home-stat-row">
                     <div class="home-stat">
@@ -1888,23 +1926,23 @@ with tab_dashboard:
             <div class="home-pillar-grid">
                 <div class="home-pillar">
                     <div class="home-pillar-label">01</div>
-                    <div class="home-pillar-title">Scouting</div>
-                    <div class="home-pillar-copy">Shortlist players by role, age, minutes, risk, reliability, league, and archetype before moving into detailed profile checks.</div>
+                    <div class="home-pillar-title">1. Filter</div>
+                    <div class="home-pillar-copy">Use role, age, minutes, league, reliability, and risk filters to define the current scouting pool.</div>
                 </div>
                 <div class="home-pillar">
                     <div class="home-pillar-label">02</div>
-                    <div class="home-pillar-title">Recruitment</div>
-                    <div class="home-pillar-copy">Rank targets by Scout Fit, value, decision score, success probability, and readiness using adjustable model weights.</div>
+                    <div class="home-pillar-title">2. Shortlist</div>
+                    <div class="home-pillar-copy">Open Board to tick players into a basket from the ranked table.</div>
                 </div>
                 <div class="home-pillar">
                     <div class="home-pillar-label">03</div>
-                    <div class="home-pillar-title">Goalkeepers</div>
-                    <div class="home-pillar-copy">Jump into the GK role board and compare the highest-rated goalkeeper profiles against the broader player database.</div>
+                    <div class="home-pillar-title">3. Inspect</div>
+                    <div class="home-pillar-copy">Open Player for one profile, strengths, risk notes, and similar players.</div>
                 </div>
                 <div class="home-pillar">
                     <div class="home-pillar-label">04</div>
-                    <div class="home-pillar-title">Team</div>
-                    <div class="home-pillar-copy">Use market maps, league depth, role strength, and shortlist exports to turn player evidence into team planning.</div>
+                    <div class="home-pillar-title">4. Export</div>
+                    <div class="home-pillar-copy">Use Reports when the shortlist is ready to share.</div>
                 </div>
             </div>
         </div>
@@ -2063,7 +2101,7 @@ with tab_dashboard:
         target_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "ScoutFitScore", "MarketTier", "FitDrivers"]
         st.dataframe(filtered[[c for c in target_cols if c in filtered.columns]].head(10).round(2), width="stretch", hide_index=True)
 
-with tab_dashboard:
+with tab_overview:
     st.subheader("Recruitment board")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2152,8 +2190,46 @@ with tab_dashboard:
                 width="stretch",
             )
 
-with tab_find:
-    st.subheader("Position ranking boards")
+with tab_board:
+    st.subheader("Start here")
+    board_cols = [
+        "PlayerName",
+        "TeamName",
+        "PositionGroup",
+        "AgeYears",
+        "MinutesPlayed",
+        "ScoutFitScore",
+        "MarketTier",
+        "Readiness",
+        "RiskBand",
+        "FitDrivers",
+    ]
+    if filtered.empty:
+        st.info("No players match the active filters.")
+    else:
+        quick_board = filtered[[c for c in board_cols if c in filtered.columns]].head(15).rename(
+            columns={
+                "PlayerName": "Player",
+                "TeamName": "Team",
+                "PositionGroup": "Role",
+                "AgeYears": "Age",
+                "MinutesPlayed": "Minutes",
+                "ScoutFitScore": "Fit",
+                "MarketTier": "Tier",
+                "RiskBand": "Risk",
+                "FitDrivers": "Drivers",
+            }
+        )
+        st.dataframe(
+            quick_board.round(2),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+
+    st.subheader("Role board")
     role = st.segmented_control("Role board", position_groups, default=position_groups[0], width="stretch")
     role_df = filtered.loc[filtered["PositionGroup"].eq(role)].sort_values("RoleFitScore", ascending=False)
     if role_df.empty:
@@ -2180,7 +2256,7 @@ with tab_find:
         with right:
             st.pyplot(render_score_distribution(role_df, "ScoutFitScore"), clear_figure=True)
 
-with tab_find:
+with tab_board:
     st.subheader("Ranked shortlist")
     shortlist_cols = [
         "PlayerName",
@@ -2352,7 +2428,7 @@ with tab_compare:
             )
             st.altair_chart(chart, width="stretch")
 
-with tab_profile:
+with tab_player:
     st.subheader("Player lab")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2451,7 +2527,7 @@ with tab_profile:
             hide_index=True,
         )
 
-with tab_dashboard:
+with tab_data:
     st.subheader("Advanced visuals")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2527,7 +2603,7 @@ with tab_dashboard:
         percentile_df = pd.DataFrame(percentile_rows)
         st.dataframe(percentile_df.round(1), width="stretch", hide_index=True)
 
-with tab_dashboard:
+with tab_data:
     st.subheader("Market map")
     if filtered.empty:
         st.info("No players match the active filters.")
