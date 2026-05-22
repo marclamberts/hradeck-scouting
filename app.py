@@ -2273,13 +2273,164 @@ st.markdown(
         line-height: 1.2;
     }
 
+    .scouting-command {
+        border: 1px solid #071118;
+        background:
+            linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(255,255,255,.06) 1px, transparent 1px),
+            radial-gradient(circle at 86% 18%, rgba(139, 212, 80, .18), transparent 18%),
+            linear-gradient(135deg, rgba(0, 184, 148, .28), transparent 42%),
+            #071118;
+        background-size: 30px 30px, 30px 30px, auto, auto, auto;
+        color: white;
+        padding: 18px;
+        margin: 6px 0 10px 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(260px, .8fr);
+        gap: 16px;
+        align-items: end;
+        box-shadow: 0 18px 38px rgba(7, 17, 24, .14);
+    }
+
+    .scouting-kicker {
+        color: var(--green);
+        font-size: .62rem;
+        font-weight: 950;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+    }
+
+    .scouting-title {
+        color: white;
+        font-size: clamp(2rem, 4vw, 4rem);
+        font-weight: 950;
+        line-height: .96;
+        margin-top: 7px;
+    }
+
+    .scouting-copy {
+        color: #c8d5dc;
+        font-size: .84rem;
+        line-height: 1.42;
+        max-width: 760px;
+        margin-top: 10px;
+    }
+
+    .scouting-mode-panel {
+        border-left: 1px solid rgba(255,255,255,.18);
+        padding-left: 14px;
+    }
+
+    .scouting-mode-label {
+        color: #9fb0ba;
+        font-size: .56rem;
+        font-weight: 950;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+    }
+
+    .scouting-mode-value {
+        color: white;
+        font-size: 1.36rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 5px;
+    }
+
+    .scouting-cockpit {
+        border: 1px solid #071118;
+        background:
+            linear-gradient(90deg, rgba(255,255,255,.055) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(255,255,255,.05) 1px, transparent 1px),
+            #10202b;
+        background-size: 26px 26px;
+        padding: 10px;
+        margin: 10px 0 12px 0;
+    }
+
+    .cockpit-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .cockpit-tile {
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        padding: 10px;
+        min-height: 82px;
+    }
+
+    .cockpit-label {
+        color: #9fb0ba;
+        font-size: .55rem;
+        font-weight: 950;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+    }
+
+    .cockpit-value {
+        color: white;
+        font-size: 1.42rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 4px;
+    }
+
+    .cockpit-note {
+        color: #c8d5dc;
+        font-size: .64rem;
+        line-height: 1.25;
+        margin-top: 5px;
+    }
+
+    .role-rail {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 6px;
+        margin: 8px 0 12px 0;
+    }
+
+    .role-cell {
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--teal);
+        background: rgba(255,255,255,.96);
+        padding: 8px;
+        min-height: 62px;
+    }
+
+    .role-cell-role {
+        color: var(--muted);
+        font-size: .55rem;
+        font-weight: 950;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+    }
+
+    .role-cell-score {
+        color: var(--navy);
+        font-size: 1.08rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 4px;
+    }
+
+    .role-cell-count {
+        color: var(--muted);
+        font-size: .62rem;
+        margin-top: 3px;
+    }
+
     @media (max-width: 900px) {
         .hero,
         .homepage,
         .home-pillar-grid,
         .home-focus-strip,
         .home-stat-row,
-        .landing-grid {
+        .landing-grid,
+        .scouting-command,
+        .cockpit-grid,
+        .role-rail {
             grid-template-columns: 1fr;
         }
 
@@ -2436,14 +2587,33 @@ if active_workspace != "Scouting":
         )
     st.stop()
 
-st.markdown("<div class='workspace-label'>Scouting workspace</div>", unsafe_allow_html=True)
-
 if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
 if "shortlist_players" not in st.session_state:
     st.session_state["shortlist_players"] = []
 
 outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
+
+st.markdown(
+    f"""
+    <div class="scouting-command">
+        <div>
+            <div class="scouting-kicker">Scouting / quality lab</div>
+            <div class="scouting-title">Find the best footballers.</div>
+            <div class="scouting-copy">
+                Outfield-only player quality room. Rank role impact, repeatable output, decisions, reliability, and on-ball strengths.
+                Recruitment value, resale, and cost risk are deliberately kept out of this view.
+            </div>
+        </div>
+        <div class="scouting-mode-panel">
+            <div class="scouting-mode-label">Active lens</div>
+            <div class="scouting-mode-value">{escape(st.session_state.get("quick_mode", "Full board"))}</div>
+            <div class="cockpit-note">{len(outfield_data):,} outfield players · GK excluded · quality first</div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 mode_columns = st.columns([1, 1, 1, 1, 1.6])
 quick_modes = ["Full board", "U23 quality", "Elite quality", "Reliable quality"]
@@ -2632,30 +2802,75 @@ st.markdown(
 )
 
 top = filtered.head(1)
-cols = st.columns(5)
-with cols[0]:
-    metric_card("Players", f"{len(filtered):,}", "after active filters")
-with cols[1]:
-    metric_card(
-        "Top quality",
-        "n/a" if top.empty else f"{top.iloc[0]['QualityScore']:.1f}",
-        "" if top.empty else str(top.iloc[0]["PlayerName"]),
+top_name = "n/a" if top.empty else str(top.iloc[0]["PlayerName"])
+top_quality = "n/a" if top.empty else f"{top.iloc[0]['QualityScore']:.1f}"
+median_quality = "n/a" if filtered.empty else f"{filtered['QualityScore'].median():.1f}"
+median_age = "n/a" if filtered.empty else f"{filtered['AgeYears'].median():.1f}"
+u23_share = (
+    "n/a"
+    if filtered.empty or "IsU23Target" not in filtered
+    else f"{filtered['IsU23Target'].fillna(False).mean() * 100:.0f}%"
+)
+high_quality = "n/a" if filtered.empty else f"{filtered['QualityTier'].isin(['High quality', 'Elite']).sum():,}"
+best_role = "n/a" if filtered.empty else filtered.groupby("PositionGroup")["QualityScore"].median().sort_values(ascending=False).index[0]
+
+st.markdown(
+    f"""
+    <div class="scouting-cockpit">
+        <div class="cockpit-grid">
+            <div class="cockpit-tile">
+                <div class="cockpit-label">Players live</div>
+                <div class="cockpit-value">{len(filtered):,}</div>
+                <div class="cockpit-note">after quality controls</div>
+            </div>
+            <div class="cockpit-tile">
+                <div class="cockpit-label">Top player</div>
+                <div class="cockpit-value">{escape(top_quality)}</div>
+                <div class="cockpit-note">{escape(top_name)}</div>
+            </div>
+            <div class="cockpit-tile">
+                <div class="cockpit-label">Median quality</div>
+                <div class="cockpit-value">{escape(median_quality)}</div>
+                <div class="cockpit-note">current board</div>
+            </div>
+            <div class="cockpit-tile">
+                <div class="cockpit-label">High quality</div>
+                <div class="cockpit-value">{escape(high_quality)}</div>
+                <div class="cockpit-note">elite + high-quality tier</div>
+            </div>
+            <div class="cockpit-tile">
+                <div class="cockpit-label">Best role</div>
+                <div class="cockpit-value">{escape(str(best_role))}</div>
+                <div class="cockpit-note">{escape(u23_share)} U23 · median age {escape(median_age)}</div>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+if not filtered.empty:
+    role_cards = (
+        filtered.groupby("PositionGroup")
+        .agg(Players=("PlayerName", "count"), MedianQuality=("QualityScore", "median"))
+        .round(1)
+        .reset_index()
+        .sort_values("MedianQuality", ascending=False)
     )
-with cols[2]:
-    metric_card("Median Age", "n/a" if filtered.empty else f"{filtered['AgeYears'].median():.1f}", "filtered pool")
-with cols[3]:
-    metric_card(
-        "U23 Share",
-        "n/a"
-        if filtered.empty or "IsU23Target" not in filtered
-        else f"{filtered['IsU23Target'].fillna(False).mean() * 100:.0f}%",
-        "filtered pool",
-    )
-with cols[4]:
-    metric_card(
-        "High quality",
-        "n/a" if filtered.empty else f"{filtered['QualityTier'].isin(['High quality', 'Elite']).sum():,}",
-        "quality tier",
+    st.markdown(
+        "<div class='role-rail'>"
+        + "".join(
+            f"""
+            <div class="role-cell">
+                <div class="role-cell-role">{escape(str(row.PositionGroup))}</div>
+                <div class="role-cell-score">{row.MedianQuality:.1f}</div>
+                <div class="role-cell-count">{int(row.Players):,} players</div>
+            </div>
+            """
+            for row in role_cards.itertuples(index=False)
+        )
+        + "</div>",
+        unsafe_allow_html=True,
     )
 
 tab_overview, tab_board, tab_player, tab_compare, tab_reports, tab_data = st.tabs(
@@ -2665,15 +2880,33 @@ tab_overview, tab_board, tab_player, tab_compare, tab_reports, tab_data = st.tab
 with tab_overview:
     top_team = filtered.head(1)
     top_u23 = filtered.loc[filtered.get("IsU23Target", pd.Series(False, index=filtered.index)).fillna(False).astype(bool)].head(1)
+    top_three_html = "".join(
+        f"""
+        <div class="home-pillar">
+            <div class="home-pillar-label">Q{idx}</div>
+            <div class="home-pillar-title">{escape(str(row.PlayerName))}</div>
+            <div class="home-pillar-copy">{escape(str(row.TeamName))} · {escape(str(row.PositionGroup))} · quality {row.QualityScore:.1f}</div>
+        </div>
+        """
+        for idx, row in enumerate(filtered.head(4).itertuples(index=False), start=1)
+    )
+    if not top_three_html:
+        top_three_html = """
+        <div class="home-pillar">
+            <div class="home-pillar-label">No rows</div>
+            <div class="home-pillar-title">No active players</div>
+            <div class="home-pillar-copy">Loosen the quality controls to bring players back into scope.</div>
+        </div>
+        """
     st.markdown(
         f"""
         <div class="homepage">
             <div class="home-feature">
-                <div class="home-kicker">Scouting overview</div>
-                <div class="home-title">Start with the best footballers.</div>
+                <div class="home-kicker">Quality cockpit</div>
+                <div class="home-title">The board is ranked by football output.</div>
                 <div class="home-copy">
-                    This room is about quality: role impact, technical output, decision-making, reliability, and repeatable strengths.
-                    Recruitment value, resale, and cost risk live under Recruitment.
+                    The scouting view now behaves like a match-intelligence board: role impact, technical profile,
+                    decision quality, repeatability, and reliability drive the ranking.
                 </div>
                 <div class="home-stat-row">
                     <div class="home-stat">
@@ -2691,26 +2924,7 @@ with tab_overview:
                 </div>
             </div>
             <div class="home-pillar-grid">
-                <div class="home-pillar">
-                    <div class="home-pillar-label">01</div>
-                    <div class="home-pillar-title">1. Set Quality</div>
-                    <div class="home-pillar-copy">Filter by role, minutes, quality floor, model quality, and reliability.</div>
-                </div>
-                <div class="home-pillar">
-                    <div class="home-pillar-label">02</div>
-                    <div class="home-pillar-title">2. Rank Roles</div>
-                    <div class="home-pillar-copy">Use the Board to compare players by quality, role fit, impact, and strengths.</div>
-                </div>
-                <div class="home-pillar">
-                    <div class="home-pillar-label">03</div>
-                    <div class="home-pillar-title">3. Inspect</div>
-                    <div class="home-pillar-copy">Open Player for one profile, strengths, risk notes, and similar players.</div>
-                </div>
-                <div class="home-pillar">
-                    <div class="home-pillar-label">04</div>
-                    <div class="home-pillar-title">4. Export</div>
-                    <div class="home-pillar-copy">Use Reports when the quality shortlist is ready to share.</div>
-                </div>
+                {top_three_html}
             </div>
         </div>
         """,
