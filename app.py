@@ -406,16 +406,16 @@ def european_market_map_frame(df: pd.DataFrame, metric: str = "ScoutFitScore") -
             Players=("PlayerName", "count"),
             MedianScore=(metric, "median"),
             TopScore=(metric, "max"),
-            Priority=("MarketTier", lambda x: x.isin(["Priority", "Must scout"]).sum()),
+            HighQuality=("QualityTier", lambda x: x.isin(["High quality", "Elite"]).sum()),
             MedianAge=("AgeYears", "median"),
         )
         .round(1)
         .reset_index()
     )
-    market["PriorityShare"] = np.where(market["Players"].gt(0), market["Priority"] / market["Players"] * 100, 0).round(1)
+    market["HighQualityShare"] = np.where(market["Players"].gt(0), market["HighQuality"] / market["Players"] * 100, 0).round(1)
     market["lat"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][0])
     market["lon"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][1])
-    market["GoScore"] = (market["MedianScore"] * 0.65 + market["PriorityShare"] * 0.25 + np.minimum(market["Players"], 80) * 0.10).round(1)
+    market["GoScore"] = (market["MedianScore"] * 0.65 + market["HighQualityShare"] * 0.25 + np.minimum(market["Players"], 80) * 0.10).round(1)
     market["Recommendation"] = pd.cut(
         market["GoScore"],
         bins=[-np.inf, 42, 52, 62, np.inf],
@@ -843,9 +843,10 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
         bottomMargin=24,
     )
     styles = getSampleStyleSheet()
-    sorted_df = df.sort_values("ScoutFitScore", ascending=False).copy()
-    priority_count = sorted_df["MarketTier"].isin(["Priority", "Must scout"]).sum() if "MarketTier" in sorted_df else 0
-    median_fit = sorted_df["ScoutFitScore"].median() if not sorted_df.empty else 0
+    sort_col = "QualityScore" if "QualityScore" in df.columns else "ScoutFitScore"
+    sorted_df = df.sort_values(sort_col, ascending=False).copy()
+    high_quality_count = sorted_df["QualityTier"].isin(["High quality", "Elite"]).sum() if "QualityTier" in sorted_df else 0
+    median_quality = sorted_df[sort_col].median() if not sorted_df.empty else 0
     median_age = sorted_df["AgeYears"].median() if not sorted_df.empty else 0
 
     story = [
@@ -855,8 +856,8 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
         Paragraph("Executive Summary", styles["Heading2"]),
         _pdf_table(
             [
-                ["Players", "Median fit", "Median age", "Priority+"],
-                [f"{len(sorted_df):,}", f"{median_fit:.1f}", f"{median_age:.1f}", f"{priority_count:,}"],
+                ["Players", "Median quality", "Median age", "High quality"],
+                [f"{len(sorted_df):,}", f"{median_quality:.1f}", f"{median_age:.1f}", f"{high_quality_count:,}"],
             ],
             header_color="#2a9d8f",
         ),
@@ -868,13 +869,13 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
             sorted_df.groupby("PositionGroup")
             .agg(
                 Players=("PlayerName", "count"),
-                MedianFit=("ScoutFitScore", "median"),
+                MedianQuality=(sort_col, "median"),
                 MedianAge=("AgeYears", "median"),
-                Priority=("MarketTier", lambda x: x.isin(["Priority", "Must scout"]).sum()),
+                HighQuality=("QualityTier", lambda x: x.isin(["High quality", "Elite"]).sum()),
             )
             .round(1)
             .reset_index()
-            .sort_values("MedianFit", ascending=False)
+            .sort_values("MedianQuality", ascending=False)
         )
         story.extend(
             [
@@ -907,10 +908,10 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
                     "TeamName",
                     "PositionGroup",
                     "AgeYears",
-                    "ScoutFitScore",
+                    sort_col,
                     "RoleFitScore",
-                    "MarketTier",
-                    "FitDrivers",
+                    "QualityTier",
+                    "QualityDrivers",
                 ]
             ].rename(
                 columns={
@@ -918,8 +919,9 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
                     "TeamName": "Team",
                     "PositionGroup": "Pos",
                     "AgeYears": "Age",
-                    "ScoutFitScore": "Fit",
+                    sort_col: "Quality",
                     "RoleFitScore": "Role Fit",
+                    "QualityDrivers": "Drivers",
                 }
             )
             story.extend(
@@ -945,9 +947,9 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
                     "Player": pick["PlayerName"],
                     "Team": pick["TeamName"],
                     "Age": pick["AgeYears"],
-                    "Fit": pick["ScoutFitScore"],
+                    "Quality": pick[sort_col],
                     "Role Fit": pick.get("RoleFitScore", 0),
-                    "Drivers": pick.get("FitDrivers", ""),
+                    "Drivers": pick.get("QualityDrivers", ""),
                 }
             )
         if xi_rows:
@@ -964,15 +966,16 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
         "TeamName",
         "PositionGroup",
         "AgeYears",
-        "ScoutFitScore",
+        sort_col,
+        "QualityTier",
         "Archetype",
         "CompositeRecruitmentScore",
-        "ValueRecruitmentScore",
         "DecisionScore",
         "Readiness",
         "RiskBand",
         "RoleFitScore",
-        "FitDrivers",
+        "ProfileScore",
+        "QualityDrivers",
         "RiskFlags",
     ]
     export = sorted_df.head(top_n)
@@ -983,13 +986,13 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
             "TeamName": "Team",
             "PositionGroup": "Pos",
             "AgeYears": "Age",
-            "ScoutFitScore": "Fit",
+            sort_col: "Quality",
             "CompositeRecruitmentScore": "Composite",
-            "ValueRecruitmentScore": "Value",
             "DecisionScore": "Decision",
             "RiskBand": "Risk",
             "RoleFitScore": "Role Fit",
-            "FitDrivers": "Drivers",
+            "ProfileScore": "Impact",
+            "QualityDrivers": "Drivers",
             "RiskFlags": "Risk Flags",
         }
     )
@@ -2343,6 +2346,8 @@ outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
 
 mode_columns = st.columns([1, 1, 1, 1, 1.6])
 quick_modes = ["Full board", "U23 quality", "Elite quality", "Reliable quality"]
+if st.session_state["quick_mode"] not in quick_modes:
+    st.session_state["quick_mode"] = "Full board"
 for idx, mode in enumerate(quick_modes):
     with mode_columns[idx]:
         st.button(
@@ -2488,7 +2493,7 @@ mask = (
     & df["AgeYears"].between(age_range[0], age_range[1])
     & df["MinutesPlayed"].between(minutes_range[0], minutes_range[1])
     & df["QualityScore"].ge(quality_floor)
-    & df["ScoutFitScore"].ge(fit_floor)
+    & df["RoleFitScore"].ge(fit_floor)
     & df["CompositeRecruitmentScore"].ge(composite_floor)
     & df["PerformanceReliabilityScore"].ge(reliability_floor)
     & df["SecurityRisk_per90"].le(max_risk)
@@ -2564,10 +2569,10 @@ with tab_overview:
         <div class="homepage">
             <div class="home-feature">
                 <div class="home-kicker">Scouting overview</div>
-                <div class="home-title">Start with the shortlist decision.</div>
+                <div class="home-title">Start with the best footballers.</div>
                 <div class="home-copy">
-                    Use the filters and quick modes to narrow the pool, then move through Board, Player, Compare, and Reports.
-                    The overview only shows the signals needed to decide where to look next.
+                    This room is about quality: role impact, technical output, decision-making, reliability, and repeatable strengths.
+                    Recruitment value, resale, and cost risk live under Recruitment.
                 </div>
                 <div class="home-stat-row">
                     <div class="home-stat">
@@ -2575,8 +2580,8 @@ with tab_overview:
                         <div class="home-stat-label">Players in scope</div>
                     </div>
                     <div class="home-stat">
-                        <div class="home-stat-value">{filtered['MarketTier'].isin(['Priority', 'Must scout']).sum() if not filtered.empty else 0:,}</div>
-                        <div class="home-stat-label">Priority targets</div>
+                        <div class="home-stat-value">{filtered['QualityTier'].isin(['High quality', 'Elite']).sum() if not filtered.empty else 0:,}</div>
+                        <div class="home-stat-label">High-quality players</div>
                     </div>
                     <div class="home-stat">
                         <div class="home-stat-value">{filtered['PositionGroup'].nunique() if not filtered.empty else 0}</div>
@@ -2587,13 +2592,13 @@ with tab_overview:
             <div class="home-pillar-grid">
                 <div class="home-pillar">
                     <div class="home-pillar-label">01</div>
-                    <div class="home-pillar-title">1. Filter</div>
-                    <div class="home-pillar-copy">Use role, age, minutes, league, reliability, and risk filters to define the current scouting pool.</div>
+                    <div class="home-pillar-title">1. Set Quality</div>
+                    <div class="home-pillar-copy">Filter by role, minutes, quality floor, model quality, and reliability.</div>
                 </div>
                 <div class="home-pillar">
                     <div class="home-pillar-label">02</div>
-                    <div class="home-pillar-title">2. Shortlist</div>
-                    <div class="home-pillar-copy">Open Board to tick players into a basket from the ranked table.</div>
+                    <div class="home-pillar-title">2. Rank Roles</div>
+                    <div class="home-pillar-copy">Use the Board to compare players by quality, role fit, impact, and strengths.</div>
                 </div>
                 <div class="home-pillar">
                     <div class="home-pillar-label">03</div>
@@ -2603,7 +2608,7 @@ with tab_overview:
                 <div class="home-pillar">
                     <div class="home-pillar-label">04</div>
                     <div class="home-pillar-title">4. Export</div>
-                    <div class="home-pillar-copy">Use Reports when the shortlist is ready to share.</div>
+                    <div class="home-pillar-copy">Use Reports when the quality shortlist is ready to share.</div>
                 </div>
             </div>
         </div>
@@ -2613,20 +2618,20 @@ with tab_overview:
 
     home_focus_cols = st.columns(4)
     with home_focus_cols[0]:
-        metric_card("Scouting lead", "n/a" if top_team.empty else str(top_team.iloc[0]["PlayerName"]), "highest Scout Fit")
+        metric_card("Quality lead", "n/a" if top_team.empty else str(top_team.iloc[0]["PlayerName"]), "highest quality")
     with home_focus_cols[1]:
-        metric_card("Recruitment score", "n/a" if top_team.empty else f"{top_team.iloc[0]['ScoutFitScore']:.1f}", "current top target")
+        metric_card("Quality score", "n/a" if top_team.empty else f"{top_team.iloc[0]['QualityScore']:.1f}", "current top player")
     with home_focus_cols[2]:
-        metric_card("Top U23", "n/a" if top_u23.empty else str(top_u23.iloc[0]["PlayerName"]), "highest young outfield fit")
+        metric_card("Top U23", "n/a" if top_u23.empty else str(top_u23.iloc[0]["PlayerName"]), "highest young quality")
     with home_focus_cols[3]:
-        metric_card("Team signal", "n/a" if filtered.empty else filtered.groupby("PositionGroup")["ScoutFitScore"].median().sort_values(ascending=False).index[0], "strongest role")
+        metric_card("Best role", "n/a" if filtered.empty else filtered.groupby("PositionGroup")["QualityScore"].median().sort_values(ascending=False).index[0], "median quality")
 
     st.markdown(
         """
         <div class="analysis-panel">
-            <div class="panel-kicker">Market command view</div>
-            <div class="panel-title">Where should FCHK send eyes next?</div>
-            <div class="panel-copy">Country bubbles combine model quality, player depth, and priority-player density. Use the score selector to switch between fit, value, readiness, and decision quality.</div>
+            <div class="panel-kicker">Quality map</div>
+            <div class="panel-title">Where is the football quality?</div>
+            <div class="panel-copy">Country bubbles show player depth and median quality in the current football-only filter.</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2634,7 +2639,7 @@ with tab_overview:
 
     home_metric = st.selectbox(
         "Map score",
-        [c for c in ["ScoutFitScore", "CompositeRecruitmentScore", "ValueRecruitmentScore", "DecisionScore", "PerformanceReliabilityScore"] if c in filtered.columns],
+        [c for c in ["QualityScore", "RoleFitScore", "ProfileScore", "CompositeRecruitmentScore", "DecisionScore", "PerformanceReliabilityScore"] if c in filtered.columns],
         index=0,
         help="Countries are colored by median score. Bigger bubbles mean more players in the current filter.",
     )
@@ -2673,8 +2678,8 @@ with tab_overview:
                         alt.Tooltip("Players:Q", format=","),
                         alt.Tooltip("MedianScore:Q", title=f"Median {home_metric}", format=".1f"),
                         alt.Tooltip("TopScore:Q", title="Top score", format=".1f"),
-                        alt.Tooltip("Priority:Q", title="Priority+ players", format=","),
-                        alt.Tooltip("PriorityShare:Q", title="Priority share", format=".1f"),
+                        alt.Tooltip("HighQuality:Q", title="High-quality players", format=","),
+                        alt.Tooltip("HighQualityShare:Q", title="High-quality share", format=".1f"),
                         alt.Tooltip("MedianAge:Q", title="Median age", format=".1f"),
                         alt.Tooltip("GoScore:Q", title="GoScore", format=".1f"),
                     ],
@@ -2692,12 +2697,12 @@ with tab_overview:
             st.subheader("Go / watch list")
             top_markets = market_map.head(8).copy()
             st.dataframe(
-                top_markets[["Country", "Recommendation", "Players", "MedianScore", "Priority", "PriorityShare", "GoScore"]],
+                top_markets[["Country", "Recommendation", "Players", "MedianScore", "HighQuality", "HighQualityShare", "GoScore"]],
                 width="stretch",
                 hide_index=True,
                 column_config={
                     "MedianScore": st.column_config.ProgressColumn("Median score", min_value=0, max_value=100, format="%.1f"),
-                    "PriorityShare": st.column_config.ProgressColumn("Priority %", min_value=0, max_value=100, format="%.1f%%"),
+                    "HighQualityShare": st.column_config.ProgressColumn("High-quality %", min_value=0, max_value=100, format="%.1f%%"),
                     "GoScore": st.column_config.ProgressColumn("GoScore", min_value=0, max_value=100, format="%.1f"),
                 },
             )
@@ -2707,7 +2712,7 @@ with tab_overview:
                 st.markdown(
                     f"""
                     <div class="analysis-panel">
-                        <div class="panel-kicker">Best trip signal</div>
+            <div class="panel-kicker">Best quality pocket</div>
                         <div class="panel-title">{best['Country']}</div>
                         <div class="panel-copy">{best['Recommendation']} · GoScore {best['GoScore']:.1f} · {int(best['Players']):,} players in current scope</div>
                     </div>
@@ -2715,24 +2720,24 @@ with tab_overview:
                     unsafe_allow_html=True,
                 )
 
-    st.subheader("Board pulse")
+    st.subheader("Quality pulse")
     st.markdown(
         """
-        <span class="scout-label">Signal <strong>Model-led</strong></span>
-        <span class="scout-label">Lens <strong>Value + Fit</strong></span>
-        <span class="scout-label">Action <strong>Trip planning</strong></span>
+        <span class="scout-label">Signal <strong>Quality-led</strong></span>
+        <span class="scout-label">Lens <strong>Role + Impact</strong></span>
+        <span class="scout-label">Action <strong>Scout the footballer</strong></span>
         """,
         unsafe_allow_html=True,
     )
     pulse_cols = st.columns(4)
     with pulse_cols[0]:
-        metric_card("Must scout", f"{filtered['MarketTier'].eq('Must scout').sum():,}" if not filtered.empty else "0", "highest model tier")
+        metric_card("Elite", f"{filtered['QualityTier'].eq('Elite').sum():,}" if not filtered.empty else "0", "highest quality tier")
     with pulse_cols[1]:
-        metric_card("Priority countries", f"{market_map['Recommendation'].isin(['Scout next', 'Go now']).sum():,}" if not market_map.empty else "0", "map signals")
+        metric_card("Quality countries", f"{market_map['Recommendation'].isin(['Scout next', 'Go now']).sum():,}" if not market_map.empty else "0", "map signals")
     with pulse_cols[2]:
-        metric_card("Best median role", filtered.groupby("PositionGroup")["ScoutFitScore"].median().sort_values(ascending=False).index[0] if not filtered.empty else "n/a", "by Scout Fit")
+        metric_card("Best median role", filtered.groupby("PositionGroup")["QualityScore"].median().sort_values(ascending=False).index[0] if not filtered.empty else "n/a", "by quality")
     with pulse_cols[3]:
-        metric_card("Median value", "n/a" if filtered.empty else f"{filtered['ValueRecruitmentScore'].median():.1f}", "filtered pool")
+        metric_card("Median impact", "n/a" if filtered.empty else f"{filtered['ProfileScore'].median():.1f}", "football output")
 
     dash_left, dash_right = st.columns([1, 1])
     with dash_left:
@@ -2740,30 +2745,30 @@ with tab_overview:
         if not filtered.empty:
             role_strength = (
                 filtered.groupby("PositionGroup")
-                .agg(Players=("PlayerName", "count"), MedianFit=("ScoutFitScore", "median"), Priority=("MarketTier", lambda x: x.isin(["Priority", "Must scout"]).sum()))
+                .agg(Players=("PlayerName", "count"), MedianQuality=("QualityScore", "median"), Elite=("QualityTier", lambda x: x.isin(["High quality", "Elite"]).sum()))
                 .round(1)
                 .reset_index()
-                .sort_values("MedianFit", ascending=False)
+                .sort_values("MedianQuality", ascending=False)
             )
             role_chart = (
                 alt.Chart(role_strength)
                 .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
                 .encode(
                     x=alt.X("PositionGroup:N", title="Role"),
-                    y=alt.Y("MedianFit:Q", title="Median Scout Fit", scale=alt.Scale(domain=[0, 100])),
+                    y=alt.Y("MedianQuality:Q", title="Median quality", scale=alt.Scale(domain=[0, 100])),
                     color=alt.Color("PositionGroup:N", legend=None, scale=alt.Scale(domain=list(POSITION_COLORS), range=list(POSITION_COLORS.values()))),
-                    tooltip=["PositionGroup", "Players", alt.Tooltip("MedianFit:Q", format=".1f"), "Priority"],
+                    tooltip=["PositionGroup", "Players", alt.Tooltip("MedianQuality:Q", format=".1f"), "Elite"],
                 )
                 .properties(height=300)
             )
             st.altair_chart(role_chart, width="stretch")
     with dash_right:
         st.subheader("Immediate targets")
-        target_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "ScoutFitScore", "MarketTier", "FitDrivers"]
+        target_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "QualityScore", "QualityTier", "RoleFitScore", "ProfileScore", "QualityDrivers"]
         st.dataframe(filtered[[c for c in target_cols if c in filtered.columns]].head(10).round(2), width="stretch", hide_index=True)
 
 with tab_overview:
-    st.subheader("Recruitment board")
+    st.subheader("Quality board")
     if filtered.empty:
         st.info("No players match the active filters.")
     else:
@@ -2777,8 +2782,8 @@ with tab_overview:
                         <div class="profile-name">{row['PlayerName']}</div>
                         <div class="profile-meta">{row['TeamName']} · {row['PositionGroup']} · {row['AgeYears']:.1f} yrs</div>
                         <div class="pill-row">
-                            <span class="pill">Fit {row['ScoutFitScore']:.1f}</span>
-                            <span class="pill">{row['MarketTier']}</span>
+                            <span class="pill">Quality {row['QualityScore']:.1f}</span>
+                            <span class="pill">{row['QualityTier']}</span>
                             <span class="pill">{row['Archetype']}</span>
                         </div>
                         <div class="profile-meta" style="margin-top:12px;">{profile_note(row)}</div>
@@ -2789,14 +2794,14 @@ with tab_overview:
 
         left, right = st.columns([1.25, 1])
         with left:
-            st.subheader("Fit vs value")
+            st.subheader("Role fit vs quality")
             scatter_source = filtered.head(750).copy()
             scatter = (
                 alt.Chart(scatter_source)
                 .mark_circle(size=80, opacity=0.72)
                 .encode(
-                    x=alt.X("ValueRecruitmentScore:Q", title="Value score"),
-                    y=alt.Y("ScoutFitScore:Q", title="Scout fit"),
+                    x=alt.X("RoleFitScore:Q", title="Role fit"),
+                    y=alt.Y("QualityScore:Q", title="Quality"),
                     color=alt.Color(
                         "PositionGroup:N",
                         title="Position",
@@ -2808,7 +2813,8 @@ with tab_overview:
                         "TeamName",
                         "PositionGroup",
                         "Archetype",
-                        alt.Tooltip("ScoutFitScore:Q", format=".1f"),
+                        alt.Tooltip("QualityScore:Q", format=".1f"),
+                        alt.Tooltip("RoleFitScore:Q", format=".1f"),
                         alt.Tooltip("CompositeRecruitmentScore:Q", format=".1f"),
                         alt.Tooltip("AgeYears:Q", format=".1f"),
                     ],
@@ -2818,9 +2824,9 @@ with tab_overview:
             )
             st.altair_chart(scatter, width="stretch")
         with right:
-            st.subheader("Market tiers")
-            tier_order = ["Must scout", "Priority", "Shortlist", "Depth", "Watch"]
-            tier_counts = filtered["MarketTier"].value_counts().reindex(tier_order).dropna().reset_index()
+            st.subheader("Quality tiers")
+            tier_order = ["Elite", "High quality", "Good", "Useful", "Monitor"]
+            tier_counts = filtered["QualityTier"].value_counts().reindex(tier_order).dropna().reset_index()
             tier_counts.columns = ["Tier", "Players"]
             bars = (
                 alt.Chart(tier_counts)
@@ -2831,7 +2837,7 @@ with tab_overview:
                     color=alt.Color(
                         "Tier:N",
                         legend=None,
-                        scale=alt.Scale(domain=list(TIER_COLORS), range=list(TIER_COLORS.values())),
+                        scale=alt.Scale(domain=tier_order, range=["#e76f51", "#f4a261", "#2a9d8f", "#457b9d", "#8d99ae"]),
                     ),
                     tooltip=["Tier", "Players"],
                 )
@@ -2842,12 +2848,13 @@ with tab_overview:
                 filtered.groupby("PositionGroup")
                 .agg(
                     Players=("PlayerName", "count"),
-                    MedianFit=("ScoutFitScore", "median"),
+                    MedianQuality=("QualityScore", "median"),
+                    MedianRoleFit=("RoleFitScore", "median"),
                     MedianAge=("AgeYears", "median"),
-                    Priority=("MarketTier", lambda x: x.isin(["Priority", "Must scout"]).sum()),
+                    Elite=("QualityTier", lambda x: x.isin(["High quality", "Elite"]).sum()),
                 )
                 .round(1)
-                .sort_values("MedianFit", ascending=False),
+                .sort_values("MedianQuality", ascending=False),
                 width="stretch",
             )
 
@@ -2859,11 +2866,14 @@ with tab_board:
         "PositionGroup",
         "AgeYears",
         "MinutesPlayed",
-        "ScoutFitScore",
-        "MarketTier",
+        "QualityScore",
+        "QualityTier",
+        "RoleFitScore",
+        "ProfileScore",
+        "DecisionScore",
         "Readiness",
         "RiskBand",
-        "FitDrivers",
+        "QualityDrivers",
     ]
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2875,10 +2885,13 @@ with tab_board:
                 "PositionGroup": "Role",
                 "AgeYears": "Age",
                 "MinutesPlayed": "Minutes",
-                "ScoutFitScore": "Fit",
-                "MarketTier": "Tier",
+                "QualityScore": "Quality",
+                "QualityTier": "Tier",
+                "RoleFitScore": "Role Fit",
+                "ProfileScore": "Impact",
+                "DecisionScore": "Decision",
                 "RiskBand": "Risk",
-                "FitDrivers": "Drivers",
+                "QualityDrivers": "Drivers",
             }
         )
         st.dataframe(
@@ -2886,7 +2899,10 @@ with tab_board:
             width="stretch",
             hide_index=True,
             column_config={
-                "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
+                "Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
+                "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
+                "Impact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"),
+                "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f"),
             },
         )
 
@@ -2902,20 +2918,21 @@ with tab_board:
             "BundleLabel",
             "AgeYears",
             "MinutesPlayed",
+            "QualityScore",
+            "QualityTier",
             "RoleFitScore",
-            "ScoutFitScore",
-            "MarketTier",
+            "ProfileScore",
+            "DecisionScore",
             "Archetype",
-            "FitDrivers",
+            "QualityDrivers",
             "RiskFlags",
-            "TierReason",
         ]
         st.dataframe(role_df[[c for c in role_cols if c in role_df.columns]].head(75).round(2), width="stretch", hide_index=True)
         left, right = st.columns([1, 1])
         with left:
             st.pyplot(render_score_distribution(role_df, "RoleFitScore"), clear_figure=True)
         with right:
-            st.pyplot(render_score_distribution(role_df, "ScoutFitScore"), clear_figure=True)
+            st.pyplot(render_score_distribution(role_df, "QualityScore"), clear_figure=True)
 
 with tab_board:
     st.subheader("Ranked shortlist")
@@ -2926,21 +2943,19 @@ with tab_board:
         "BundleLabel",
         "AgeYears",
         "MinutesPlayed",
-        "ScoutFitScore",
-        "MarketTier",
+        "QualityScore",
+        "QualityTier",
+        "RoleFitScore",
+        "ProfileScore",
         "Archetype",
         "Readiness",
         "RiskBand",
         "CompositeRecruitmentScore",
         "DecisionScore",
-        "ValueRecruitmentScore",
-        "SuccessProbability",
         "PerformanceReliabilityScore",
         "SecurityRisk_per90",
-        "RoleFitScore",
-        "FitDrivers",
+        "QualityDrivers",
         "RiskFlags",
-        "TierReason",
     ]
     view_cols = [c for c in shortlist_cols if c in filtered.columns]
     if filtered.empty:
@@ -2952,11 +2967,13 @@ with tab_board:
             "PositionGroup",
             "BundleLabel",
             "AgeYears",
-            "ScoutFitScore",
-            "MarketTier",
+            "QualityScore",
+            "QualityTier",
+            "RoleFitScore",
+            "ProfileScore",
             "Readiness",
             "RiskBand",
-            "FitDrivers",
+            "QualityDrivers",
         ]
         shortlist_picker = filtered[[c for c in picker_cols if c in filtered.columns]].head(75).copy()
         shortlist_picker.insert(0, "Add", False)
@@ -2973,7 +2990,9 @@ with tab_board:
                 "PositionGroup": st.column_config.TextColumn("Role"),
                 "BundleLabel": st.column_config.TextColumn("League"),
                 "AgeYears": st.column_config.NumberColumn("Age", format="%.1f"),
-                "ScoutFitScore": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
+                "QualityScore": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
+                "RoleFitScore": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
+                "ProfileScore": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"),
             },
         )
         add_cols = st.columns([1, 1, 3])
@@ -2986,7 +3005,7 @@ with tab_board:
         with add_cols[2]:
             st.caption(f"{len(st.session_state.get('shortlist_players', []))} players in shortlist basket")
 
-    shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("ScoutFitScore", ascending=False)
+    shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("QualityScore", ascending=False)
     if not shortlist_df.empty:
         st.subheader("Shortlist basket")
         st.dataframe(shortlist_df[[c for c in view_cols if c in shortlist_df.columns]].round(2), width="stretch", hide_index=True)
@@ -2995,15 +3014,15 @@ with tab_board:
             st.download_button(
                 "Download shortlist CSV",
                 data=shortlist_df[[c for c in view_cols if c in shortlist_df.columns]].to_csv(index=False).encode("utf-8"),
-                file_name="fchk_shortlist_basket.csv",
+                file_name="fchk_quality_shortlist_basket.csv",
                 mime="text/csv",
                 width="stretch",
             )
         with basket_cols[1]:
             st.download_button(
                 "Download shortlist PDF",
-                data=build_pdf(shortlist_df, "FCHK Shortlist Basket", scope_note=f"{len(shortlist_df):,} manually shortlisted players", top_n=100),
-                file_name="fchk_shortlist_basket.pdf",
+                data=build_pdf(shortlist_df, "FCHK Quality Shortlist", scope_note=f"{len(shortlist_df):,} manually shortlisted players", top_n=100),
+                file_name="fchk_quality_shortlist_basket.pdf",
                 mime="application/pdf",
                 type="primary",
                 width="stretch",
@@ -3015,9 +3034,10 @@ with tab_board:
         width="stretch",
         hide_index=True,
         column_config={
-            "ScoutFitScore": st.column_config.ProgressColumn("Scout Fit", min_value=0, max_value=100),
+            "QualityScore": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100),
+            "RoleFitScore": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100),
+            "ProfileScore": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100),
             "CompositeRecruitmentScore": st.column_config.ProgressColumn("Composite", min_value=0, max_value=100),
-            "ValueRecruitmentScore": st.column_config.ProgressColumn("Value", min_value=0, max_value=100),
             "DecisionScore": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100),
             "PerformanceReliabilityScore": st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100),
         },
@@ -3045,12 +3065,12 @@ with tab_compare:
     else:
         compare_options = (
             filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"])
-            .sort_values("ScoutFitScore", ascending=False)["_label"]
+            .sort_values("QualityScore", ascending=False)["_label"]
             .tolist()
         )
         selected_compare = st.multiselect("Select 2-4 players", compare_options, default=compare_options[: min(3, len(compare_options))], max_selections=4)
         compare_names = [label.split(" | ")[0] for label in selected_compare]
-        compare_df = filtered.loc[filtered["PlayerName"].isin(compare_names)].sort_values("ScoutFitScore", ascending=False)
+        compare_df = filtered.loc[filtered["PlayerName"].isin(compare_names)].sort_values("QualityScore", ascending=False)
         if len(compare_df) < 2:
             st.info("Pick at least two players to compare.")
         else:
@@ -3060,12 +3080,13 @@ with tab_compare:
                 "PositionGroup",
                 "AgeYears",
                 "MinutesPlayed",
-                "ScoutFitScore",
+                "QualityScore",
+                "QualityTier",
                 "RoleFitScore",
-                "MarketTier",
-                "FitDrivers",
+                "ProfileScore",
+                "DecisionScore",
+                "QualityDrivers",
                 "RiskFlags",
-                "TierReason",
             ]
             st.dataframe(compare_df[[c for c in summary_cols if c in compare_df.columns]].round(2), width="stretch", hide_index=True)
             pizza_cols = st.columns(len(compare_df))
@@ -3096,7 +3117,7 @@ with tab_player:
     else:
         player_options = (
             filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"])
-            .sort_values("ScoutFitScore", ascending=False)
+            .sort_values("QualityScore", ascending=False)
         )
         selected_label = st.selectbox("Player", player_options["_label"].tolist())
         player = player_options.loc[player_options["_label"].eq(selected_label)].iloc[0]
@@ -3108,7 +3129,7 @@ with tab_player:
                 <div class="profile-meta">{player['TeamName']} · {player['BundleLabel']} · {player['PositionGroup']} · {player['AgeYears']:.1f} years · {int(player['MinutesPlayed']):,} minutes</div>
                 <div class="pill-row">
                     <span class="pill">{player['Archetype']}</span>
-                    <span class="pill">{player['MarketTier']}</span>
+                    <span class="pill">{player['QualityTier']}</span>
                     <span class="pill">{player['Readiness']}</span>
                     <span class="pill">{player['RiskBand']} risk</span>
                 </div>
@@ -3117,13 +3138,12 @@ with tab_player:
             unsafe_allow_html=True,
         )
         a, b, c, d, e = st.columns(5)
-        a.metric("Scout Fit", f"{player['ScoutFitScore']:.1f}")
-        b.metric("Composite", f"{player['CompositeRecruitmentScore']:.1f}")
-        c.metric("Value", f"{player['ValueRecruitmentScore']:.1f}")
+        a.metric("Quality", f"{player['QualityScore']:.1f}")
+        b.metric("Role Fit", f"{player['RoleFitScore']:.1f}")
+        c.metric("Impact", f"{player['ProfileScore']:.1f}")
         d.metric("Decision", f"{player['DecisionScore']:.1f}")
-        e.metric("Position pctile", f"{percentile_rank(df.loc[df['PositionGroup'].eq(player['PositionGroup']), 'ScoutFitScore'], player['ScoutFitScore']):.0f}")
-        st.markdown(f"<div class='note-box'>{profile_note(player)}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='note-box'>{player['TierReason']}</div>", unsafe_allow_html=True)
+        e.metric("Position pctile", f"{percentile_rank(df.loc[df['PositionGroup'].eq(player['PositionGroup']), 'QualityScore'], player['QualityScore']):.0f}")
+        st.markdown(f"<div class='note-box'>{player['Archetype']} · quality driven by {player['QualityDrivers']}. Reliability: {player['Readiness']}; risk: {player['RiskBand']}.</div>", unsafe_allow_html=True)
         action_cols = st.columns([1, 1, 3])
         with action_cols[0]:
             if st.button("Add to shortlist", type="primary", width="stretch"):
@@ -3168,22 +3188,22 @@ with tab_player:
 
         comparable = similar_players(df, player, same_position=True, n=12)
         st.subheader("Similarity search")
+        similar_cols = [
+            "PlayerName",
+            "TeamName",
+            "PositionGroup",
+            "AgeYears",
+            "MinutesPlayed",
+            "SimilarityScore",
+            "QualityScore",
+            "QualityTier",
+            "RoleFitScore",
+            "ProfileScore",
+            "Archetype",
+            "CompositeRecruitmentScore",
+        ]
         st.dataframe(
-            comparable[
-                [
-                    "PlayerName",
-                    "TeamName",
-                    "PositionGroup",
-                    "AgeYears",
-                    "MinutesPlayed",
-                    "SimilarityScore",
-                    "ScoutFitScore",
-                    "RoleFitScore",
-                    "Archetype",
-                    "CompositeRecruitmentScore",
-                    "ValueRecruitmentScore",
-                ]
-            ].round(2),
+            comparable[[c for c in similar_cols if c in comparable.columns]].round(2),
             width="stretch",
             hide_index=True,
         )
@@ -3194,11 +3214,12 @@ with tab_data:
         st.info("No players match the active filters.")
     else:
         visual_cols = st.columns([1, 1, 1])
+        quality_visual_metrics = ["QualityScore", "RoleFitScore", "ProfileScore"] + [c for c in SCORE_COLUMNS if c in filtered.columns]
         with visual_cols[0]:
             visual_metric = st.selectbox(
                 "Visual metric",
-                SCORE_COLUMNS,
-                index=SCORE_COLUMNS.index("CompositeRecruitmentScore"),
+                quality_visual_metrics,
+                index=quality_visual_metrics.index("QualityScore"),
             )
         with visual_cols[1]:
             reference_scope = st.selectbox("Reference pool", ["Filtered board", "Full database", "Same position as selected player"])
@@ -3206,7 +3227,7 @@ with tab_data:
             selected_visual_player = st.selectbox(
                 "Highlight player",
                 filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"])
-                .sort_values("ScoutFitScore", ascending=False)["_label"]
+                .sort_values("QualityScore", ascending=False)["_label"]
                 .tolist(),
             )
 
@@ -3253,7 +3274,8 @@ with tab_data:
                     "Player": row["PlayerName"],
                     "Team": row["TeamName"],
                     "Pos": row["PositionGroup"],
-                    "Fit": row["ScoutFitScore"],
+                    "Quality": row["QualityScore"],
+                    "Role Fit": row["RoleFitScore"],
                     **{
                         label: percentile_rank(row_ref[col], float(row[col]))
                         for label, col in PIZZA_METRICS.items()
@@ -3265,13 +3287,14 @@ with tab_data:
         st.dataframe(percentile_df.round(1), width="stretch", hide_index=True)
 
 with tab_data:
-    st.subheader("Market map")
+    st.subheader("Quality map")
     if filtered.empty:
         st.info("No players match the active filters.")
     else:
-        x_axis = st.selectbox("X axis", SCORE_COLUMNS, index=SCORE_COLUMNS.index("CompositeRecruitmentScore"))
-        y_axis = st.selectbox("Y axis", SCORE_COLUMNS, index=SCORE_COLUMNS.index("ValueRecruitmentScore"))
-        chart_df = filtered[["PlayerName", "TeamName", "PositionGroup", "Archetype", "MarketTier", x_axis, y_axis]].dropna().rename(
+        axis_options = ["QualityScore", "RoleFitScore", "ProfileScore"] + [c for c in SCORE_COLUMNS if c in filtered.columns]
+        x_axis = st.selectbox("X axis", axis_options, index=axis_options.index("RoleFitScore"))
+        y_axis = st.selectbox("Y axis", axis_options, index=axis_options.index("QualityScore"))
+        chart_df = filtered[["PlayerName", "TeamName", "PositionGroup", "Archetype", "QualityTier", x_axis, y_axis]].dropna().rename(
             columns={x_axis: "x", y_axis: "y"}
         )
         market_chart = (
@@ -3281,12 +3304,12 @@ with tab_data:
                 x=alt.X("x:Q", title=x_axis),
                 y=alt.Y("y:Q", title=y_axis),
                 color=alt.Color(
-                    "MarketTier:N",
-                    title="Tier",
-                    scale=alt.Scale(domain=list(TIER_COLORS), range=list(TIER_COLORS.values())),
+                    "QualityTier:N",
+                    title="Quality tier",
+                    scale=alt.Scale(domain=["Elite", "High quality", "Good", "Useful", "Monitor"], range=["#e76f51", "#f4a261", "#2a9d8f", "#457b9d", "#8d99ae"]),
                 ),
                 shape=alt.Shape("PositionGroup:N", title="Position"),
-                tooltip=["PlayerName", "TeamName", "PositionGroup", "Archetype", "MarketTier", alt.Tooltip("x:Q", format=".1f"), alt.Tooltip("y:Q", format=".1f")],
+                tooltip=["PlayerName", "TeamName", "PositionGroup", "Archetype", "QualityTier", alt.Tooltip("x:Q", format=".1f"), alt.Tooltip("y:Q", format=".1f")],
             )
             .properties(height=460)
             .interactive()
@@ -3294,11 +3317,11 @@ with tab_data:
         st.altair_chart(market_chart, width="stretch")
 
         score_summary = (
-            filtered.groupby(["PositionGroup", "Archetype"])[[c for c in SCORE_COLUMNS if c in filtered.columns]]
+            filtered.groupby(["PositionGroup", "Archetype"])[[c for c in ["QualityScore", "RoleFitScore", "ProfileScore"] + SCORE_COLUMNS if c in filtered.columns]]
             .median()
             .round(1)
             .reset_index()
-            .sort_values("CompositeRecruitmentScore", ascending=False)
+            .sort_values("QualityScore", ascending=False)
         )
         st.dataframe(score_summary, width="stretch", hide_index=True)
 
@@ -3466,7 +3489,7 @@ with tab_reports:
     export_cols = [
         c
         for c in CORE_COLUMNS
-        + ["MarketTier", "Readiness", "RiskBand", "ProfileScore"]
+        + ["QualityScore", "QualityTier", "RoleFitScore", "ProfileScore", "QualityDrivers", "Readiness", "RiskBand"]
         + SCORE_COLUMNS
         + [c for c in filtered.columns if c.endswith("_per90") or c.startswith("Imp_")]
         if c in filtered.columns
@@ -3489,36 +3512,36 @@ with tab_reports:
         if report_scope == "Single league / bundle":
             selected_league = st.selectbox("League / bundle", bundle_groups)
             report_df = df.loc[df["BundleLabel"].astype(str).eq(selected_league)].sort_values(
-                ["ScoutFitScore", "CompositeRecruitmentScore"], ascending=False
+                ["QualityScore", "RoleFitScore"], ascending=False
             )
-            report_title = f"FCHK League Report: {selected_league}"
-            scope_note = f"League report for {selected_league} · {len(report_df):,} players · weighted with {model_preset} model"
+            report_title = f"FCHK Quality Report: {selected_league}"
+            scope_note = f"League quality report for {selected_league} · {len(report_df):,} players · {model_preset} lens"
             file_stub = f"league_{selected_league}"
         elif report_scope == "Shortlist basket":
             report_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values(
-                ["ScoutFitScore", "CompositeRecruitmentScore"], ascending=False
+                ["QualityScore", "RoleFitScore"], ascending=False
             )
-            report_title = "FCHK Shortlist Basket Report"
-            scope_note = f"Manual shortlist · {len(report_df):,} players · weighted with {model_preset} model"
+            report_title = "FCHK Quality Shortlist Report"
+            scope_note = f"Manual quality shortlist · {len(report_df):,} players · {model_preset} lens"
             file_stub = "shortlist_basket"
         elif report_scope == "Single position group":
             selected_position = st.selectbox("Position group", position_groups)
             report_df = df.loc[df["PositionGroup"].astype(str).eq(selected_position)].sort_values(
-                ["ScoutFitScore", "CompositeRecruitmentScore"], ascending=False
+                ["QualityScore", "RoleFitScore"], ascending=False
             )
-            report_title = f"FCHK Position Report: {selected_position}"
-            scope_note = f"Position report for {selected_position} · {len(report_df):,} players · weighted with {model_preset} model"
+            report_title = f"FCHK Position Quality Report: {selected_position}"
+            scope_note = f"Position quality report for {selected_position} · {len(report_df):,} players · {model_preset} lens"
             file_stub = f"position_{selected_position}"
         elif report_scope == "Single player":
             player_choices = (
                 df.assign(_label=df["PlayerName"] + " | " + df["TeamName"] + " | " + df["PositionGroup"])
-                .sort_values("ScoutFitScore", ascending=False)
+                .sort_values("QualityScore", ascending=False)
             )
             selected_player = st.selectbox("Player", player_choices["_label"].tolist())
             report_df = player_choices.loc[player_choices["_label"].eq(selected_player)].drop(columns=["_label"])
             player_name = str(report_df.iloc[0]["PlayerName"]) if not report_df.empty else "Player"
             report_title = f"FCHK Player Report: {player_name}"
-            scope_note = f"Player report · generated with {model_preset} model"
+            scope_note = f"Player quality report · generated with {model_preset} lens"
             file_stub = f"player_{player_name}"
 
         st.markdown(
@@ -3538,7 +3561,7 @@ with tab_reports:
         st.download_button(
             "Download filtered CSV",
             data=export_df.to_csv(index=False).encode("utf-8"),
-            file_name=download_name("shortlist", "csv"),
+            file_name=download_name("quality_board", "csv"),
             mime="text/csv",
             width="stretch",
         )
@@ -3569,8 +3592,10 @@ with tab_reports:
                 "PositionGroup",
                 "BundleLabel",
                 "AgeYears",
-                "ScoutFitScore",
-                "MarketTier",
+                "QualityScore",
+                "QualityTier",
+                "RoleFitScore",
+                "ProfileScore",
                 "Archetype",
                 "Readiness",
                 "RiskBand",
