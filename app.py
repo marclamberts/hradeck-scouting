@@ -1692,28 +1692,35 @@ st.markdown(
     """
     <style>
     :root {
-        --ink: #09131c;
-        --muted: #5f6b76;
+        --ink: #071118;
+        --muted: #657481;
         --panel: #ffffff;
-        --line: #d3dde3;
-        --navy: #07111a;
-        --navy-2: #0f1e2b;
-        --teal: #2ec4a6;
-        --green: #38b000;
-        --amber: #ff9f1c;
-        --red: #e5383b;
-        --wash: #f3f6f8;
+        --line: #c8d5dc;
+        --line-strong: #8da0aa;
+        --navy: #071118;
+        --navy-2: #10202b;
+        --teal: #00b894;
+        --green: #8bd450;
+        --amber: #ffb020;
+        --red: #e24a4a;
+        --blue: #2e6fba;
+        --wash: #edf2f5;
+        --pitch: #10271f;
     }
 
     .stApp {
-        background: var(--wash);
+        background:
+            linear-gradient(90deg, rgba(7,17,24,.035) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(7,17,24,.035) 1px, transparent 1px),
+            var(--wash);
+        background-size: 24px 24px;
         color: var(--ink);
     }
 
     .block-container {
-        padding-top: .7rem;
-        padding-bottom: 1.4rem;
-        max-width: 94%;
+        padding-top: 1.05rem;
+        padding-bottom: 1.6rem;
+        max-width: 96%;
     }
 
     h1, h2, h3 {
@@ -1723,14 +1730,17 @@ st.markdown(
     }
 
     h2 {
-        font-size: 1.05rem !important;
+        font-size: .92rem !important;
         text-transform: uppercase;
-        letter-spacing: .04em;
+        letter-spacing: .08em;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 6px;
     }
 
     section[data-testid="stSidebar"] {
-        background: #f7fafb;
-        border-right: 1px solid var(--line);
+        background:
+            linear-gradient(180deg, #071118 0%, #10202b 52%, #edf2f5 52%, #edf2f5 100%);
+        border-right: 1px solid #071118;
     }
 
     section[data-testid="stSidebar"] .block-container {
@@ -1742,10 +1752,19 @@ st.markdown(
     }
 
     .hero {
-        max-width: 760px;
-        margin: 16vh auto 28px auto;
-        color: var(--ink);
+        max-width: 920px;
+        margin: 12vh auto 28px auto;
+        color: white;
         text-align: center;
+        border: 1px solid #071118;
+        background:
+            linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(255,255,255,.055) 1px, transparent 1px),
+            linear-gradient(135deg, rgba(0,184,148,.24), rgba(139,212,80,.08) 44%, rgba(7,17,24,0) 44%),
+            #071118;
+        background-size: 36px 36px, 36px 36px, auto, auto;
+        padding: 42px 34px;
+        box-shadow: 0 18px 42px rgba(7, 17, 24, .16);
     }
 
     .hero-content,
@@ -1755,7 +1774,7 @@ st.markdown(
     }
 
     .hero-kicker {
-        color: #66737d;
+        color: var(--green);
         font-size: .62rem;
         font-weight: 950;
         text-transform: uppercase;
@@ -1763,7 +1782,7 @@ st.markdown(
     }
 
     .hero h1 {
-        color: var(--ink);
+        color: white;
         margin: 12px auto 10px auto;
         max-width: 760px;
         font-size: clamp(2.4rem, 5vw, 4.8rem);
@@ -1775,7 +1794,7 @@ st.markdown(
         margin: 0;
         max-width: 560px;
         margin: 0 auto;
-        color: #66737d;
+        color: #c8d5dc;
         font-size: .95rem;
         line-height: 1.5;
     }
@@ -1837,7 +1856,7 @@ st.markdown(
         color: white;
         font-size: 1.18rem;
         font-weight: 950;
-        letter-spacing: -.04em;
+        letter-spacing: 0;
         line-height: 1.05;
     }
 
@@ -1851,7 +1870,7 @@ st.markdown(
     .landing-grid {
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 10px;
+        gap: 8px;
         max-width: 920px;
         margin: 0 auto;
     }
@@ -1875,7 +1894,7 @@ st.markdown(
         color: white;
         font-size: 1rem;
         font-weight: 950;
-        letter-spacing: -.03em;
+        letter-spacing: 0;
         margin-top: 4px;
     }
 
@@ -1887,24 +1906,61 @@ st.markdown(
     }
 
     .workspace-label {
-        color: #66737d;
+        border-left: 4px solid var(--teal);
+        color: var(--navy);
         font-size: .62rem;
         font-weight: 950;
         letter-spacing: .16em;
         text-transform: uppercase;
-        margin: 6px 0 8px 0;
+        margin: 8px 0 10px 0;
+        padding: 4px 0 4px 8px;
+        background: rgba(255, 255, 255, .62);
+    }
+
+    .intel-strip {
+        border: 1px solid #071118;
+        background:
+            linear-gradient(90deg, rgba(0,184,148,.20), transparent 36%),
+            #071118;
+        color: #dfe8ed;
+        padding: 9px 11px;
+        margin: 8px 0 12px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .intel-strip-title {
+        color: white;
+        font-size: .84rem;
+        font-weight: 950;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .intel-strip-meta {
+        color: #9fb0ba;
+        font-size: .62rem;
+        font-weight: 850;
+        letter-spacing: .09em;
+        text-transform: uppercase;
     }
 
     .analysis-panel {
-        border: 1px solid #1b2b38;
-        border-radius: 2px;
-        background: linear-gradient(180deg, #07111a 0%, #0d1823 100%);
+        border: 1px solid #071118;
+        border-radius: 0;
+        background:
+            linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(255,255,255,.05) 1px, transparent 1px),
+            linear-gradient(180deg, #071118 0%, #10202b 100%);
+        background-size: 28px 28px;
         color: #dce5ea;
-        padding: 10px 11px;
+        padding: 12px;
     }
 
     .analysis-panel .panel-kicker {
-        color: #7cead5;
+        color: var(--green);
         font-size: .58rem;
         font-weight: 950;
         text-transform: uppercase;
@@ -1917,7 +1973,7 @@ st.markdown(
         font-size: 1rem;
         font-weight: 950;
         line-height: 1;
-        letter-spacing: -.04em;
+        letter-spacing: 0;
     }
 
     .analysis-panel .panel-copy {
@@ -1929,15 +1985,16 @@ st.markdown(
 
     .metric-card {
         border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 12px 13px;
-        background: white;
-        min-height: 82px;
-        box-shadow: 0 1px 2px rgba(16, 33, 43, .04);
+        border-top: 3px solid var(--teal);
+        border-radius: 0;
+        padding: 11px 12px;
+        background: rgba(255, 255, 255, .96);
+        min-height: 84px;
+        box-shadow: 0 8px 18px rgba(7, 17, 24, .055);
     }
 
     .metric-label {
-        color: #66737d;
+        color: var(--muted);
         font-size: .58rem;
         text-transform: uppercase;
         letter-spacing: .13em;
@@ -1946,15 +2003,15 @@ st.markdown(
 
     .metric-value {
         margin-top: 2px;
-        color: #09131c;
-        font-size: 1.28rem;
+        color: var(--navy);
+        font-size: 1.34rem;
         font-weight: 950;
         line-height: 1;
         letter-spacing: 0;
     }
 
     .metric-caption {
-        color: #66737d;
+        color: var(--muted);
         font-size: .66rem;
         margin-top: 4px;
         line-height: 1.25;
@@ -1962,22 +2019,23 @@ st.markdown(
 
     .profile-card {
         border: 1px solid var(--line);
-        border-radius: 2px;
-        padding: 10px;
-        background: white;
+        border-left: 4px solid var(--blue);
+        border-radius: 0;
+        padding: 11px;
+        background: rgba(255, 255, 255, .98);
         min-height: 104px;
     }
 
     .profile-name {
-        color: #09131c;
+        color: var(--navy);
         font-weight: 950;
         font-size: .95rem;
         line-height: 1;
-        letter-spacing: -.03em;
+        letter-spacing: 0;
     }
 
     .profile-meta {
-        color: #66737d;
+        color: var(--muted);
         font-size: .68rem;
         margin-top: 2px;
         line-height: 1.3;
@@ -1991,11 +2049,11 @@ st.markdown(
     }
 
     .pill {
-        border: 1px solid #ccd8df;
-        border-radius: 2px;
-        color: #09131c;
-        background: #f9fbfc;
-        padding: 2px 5px;
+        border: 1px solid #aab9c2;
+        border-radius: 0;
+        color: var(--navy);
+        background: #eef4f7;
+        padding: 3px 6px;
         font-size: .58rem;
         font-weight: 950;
         text-transform: uppercase;
@@ -2003,9 +2061,10 @@ st.markdown(
     }
 
     .note-box {
-        border-left: 2px solid var(--teal);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--teal);
         background: #ffffff;
-        padding: 7px 9px;
+        padding: 9px 10px;
         border-radius: 0;
         color: #10212b;
         font-size: .74rem;
@@ -2016,9 +2075,9 @@ st.markdown(
         display: inline-flex;
         align-items: center;
         border: 1px solid #ccd8df;
-        border-radius: 2px;
+        border-radius: 0;
         background: #fff;
-        padding: 2px 5px;
+        padding: 3px 6px;
         margin: 1px 3px 1px 0;
         font-size: .56rem;
         font-weight: 950;
@@ -2029,9 +2088,9 @@ st.markdown(
 
     .section-card {
         border: 1px solid var(--line);
-        border-radius: 2px;
-        background: white;
-        padding: 9px;
+        border-radius: 0;
+        background: rgba(255, 255, 255, .97);
+        padding: 10px;
     }
 
     .homepage {
@@ -2043,11 +2102,14 @@ st.markdown(
     }
 
     .home-feature {
-        border: 1px solid #1b2b38;
-        border-radius: 2px;
+        border: 1px solid #071118;
+        border-radius: 0;
         background:
-            linear-gradient(135deg, rgba(46, 196, 166, .16) 0%, rgba(46, 196, 166, 0) 42%),
-            linear-gradient(180deg, #07111a 0%, #0f1e2b 100%);
+            linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(255,255,255,.055) 1px, transparent 1px),
+            linear-gradient(135deg, rgba(0, 184, 148, .24) 0%, rgba(0, 184, 148, 0) 40%),
+            linear-gradient(180deg, #071118 0%, #10202b 100%);
+        background-size: 34px 34px, 34px 34px, auto, auto;
         color: white;
         min-height: 356px;
         padding: 18px;
@@ -2060,7 +2122,7 @@ st.markdown(
         position: absolute;
         inset: auto -10% -18% 38%;
         height: 220px;
-        border: 1px solid rgba(124, 234, 213, .16);
+        border: 1px solid rgba(139, 212, 80, .22);
         background:
             linear-gradient(90deg, transparent 0 18%, rgba(255,255,255,.06) 18% 19%, transparent 19% 39%, rgba(255,255,255,.06) 39% 40%, transparent 40% 60%, rgba(255,255,255,.06) 60% 61%, transparent 61% 82%, rgba(255,255,255,.06) 82% 83%, transparent 83%),
             linear-gradient(0deg, transparent 0 22%, rgba(255,255,255,.05) 22% 23%, transparent 23% 48%, rgba(255,255,255,.05) 48% 49%, transparent 49% 74%, rgba(255,255,255,.05) 74% 75%, transparent 75%);
@@ -2069,7 +2131,7 @@ st.markdown(
     }
 
     .home-kicker {
-        color: #7cead5;
+        color: var(--green);
         font-size: .62rem;
         font-weight: 950;
         text-transform: uppercase;
@@ -2082,7 +2144,7 @@ st.markdown(
         color: white;
         font-size: 2.8rem;
         font-weight: 950;
-        letter-spacing: -.05em;
+        letter-spacing: 0;
         line-height: .95;
         max-width: 760px;
         margin-top: 8px;
@@ -2112,15 +2174,15 @@ st.markdown(
 
     .home-stat {
         border: 1px solid rgba(255, 255, 255, .16);
-        background: rgba(255, 255, 255, .06);
-        border-radius: 2px;
+        background: rgba(255, 255, 255, .075);
+        border-radius: 0;
         padding: 9px;
     }
 
     .home-stat-value {
         font-size: 1.32rem;
         font-weight: 950;
-        letter-spacing: -.04em;
+        letter-spacing: 0;
         line-height: 1;
     }
 
@@ -2141,14 +2203,15 @@ st.markdown(
 
     .home-pillar {
         border: 1px solid var(--line);
-        border-radius: 2px;
-        background: #ffffff;
+        border-radius: 0;
+        background: rgba(255, 255, 255, .98);
         padding: 12px;
         min-height: 172px;
+        box-shadow: 0 8px 18px rgba(7, 17, 24, .045);
     }
 
     .home-pillar-label {
-        color: #2a9d8f;
+        color: var(--teal);
         font-size: .58rem;
         font-weight: 950;
         letter-spacing: .14em;
@@ -2156,10 +2219,10 @@ st.markdown(
     }
 
     .home-pillar-title {
-        color: #09131c;
+        color: var(--navy);
         font-size: 1.18rem;
         font-weight: 950;
-        letter-spacing: -.04em;
+        letter-spacing: 0;
         line-height: 1.05;
         margin-top: 5px;
     }
@@ -2180,8 +2243,8 @@ st.markdown(
 
     .filter-summary {
         border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #ffffff;
+        border-radius: 0;
+        background: rgba(255, 255, 255, .96);
         padding: 10px 12px;
         margin: 10px 0 12px 0;
         display: flex;
@@ -2200,10 +2263,10 @@ st.markdown(
     }
 
     .filter-token {
-        border: 1px solid #ccd8df;
-        border-radius: 999px;
-        background: #f7fafb;
-        color: #09131c;
+        border: 1px solid #aab9c2;
+        border-radius: 0;
+        background: #eef4f7;
+        color: var(--navy);
         padding: 3px 8px;
         font-size: .68rem;
         font-weight: 800;
@@ -2236,23 +2299,31 @@ st.markdown(
 
     .stButton > button,
     .stDownloadButton > button {
-        border-radius: 2px;
-        border: 1px solid #ccd8df;
-        background: #fff;
+        border-radius: 0;
+        border: 1px solid #9eb0bb;
+        background: #ffffff;
         color: var(--ink);
         font-weight: 900;
-        min-height: 34px;
+        min-height: 36px;
         font-size: .72rem;
-        letter-spacing: .04em;
+        letter-spacing: .08em;
         text-transform: uppercase;
         box-shadow: none;
     }
 
     .stButton > button[kind="primary"],
     .stDownloadButton > button[kind="primary"] {
-        background: var(--navy);
+        background:
+            linear-gradient(90deg, rgba(0, 184, 148, .22), transparent 46%),
+            var(--navy);
         border-color: var(--navy);
         color: white;
+    }
+
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
+        border-color: var(--teal);
+        color: var(--navy);
     }
 
     div[data-testid="stTabs"] button {
@@ -2263,9 +2334,30 @@ st.markdown(
     }
 
     [data-testid="stDataFrame"] {
-        border: 1px solid var(--line);
-        border-radius: 2px;
+        border: 1px solid #9eb0bb;
+        border-radius: 0;
         overflow: hidden;
+        box-shadow: 0 8px 20px rgba(7, 17, 24, .055);
+    }
+
+    div[data-testid="stExpander"] {
+        border: 1px solid var(--line);
+        border-radius: 0;
+        background: rgba(255, 255, 255, .93);
+    }
+
+    div[data-testid="stMetric"] {
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--green);
+        padding: 8px 10px;
+        background: #fff;
+    }
+
+    input,
+    textarea,
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="tag"] {
+        border-radius: 0 !important;
     }
 </style>
     """,
@@ -2282,9 +2374,9 @@ if not st.session_state["show_scouting_workspace"]:
         """
         <div class="hero">
             <div class="hero-content">
-                <div class="hero-kicker">Hradeck</div>
-                <h1>Football intelligence workspace</h1>
-                <p>Choose a workspace to continue.</p>
+                <div class="hero-kicker">Hradeck Intelligence</div>
+                <h1>Player quality command room</h1>
+                <p>Scouting, recruitment, goalkeeper, team, and model views built for fast football decisions.</p>
             </div>
         </div>
         """,
@@ -2312,6 +2404,15 @@ render_workspace_nav("main")
 active_workspace = st.session_state.get("active_workspace", "Scouting")
 data = load_default_data()
 model_metadata = load_model_metadata()
+st.markdown(
+    f"""
+    <div class="intel-strip">
+        <div class="intel-strip-title">{escape(active_workspace)} intelligence</div>
+        <div class="intel-strip-meta">{len(data):,} players · {data['BundleLabel'].nunique()} leagues · model v3</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 if active_workspace != "Scouting":
     if active_workspace == "Model":
         render_model_workspace(data, model_metadata)
