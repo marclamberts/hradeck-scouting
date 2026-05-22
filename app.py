@@ -2787,144 +2787,56 @@ if filtered.empty:
 quality_tab, player_tab, compare_tab, export_tab = st.tabs(["Quality", "Player Lab", "Compare", "Export"])
 
 with quality_tab:
-    top_quality_player = filtered.iloc[0]
-    st.markdown(
-        f"""
-        <div class="quality-hero">
-            <div>
-                <div class="scouting-kicker">Quality command</div>
-                <div class="quality-title">Rank the football, not the deal.</div>
-                <div class="quality-copy">Quality combines role fit, impact, decision-making, reliability, and repeatable strengths. Use this tab as the first pass before opening Player Lab.</div>
-            </div>
-            <div class="quality-signal">
-                <div class="quality-signal-label">Board leader</div>
-                <div class="quality-signal-value">{escape(str(top_quality_player['PlayerName']))}</div>
-                <div class="cockpit-note">Quality {top_quality_player['QualityScore']:.1f} · {escape(str(top_quality_player['PositionGroup']))} · {escape(str(top_quality_player['TeamName']))}</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    quality_cols = [
+        "PlayerName",
+        "TeamName",
+        "PositionGroup",
+        "BundleLabel",
+        "AgeYears",
+        "MinutesPlayed",
+        "QualityScore",
+        "QualityTier",
+        "RoleFitScore",
+        "ProfileScore",
+        "DecisionScore",
+        "PerformanceReliabilityScore",
+        "Readiness",
+        "RiskBand",
+        "Archetype",
+        "QualityDrivers",
+    ]
+    quality_board = filtered[[c for c in quality_cols if c in filtered.columns]].rename(
+        columns={
+            "PlayerName": "Player",
+            "TeamName": "Team",
+            "PositionGroup": "Role",
+            "BundleLabel": "League",
+            "AgeYears": "Age",
+            "MinutesPlayed": "Minutes",
+            "QualityScore": "Quality",
+            "QualityTier": "Tier",
+            "RoleFitScore": "Role Fit",
+            "ProfileScore": "Impact",
+            "DecisionScore": "Decision",
+            "PerformanceReliabilityScore": "Reliability",
+            "RiskBand": "Risk",
+            "QualityDrivers": "Drivers",
+        }
     )
-
-    summary_cols = st.columns(4)
-    with summary_cols[0]:
-        metric_card("Players", f"{len(filtered):,}", "in current quality scope")
-    with summary_cols[1]:
-        metric_card("Median quality", median_quality, "current board")
-    with summary_cols[2]:
-        metric_card("High quality", f"{high_quality_count:,}", "elite + high quality")
-    with summary_cols[3]:
-        metric_card("Best role", str(best_role), "by median quality")
-
-    top_cards = "".join(
-        f"""
-        <div class="quality-player-card">
-            <div class="quality-rank">Rank {idx}</div>
-            <div class="quality-player-name">{escape(str(row.PlayerName))}</div>
-            <div class="quality-player-meta">{escape(str(row.TeamName))} · {escape(str(row.PositionGroup))} · quality {row.QualityScore:.1f}</div>
-            <div class="quality-player-meta">{escape(str(row.QualityDrivers))}</div>
-        </div>
-        """
-        for idx, row in enumerate(filtered.head(3).itertuples(index=False), start=1)
+    st.dataframe(
+        quality_board.round(2),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
+            "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
+            "Impact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"),
+            "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f"),
+            "Reliability": st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
+            "Age": st.column_config.NumberColumn("Age", format="%.1f"),
+            "Minutes": st.column_config.NumberColumn("Minutes", format="%d"),
+        },
     )
-    st.markdown(f"<div class='quality-card-grid'>{top_cards}</div>", unsafe_allow_html=True)
-
-    left, right = st.columns([1.35, 1])
-    with left:
-        quality_cols = [
-            "PlayerName",
-            "TeamName",
-            "PositionGroup",
-            "BundleLabel",
-            "AgeYears",
-            "MinutesPlayed",
-            "QualityScore",
-            "QualityTier",
-            "RoleFitScore",
-            "ProfileScore",
-            "DecisionScore",
-            "QualityDrivers",
-        ]
-        quality_board = filtered[[c for c in quality_cols if c in filtered.columns]].rename(
-            columns={
-                "PlayerName": "Player",
-                "TeamName": "Team",
-                "PositionGroup": "Role",
-                "BundleLabel": "League",
-                "AgeYears": "Age",
-                "MinutesPlayed": "Minutes",
-                "QualityScore": "Quality",
-                "QualityTier": "Tier",
-                "RoleFitScore": "Role Fit",
-                "ProfileScore": "Impact",
-                "DecisionScore": "Decision",
-                "QualityDrivers": "Drivers",
-            }
-        )
-        st.dataframe(
-            quality_board.round(2),
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
-                "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
-                "Impact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"),
-                "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f"),
-            },
-        )
-    with right:
-        st.subheader("Role Quality")
-        role_quality = (
-            filtered.groupby("PositionGroup")
-            .agg(
-                Players=("PlayerName", "count"),
-                MedianQuality=("QualityScore", "median"),
-                MedianImpact=("ProfileScore", "median"),
-                TopQuality=("QualityScore", "max"),
-            )
-            .round(1)
-            .reset_index()
-            .sort_values("MedianQuality", ascending=False)
-        )
-        st.dataframe(
-            role_quality,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "MedianQuality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
-                "MedianImpact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"),
-                "TopQuality": st.column_config.ProgressColumn("Top", min_value=0, max_value=100, format="%.1f"),
-            },
-        )
-        chart = (
-            alt.Chart(role_quality)
-            .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
-            .encode(
-                x=alt.X("PositionGroup:N", title="Role", sort="-y"),
-                y=alt.Y("MedianQuality:Q", title="Median quality", scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color("MedianQuality:Q", legend=None, scale=alt.Scale(domain=[35, 75], range=["#2e6fba", "#00b894", "#8bd450"])),
-                tooltip=["PositionGroup", "Players", alt.Tooltip("MedianQuality:Q", format=".1f"), alt.Tooltip("TopQuality:Q", format=".1f")],
-            )
-            .properties(height=260)
-        )
-        st.altair_chart(chart, width="stretch")
-
-        st.subheader("Quality Tier Mix")
-        tier_order = ["Elite", "High quality", "Good", "Useful", "Monitor"]
-        tier_mix = filtered["QualityTier"].value_counts().reindex(tier_order).fillna(0).astype(int).reset_index()
-        tier_mix.columns = ["Tier", "Players"]
-        tier_chart = (
-            alt.Chart(tier_mix)
-            .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
-            .encode(
-                y=alt.Y("Tier:N", title=None, sort=tier_order),
-                x=alt.X("Players:Q", title="Players"),
-                color=alt.Color("Tier:N", legend=None, scale=alt.Scale(domain=tier_order, range=["#8bd450", "#00b894", "#2e6fba", "#ffb020", "#657481"])),
-                tooltip=["Tier", "Players"],
-            )
-            .properties(height=210)
-        )
-        st.altair_chart(tier_chart, width="stretch")
 
 with player_tab:
     st.subheader("Player Lab")
