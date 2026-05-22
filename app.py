@@ -2689,129 +2689,11 @@ high_quality_count = 0 if filtered.empty else int(filtered["QualityTier"].isin([
 median_quality = "n/a" if filtered.empty else f"{filtered['QualityScore'].median():.1f}"
 median_impact = "n/a" if filtered.empty else f"{filtered['ProfileScore'].median():.1f}"
 
-st.markdown(
-    f"""
-    <div class="scouting-command">
-        <div>
-            <div class="scouting-kicker">Scouting IQ / quality room</div>
-            <div class="scouting-title">Scout the footballer first.</div>
-            <div class="scouting-copy">
-                A rebuilt outfield-only workspace for quality: role fit, impact, decision-making, reliability, repeatable strengths, and comparable profiles.
-            </div>
-        </div>
-        <div class="scouting-mode-panel">
-            <div class="scouting-mode-label">Live leader</div>
-            <div class="scouting-mode-value">{escape(leader_name)}</div>
-            <div class="cockpit-note">Quality {escape(leader_score)} · {len(filtered):,} players in scope</div>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-mode_columns = st.columns([1, 1, 1, 1, 1.2])
-for idx, mode in enumerate(quick_modes):
-    with mode_columns[idx]:
-        st.button(
-            mode,
-            key=f"quick_{mode}",
-            type="primary" if st.session_state["quick_mode"] == mode else "secondary",
-            width="stretch",
-            on_click=set_quick_mode,
-            args=(mode,),
-        )
-with mode_columns[-1]:
-    st.button("Reset", width="stretch", on_click=reset_filters)
-
-st.markdown(
-    f"""
-    <div class="scouting-cockpit">
-        <div class="cockpit-grid">
-            <div class="cockpit-tile"><div class="cockpit-label">In Scope</div><div class="cockpit-value">{len(filtered):,}</div><div class="cockpit-note">players after controls</div></div>
-            <div class="cockpit-tile"><div class="cockpit-label">Leader</div><div class="cockpit-value">{escape(leader_score)}</div><div class="cockpit-note">{escape(leader_name)}</div></div>
-            <div class="cockpit-tile"><div class="cockpit-label">Median Quality</div><div class="cockpit-value">{escape(median_quality)}</div><div class="cockpit-note">board strength</div></div>
-            <div class="cockpit-tile"><div class="cockpit-label">High Quality</div><div class="cockpit-value">{high_quality_count:,}</div><div class="cockpit-note">elite + high-quality tier</div></div>
-            <div class="cockpit-tile"><div class="cockpit-label">Best Role</div><div class="cockpit-value">{escape(str(best_role))}</div><div class="cockpit-note">median impact {escape(median_impact)}</div></div>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 if filtered.empty:
-    st.info("No players match the current quality controls. Loosen the filters to rebuild the board.")
+    st.info("No players match the current quality controls. Loosen the filters in the sidebar to open Player Lab.")
     st.stop()
 
-role_cards = (
-    filtered.groupby("PositionGroup")
-    .agg(Players=("PlayerName", "count"), MedianQuality=("QualityScore", "median"), MedianImpact=("ProfileScore", "median"))
-    .round(1)
-    .reset_index()
-    .sort_values("MedianQuality", ascending=False)
-)
-st.markdown(
-    "<div class='role-rail'>"
-    + "".join(
-        f"""
-        <div class="role-cell">
-            <div class="role-cell-role">{escape(str(row.PositionGroup))}</div>
-            <div class="role-cell-score">{row.MedianQuality:.1f}</div>
-            <div class="role-cell-count">{int(row.Players):,} players · impact {row.MedianImpact:.1f}</div>
-        </div>
-        """
-        for row in role_cards.itertuples(index=False)
-    )
-    + "</div>",
-    unsafe_allow_html=True,
-)
-
-command_tab, board_tab, player_tab, compare_tab, export_tab = st.tabs(["Command", "Board", "Player Lab", "Compare", "Export"])
-
-with command_tab:
-    left, right = st.columns([1.25, 1])
-    with left:
-        st.subheader("Quality Map")
-        chart_source = filtered.head(800).copy()
-        quality_scatter = (
-            alt.Chart(chart_source)
-            .mark_circle(size=82, opacity=0.78, stroke="#071118", strokeWidth=0.4)
-            .encode(
-                x=alt.X("RoleFitScore:Q", title="Role fit", scale=alt.Scale(domain=[0, 100])),
-                y=alt.Y("QualityScore:Q", title="Quality", scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color("PositionGroup:N", title="Role", scale=alt.Scale(domain=list(POSITION_COLORS), range=list(POSITION_COLORS.values()))),
-                size=alt.Size("MinutesPlayed:Q", title="Minutes", scale=alt.Scale(range=[35, 220])),
-                tooltip=["PlayerName", "TeamName", "PositionGroup", "Archetype", alt.Tooltip("QualityScore:Q", format=".1f"), alt.Tooltip("RoleFitScore:Q", format=".1f"), alt.Tooltip("ProfileScore:Q", format=".1f")],
-            )
-            .properties(height=430)
-            .interactive()
-        )
-        st.altair_chart(quality_scatter, width="stretch")
-    with right:
-        st.subheader("Top Quality Stack")
-        top_stack = filtered.head(8)[["PlayerName", "TeamName", "PositionGroup", "QualityScore", "RoleFitScore", "ProfileScore", "QualityDrivers"]].rename(columns={"PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role", "QualityScore": "Quality", "RoleFitScore": "Role Fit", "ProfileScore": "Impact", "QualityDrivers": "Drivers"})
-        st.dataframe(top_stack.round(2), width="stretch", hide_index=True, column_config={"Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"), "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"), "Impact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f")})
-        st.subheader("Role Signal")
-        st.dataframe(role_cards, width="stretch", hide_index=True, column_config={"MedianQuality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"), "MedianImpact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f")})
-
-with board_tab:
-    st.subheader("Quality Board")
-    board_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed", "QualityScore", "QualityTier", "RoleFitScore", "ProfileScore", "DecisionScore", "Readiness", "RiskBand", "Archetype", "QualityDrivers"]
-    board = filtered[[c for c in board_cols if c in filtered.columns]].rename(columns={"PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role", "BundleLabel": "League", "AgeYears": "Age", "MinutesPlayed": "Minutes", "QualityScore": "Quality", "QualityTier": "Tier", "RoleFitScore": "Role Fit", "ProfileScore": "Impact", "DecisionScore": "Decision", "RiskBand": "Risk", "QualityDrivers": "Drivers"})
-    st.dataframe(board.round(2), width="stretch", hide_index=True, column_config={"Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"), "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"), "Impact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"), "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f")})
-
-    st.subheader("Shortlist Builder")
-    picker = filtered[[c for c in ["PlayerName", "TeamName", "PositionGroup", "QualityScore", "QualityTier", "RoleFitScore", "ProfileScore"] if c in filtered.columns]].head(100).copy()
-    picker.insert(0, "Add", False)
-    edited_picker = st.data_editor(picker.round(2), width="stretch", hide_index=True, key="quality_shortlist_picker", disabled=[c for c in picker.columns if c != "Add"], column_config={"Add": st.column_config.CheckboxColumn("Add"), "QualityScore": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"), "RoleFitScore": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"), "ProfileScore": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f")})
-    add_cols = st.columns([1, 1, 3])
-    with add_cols[0]:
-        if st.button("Add checked", type="primary", width="stretch"):
-            for player_name in edited_picker.loc[edited_picker["Add"], "PlayerName"].astype(str):
-                add_to_shortlist(player_name)
-    with add_cols[1]:
-        st.button("Clear", width="stretch", on_click=clear_shortlist)
-    with add_cols[2]:
-        st.caption(f"{len(st.session_state.get('shortlist_players', []))} players in quality shortlist")
+player_tab, compare_tab, export_tab = st.tabs(["Player Lab", "Compare", "Export"])
 
 with player_tab:
     st.subheader("Player Lab")
@@ -2867,5 +2749,4 @@ with export_tab:
     if not shortlist_df.empty:
         st.subheader("Current Shortlist")
         st.dataframe(shortlist_df[[c for c in export_cols if c in shortlist_df.columns]].round(2), width="stretch", hide_index=True)
-
 
