@@ -1050,6 +1050,193 @@ def render_workspace_nav(location: str = "top") -> None:
             )
 
 
+BALANCED_WEIGHTS = {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1}
+
+
+def czech_market(df: pd.DataFrame) -> pd.DataFrame:
+    country = df.get("CountryLabel", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
+    league = df.get("LeagueLabel", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
+    return df.loc[country.eq("czechia") | country.eq("czech republic") | league.str.contains("fortuna|chance narodni|czech", regex=True)].copy()
+
+
+def hradec_squad(df: pd.DataFrame) -> pd.DataFrame:
+    team = df.get("TeamName", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
+    return df.loc[team.str.contains("hradec|kralove|králové", regex=True)].copy()
+
+
+def render_team_workspace(data: pd.DataFrame) -> None:
+    team_df = add_scouting_fields(data, BALANCED_WEIGHTS)
+    czech_df = czech_market(team_df)
+    hradec_df = hradec_squad(team_df)
+    external_czech = czech_df.loc[~czech_df["TeamName"].isin(hradec_df["TeamName"].unique())].copy()
+
+    st.markdown("<div class='workspace-label'>Team workspace</div>", unsafe_allow_html=True)
+    st.subheader("Hradec Kralove focus")
+
+    h_top = hradec_df.sort_values("ScoutFitScore", ascending=False).head(1)
+    cz_top = external_czech.sort_values("ScoutFitScore", ascending=False).head(1)
+    team_cols = st.columns(5)
+    with team_cols[0]:
+        metric_card("Czech players", f"{len(czech_df):,}", "Fortuna + Chance Narodni")
+    with team_cols[1]:
+        metric_card("Czech leagues", f"{czech_df['LeagueLabel'].nunique():,}", "loaded in model")
+    with team_cols[2]:
+        metric_card("Hradec squad", f"{len(hradec_df):,}", "players in model")
+    with team_cols[3]:
+        metric_card("Hradec median fit", "n/a" if hradec_df.empty else f"{hradec_df['ScoutFitScore'].median():.1f}", "balanced model")
+    with team_cols[4]:
+        metric_card("Best Hradec", "n/a" if h_top.empty else str(h_top.iloc[0]["PlayerName"]), "current top signal")
+
+    if hradec_df.empty:
+        st.info("No FC Hradec Kralove rows were found in the loaded model outputs.")
+        return
+
+    st.markdown(
+        """
+        <div class="note-box">
+            Team view is intentionally compact: first understand Hradec's own squad, then compare it with the Czech market, then use the gaps to decide where to scout.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    squad_cols = [
+        "PlayerName",
+        "PositionGroup",
+        "AgeYears",
+        "MinutesPlayed",
+        "ScoutFitScore",
+        "CompositeRecruitmentScore",
+        "ValueRecruitmentScore",
+        "DecisionScore",
+        "Readiness",
+        "RiskBand",
+        "FitDrivers",
+    ]
+    squad_view = hradec_df[[c for c in squad_cols if c in hradec_df.columns]].sort_values("ScoutFitScore", ascending=False).rename(
+        columns={
+            "PlayerName": "Player",
+            "PositionGroup": "Role",
+            "AgeYears": "Age",
+            "MinutesPlayed": "Minutes",
+            "ScoutFitScore": "Fit",
+            "CompositeRecruitmentScore": "Model",
+            "ValueRecruitmentScore": "Value",
+            "DecisionScore": "Decision",
+            "RiskBand": "Risk",
+            "FitDrivers": "Drivers",
+        }
+    )
+    st.subheader("Squad read")
+    st.dataframe(
+        squad_view.round(2),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
+            "Model": st.column_config.ProgressColumn("Model", min_value=0, max_value=100, format="%.1f"),
+            "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
+        },
+    )
+
+    role_summary = (
+        czech_df.groupby("PositionGroup")
+        .agg(CzechPlayers=("PlayerName", "count"), CzechMedianFit=("ScoutFitScore", "median"), CzechMedianValue=("ValueRecruitmentScore", "median"))
+        .join(
+            hradec_df.groupby("PositionGroup")
+            .agg(HradecPlayers=("PlayerName", "count"), HradecMedianFit=("ScoutFitScore", "median"), HradecMedianValue=("ValueRecruitmentScore", "median")),
+            how="left",
+        )
+        .fillna({"HradecPlayers": 0})
+        .reset_index()
+    )
+    role_summary["FitGap"] = (role_summary["HradecMedianFit"] - role_summary["CzechMedianFit"]).round(1)
+    role_summary["ValueGap"] = (role_summary["HradecMedianValue"] - role_summary["CzechMedianValue"]).round(1)
+    role_summary["NeedSignal"] = np.select(
+        [
+            role_summary["HradecPlayers"].eq(0),
+            role_summary["FitGap"].lt(-6),
+            role_summary["ValueGap"].lt(-6),
+        ],
+        ["No depth", "Fit gap", "Value gap"],
+        default="Stable",
+    )
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.subheader("Role gaps")
+        st.dataframe(
+            role_summary.rename(columns={"PositionGroup": "Role"}).round(1),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "CzechMedianFit": st.column_config.ProgressColumn("Czech fit", min_value=0, max_value=100, format="%.1f"),
+                "HradecMedianFit": st.column_config.ProgressColumn("Hradec fit", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+    with right:
+        st.subheader("Immediate team signals")
+        facts = [
+            f"Best internal model signal: {h_top.iloc[0]['PlayerName']} ({h_top.iloc[0]['PositionGroup']}, fit {h_top.iloc[0]['ScoutFitScore']:.1f}).",
+            f"Best Czech external signal: {cz_top.iloc[0]['PlayerName']} ({cz_top.iloc[0]['TeamName']}, fit {cz_top.iloc[0]['ScoutFitScore']:.1f})." if not cz_top.empty else "No external Czech target found.",
+            f"Hradec median age: {hradec_df['AgeYears'].median():.1f}; Czech market median age: {czech_df['AgeYears'].median():.1f}.",
+            f"Hradec U23 players: {int(hradec_df['IsU23Target'].fillna(False).sum())}; Czech U23 market: {int(czech_df['IsU23Target'].fillna(False).sum())}.",
+        ]
+        st.markdown("<div class='section-card'>" + "".join(f"<div class='metric-caption'>{escape(fact)}</div>" for fact in facts) + "</div>", unsafe_allow_html=True)
+
+    external_cols = [
+        "PlayerName",
+        "TeamName",
+        "PositionGroup",
+        "AgeYears",
+        "MinutesPlayed",
+        "ScoutFitScore",
+        "ValueRecruitmentScore",
+        "DecisionScore",
+        "Readiness",
+        "RiskBand",
+        "FitDrivers",
+    ]
+    with st.expander("Czech league watchlist", expanded=True):
+        watch = external_czech.sort_values(["ScoutFitScore", "ValueRecruitmentScore"], ascending=False).head(30)
+        watch_view = watch[[c for c in external_cols if c in watch.columns]].rename(
+            columns={
+                "PlayerName": "Player",
+                "TeamName": "Team",
+                "PositionGroup": "Role",
+                "AgeYears": "Age",
+                "MinutesPlayed": "Minutes",
+                "ScoutFitScore": "Fit",
+                "ValueRecruitmentScore": "Value",
+                "DecisionScore": "Decision",
+                "RiskBand": "Risk",
+                "FitDrivers": "Drivers",
+            }
+        )
+        st.dataframe(
+            watch_view.round(2),
+            width="stretch",
+            hide_index=True,
+            column_config={"Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f")},
+        )
+
+    with st.expander("Czech league detail", expanded=False):
+        league_summary = (
+            czech_df.groupby(["LeagueLabel", "PositionGroup"])
+            .agg(
+                Players=("PlayerName", "count"),
+                MedianFit=("ScoutFitScore", "median"),
+                MedianValue=("ValueRecruitmentScore", "median"),
+                MedianAge=("AgeYears", "median"),
+                U23=("IsU23Target", lambda x: x.fillna(False).astype(bool).sum()),
+            )
+            .round(1)
+            .reset_index()
+            .sort_values(["LeagueLabel", "MedianFit"], ascending=[True, False])
+        )
+        st.dataframe(league_summary, width="stretch", hide_index=True)
+
+
 st.markdown(
     """
     <style>
@@ -1663,18 +1850,23 @@ if not st.session_state["show_scouting_workspace"]:
 render_workspace_nav("main")
 
 active_workspace = st.session_state.get("active_workspace", "Scouting")
+data = load_default_data()
+model_metadata = load_model_metadata()
 if active_workspace != "Scouting":
-    st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <div class="section-card">
-            <div class="metric-label">Coming next</div>
-            <div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>
-            <div class="metric-caption">This workspace is ready in the navigation, but the detailed tools are still being shaped. Use the buttons above to switch back to Scouting or move between workspaces.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    if active_workspace == "Team":
+        render_team_workspace(data)
+    else:
+        st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div class="section-card">
+                <div class="metric-label">Coming next</div>
+                <div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>
+                <div class="metric-caption">This workspace is ready in the navigation, but the detailed tools are still being shaped. Use the buttons above to switch back to Scouting or move between workspaces.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     st.stop()
 
 st.markdown("<div class='workspace-label'>Scouting workspace</div>", unsafe_allow_html=True)
@@ -1700,8 +1892,6 @@ with mode_columns[-1]:
     st.button("Reset filters", width="stretch", on_click=reset_filters)
 
 with st.sidebar:
-    data = load_default_data()
-    model_metadata = load_model_metadata()
     using_v3_outputs = _model_file("recruitment").exists()
     st.markdown(
         f"""
@@ -1754,7 +1944,8 @@ with st.sidebar:
 
 df = add_scouting_fields(data, weights)
 
-with st.sidebar:
+st.subheader("Filters")
+with st.container(border=True):
     position_groups = sorted(df["PositionGroup"].dropna().astype(str).unique())
     bundle_groups = sorted(df["BundleLabel"].dropna().astype(str).unique())
     archetype_groups = sorted(df["Archetype"].dropna().astype(str).unique())
