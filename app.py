@@ -497,6 +497,22 @@ def fit_drivers(row: pd.Series, limit: int = 3) -> str:
     return ", ".join(f"{label} {float(score):.0f}" for label, score in top)
 
 
+def quality_drivers(row: pd.Series, limit: int = 3) -> str:
+    candidates = {
+        "Role": row.get("RoleFitScore", 0),
+        "Impact": row.get("ProfileScore", 0),
+        "Decision": row.get("DecisionScore", 0),
+        "Reliability": row.get("PerformanceReliabilityScore", 0),
+        "Threat": row.get("ExpectedThreatScore", 0),
+        "Security": row.get("BallSecurityScore", 0),
+        "Creation": row.get("CreativeProgressionScore", 0),
+        "Defense": row.get("DefensiveDisruptionScore", 0),
+        "Pressing": row.get("PressingScore", 0),
+    }
+    top = sorted(candidates.items(), key=lambda item: pd.to_numeric(item[1], errors="coerce"), reverse=True)[:limit]
+    return ", ".join(f"{label} {float(score):.0f}" for label, score in top)
+
+
 def risk_flags(row: pd.Series) -> list[str]:
     flags = []
     if row.get("MinutesPlayed", 0) < 900:
@@ -559,7 +575,21 @@ def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFra
         + safe_col(out, "DefensiveDisruptionScore")
         + safe_col(out, "BallSecurityScore")
     ) / 4
+    out["QualityScore"] = (
+        safe_col(out, "RoleFitScore") * 0.34
+        + safe_col(out, "ProfileScore") * 0.24
+        + safe_col(out, "DecisionScore") * 0.16
+        + safe_col(out, "PerformanceReliabilityScore") * 0.14
+        + safe_col(out, "ExpectedThreatScore") * 0.07
+        + safe_col(out, "BallSecurityScore") * 0.05
+    ).clip(0, 100)
+    out["QualityTier"] = pd.cut(
+        out["QualityScore"],
+        bins=[-np.inf, 42, 52, 62, 72, np.inf],
+        labels=["Monitor", "Useful", "Good", "High quality", "Elite"],
+    ).astype(str)
     out["FitDrivers"] = out.apply(fit_drivers, axis=1)
+    out["QualityDrivers"] = out.apply(quality_drivers, axis=1)
     out["RiskFlags"] = out.apply(lambda row: ", ".join(risk_flags(row)), axis=1)
     out["TierReason"] = out.apply(tier_reason, axis=1)
     return out
@@ -986,6 +1016,7 @@ def reset_filters() -> None:
         "age_filter",
         "minutes_filter",
         "fit_floor",
+        "quality_floor",
         "composite_floor",
         "reliability_floor",
         "max_risk",
@@ -1007,17 +1038,20 @@ def clear_shortlist() -> None:
 
 def set_quick_mode(mode: str) -> None:
     st.session_state["quick_mode"] = mode
-    if mode == "U23 hunt":
+    if mode == "U23 quality":
         st.session_state["u23_filter"] = True
         st.session_state["fit_floor"] = 35
+        st.session_state["quality_floor"] = 52
         st.session_state["max_risk"] = 18.0
-    elif mode == "Priority board":
-        st.session_state["fit_floor"] = 58
+    elif mode == "Elite quality":
+        st.session_state["fit_floor"] = 35
+        st.session_state["quality_floor"] = 68
         st.session_state["composite_floor"] = 45
         st.session_state["reliability_floor"] = 55
-    elif mode == "Low-risk only":
+    elif mode == "Reliable quality":
         st.session_state["max_risk"] = 9.0
         st.session_state["reliability_floor"] = 70
+        st.session_state["quality_floor"] = 55
     else:
         reset_filters()
 
@@ -2308,7 +2342,7 @@ if "shortlist_players" not in st.session_state:
 outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
 
 mode_columns = st.columns([1, 1, 1, 1, 1.6])
-quick_modes = ["Full board", "U23 hunt", "Priority board", "Low-risk only"]
+quick_modes = ["Full board", "U23 quality", "Elite quality", "Reliable quality"]
 for idx, mode in enumerate(quick_modes):
     with mode_columns[idx]:
         st.button(
@@ -2333,7 +2367,7 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("<div class='menu-caption'>Use board modes for fast cuts, then refine the pool in the panels below.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='menu-caption'>Use board modes for fast quality cuts, then refine by role, minutes, and reliability.</div>", unsafe_allow_html=True)
     source_label = "FCHK Model V3 outputs"
     st.caption(f"Data source: {source_label} · {DEFAULT_MODEL_OUTPUT_DIR}")
     with st.expander("Loaded model files", expanded=False):
@@ -2350,20 +2384,20 @@ with st.sidebar:
                 st.dataframe(summary.head(12), hide_index=True, width="stretch")
 
     preset_weights = {
-        "Balanced": {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1},
-        "Value hunters": {"Composite": 2, "Decision": 1, "Value": 4, "Success": 1, "Reliability": 1, "Risk penalty": 1},
-        "Ready now": {"Composite": 3, "Decision": 3, "Value": 1, "Success": 2, "Reliability": 3, "Risk penalty": 2},
-        "High upside": {"Composite": 2, "Decision": 1, "Value": 3, "Success": 2, "Reliability": 1, "Risk penalty": 0},
+        "Balanced quality": {"Composite": 3, "Decision": 2, "Value": 0, "Success": 1, "Reliability": 2, "Risk penalty": 1},
+        "Technique": {"Composite": 2, "Decision": 3, "Value": 0, "Success": 1, "Reliability": 1, "Risk penalty": 1},
+        "Ready quality": {"Composite": 3, "Decision": 3, "Value": 0, "Success": 1, "Reliability": 3, "Risk penalty": 2},
+        "Upside quality": {"Composite": 2, "Decision": 2, "Value": 0, "Success": 2, "Reliability": 1, "Risk penalty": 0},
     }
     model_preset = st.segmented_control(
-        "Recruitment model",
+        "Quality lens",
         list(preset_weights),
-        default="Balanced",
+        default="Balanced quality",
         width="stretch",
     )
     defaults = preset_weights[model_preset]
     with st.expander("Scoring weights", expanded=False):
-        st.markdown("<div class='menu-caption'>Tune how the Scout Fit score balances talent, value, readiness, and risk.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='menu-caption'>Tune the quality lens. Value is kept at zero here; recruitment value lives in the Recruitment workspace.</div>", unsafe_allow_html=True)
         weights = {
             "Composite": st.slider("Composite", 0, 5, defaults["Composite"]),
             "Decision": st.slider("Decision", 0, 5, defaults["Decision"]),
@@ -2427,8 +2461,9 @@ with st.container(border=True):
             step=100,
             key="minutes_filter",
         )
-        fit_floor = st.slider("Scout fit floor", 0, 100, 35, key="fit_floor")
-        composite_floor = st.slider("Composite floor", 0, 100, 35, key="composite_floor")
+        quality_floor = st.slider("Quality floor", 0, 100, 35, key="quality_floor")
+        fit_floor = st.slider("Role fit floor", 0, 100, 35, key="fit_floor")
+        composite_floor = st.slider("Model quality floor", 0, 100, 35, key="composite_floor")
     with st.expander("Leagues and profiles", expanded=False):
         bundles = st.multiselect(
             "Leagues / bundles",
@@ -2452,6 +2487,7 @@ mask = (
     & df["Archetype"].astype(str).isin(archetypes)
     & df["AgeYears"].between(age_range[0], age_range[1])
     & df["MinutesPlayed"].between(minutes_range[0], minutes_range[1])
+    & df["QualityScore"].ge(quality_floor)
     & df["ScoutFitScore"].ge(fit_floor)
     & df["CompositeRecruitmentScore"].ge(composite_floor)
     & df["PerformanceReliabilityScore"].ge(reliability_floor)
@@ -2467,7 +2503,7 @@ if search:
     ).str.lower()
     mask &= haystack.str.contains(search.lower(), regex=False)
 
-filtered = df.loc[mask].sort_values(["ScoutFitScore", "CompositeRecruitmentScore"], ascending=False)
+filtered = df.loc[mask].sort_values(["QualityScore", "RoleFitScore", "CompositeRecruitmentScore"], ascending=False)
 
 filter_tokens = [
     f"{len(positions)} roles" if len(positions) != len(position_groups) else "All roles",
@@ -2475,7 +2511,8 @@ filter_tokens = [
     "U23 only" if u23_only else "All ages",
     f"{age_range[0]:.0f}-{age_range[1]:.0f} yrs",
     f"{minutes_range[0]:,}+ min",
-    f"Fit {fit_floor}+",
+    f"Quality {quality_floor}+",
+    f"Role fit {fit_floor}+",
     f"Reliability {reliability_floor}+",
     f"Risk <= {max_risk:.1f}/90",
 ]
@@ -2494,8 +2531,8 @@ with cols[0]:
     metric_card("Players", f"{len(filtered):,}", "after active filters")
 with cols[1]:
     metric_card(
-        "Top Fit",
-        "n/a" if top.empty else f"{top.iloc[0]['ScoutFitScore']:.1f}",
+        "Top quality",
+        "n/a" if top.empty else f"{top.iloc[0]['QualityScore']:.1f}",
         "" if top.empty else str(top.iloc[0]["PlayerName"]),
     )
 with cols[2]:
@@ -2510,9 +2547,9 @@ with cols[3]:
     )
 with cols[4]:
     metric_card(
-        "Priority+",
-        "n/a" if filtered.empty else f"{filtered['MarketTier'].isin(['Priority', 'Must scout']).sum():,}",
-        "priority or must-scout tier",
+        "High quality",
+        "n/a" if filtered.empty else f"{filtered['QualityTier'].isin(['High quality', 'Elite']).sum():,}",
+        "quality tier",
     )
 
 tab_overview, tab_board, tab_player, tab_compare, tab_reports, tab_data = st.tabs(
