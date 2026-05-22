@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from html import escape
 from io import BytesIO
 from pathlib import Path
 from textwrap import shorten
@@ -520,6 +521,7 @@ def tier_reason(row: pd.Series) -> str:
     )
 
 
+@st.cache_data(show_spinner=False)
 def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFrame:
     out = df.copy()
     out["Archetype"] = assign_archetypes(out)
@@ -1052,14 +1054,14 @@ st.markdown(
     }
 
     .block-container {
-        padding-top: .45rem;
-        padding-bottom: 1.25rem;
-        max-width: 96%;
+        padding-top: .7rem;
+        padding-bottom: 1.4rem;
+        max-width: 94%;
     }
 
     h1, h2, h3 {
         color: var(--ink);
-        letter-spacing: -.03em;
+        letter-spacing: 0;
         font-weight: 950;
     }
 
@@ -1290,16 +1292,16 @@ st.markdown(
 
     .metric-card {
         border: 1px solid var(--line);
-        border-radius: 2px;
-        padding: 8px 9px;
+        border-radius: 8px;
+        padding: 12px 13px;
         background: white;
-        min-height: 72px;
-        box-shadow: none;
+        min-height: 82px;
+        box-shadow: 0 1px 2px rgba(16, 33, 43, .04);
     }
 
     .metric-label {
         color: #66737d;
-        font-size: .56rem;
+        font-size: .58rem;
         text-transform: uppercase;
         letter-spacing: .13em;
         font-weight: 950;
@@ -1308,10 +1310,10 @@ st.markdown(
     .metric-value {
         margin-top: 2px;
         color: #09131c;
-        font-size: 1.12rem;
+        font-size: 1.28rem;
         font-weight: 950;
         line-height: 1;
-        letter-spacing: -.04em;
+        letter-spacing: 0;
     }
 
     .metric-caption {
@@ -1539,6 +1541,38 @@ st.markdown(
         margin-top: 12px;
     }
 
+    .filter-summary {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 10px 12px;
+        margin: 10px 0 12px 0;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .filter-summary-label {
+        color: #66737d;
+        font-size: .58rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        margin-right: 4px;
+    }
+
+    .filter-token {
+        border: 1px solid #ccd8df;
+        border-radius: 999px;
+        background: #f7fafb;
+        color: #09131c;
+        padding: 3px 8px;
+        font-size: .68rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+
     @media (max-width: 900px) {
         .hero,
         .homepage,
@@ -1598,7 +1632,7 @@ st.markdown(
 )
 
 if "show_scouting_workspace" not in st.session_state:
-    st.session_state["show_scouting_workspace"] = False
+    st.session_state["show_scouting_workspace"] = True
 
 if not st.session_state["show_scouting_workspace"]:
     st.markdown(
@@ -1627,7 +1661,7 @@ if not st.session_state["show_scouting_workspace"]:
         st.info(st.session_state["landing_notice"])
     st.stop()
 
-st.markdown("<div class='workspace-label'>Scouting workspace</div>", unsafe_allow_html=True)
+st.markdown("<div class='workspace-label'>FCHK scouting workspace</div>", unsafe_allow_html=True)
 
 if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
@@ -1795,6 +1829,25 @@ if search:
 
 filtered = df.loc[mask].sort_values(["ScoutFitScore", "CompositeRecruitmentScore"], ascending=False)
 
+filter_tokens = [
+    f"{len(positions)} roles" if len(positions) != len(position_groups) else "All roles",
+    f"{len(bundles)} leagues" if len(bundles) != len(bundle_groups) else "All leagues",
+    "U23 only" if u23_only else "All ages",
+    f"{age_range[0]:.0f}-{age_range[1]:.0f} yrs",
+    f"{minutes_range[0]:,}+ min",
+    f"Fit {fit_floor}+",
+    f"Reliability {reliability_floor}+",
+    f"Risk <= {max_risk:.1f}/90",
+]
+if search:
+    filter_tokens.insert(0, f"Search: {search}")
+st.markdown(
+    "<div class='filter-summary'><span class='filter-summary-label'>Active view</span>"
+    + "".join(f"<span class='filter-token'>{escape(str(token))}</span>" for token in filter_tokens)
+    + "</div>",
+    unsafe_allow_html=True,
+)
+
 top = filtered.head(1)
 cols = st.columns(5)
 with cols[0]:
@@ -1822,11 +1875,11 @@ with cols[4]:
         "priority or must-scout tier",
     )
 
-tab_home, tab_overview, tab_roles, tab_shortlist, tab_compare, tab_player, tab_analytics, tab_market, tab_data_room, tab_exports = st.tabs(
-    ["Home", "Overview", "Role boards", "Shortlist", "Compare", "Player lab", "Analytics", "Market map", "Data room", "Downloads"]
+tab_dashboard, tab_find, tab_profile, tab_compare, tab_reports, tab_data = st.tabs(
+    ["Dashboard", "Find players", "Player profile", "Compare", "Reports", "Data health"]
 )
 
-with tab_home:
+with tab_dashboard:
     top_gk = filtered.loc[filtered["PositionGroup"].eq("GK")].head(1)
     top_team = filtered.head(1)
     st.markdown(
@@ -2032,7 +2085,7 @@ with tab_home:
         target_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "ScoutFitScore", "MarketTier", "FitDrivers"]
         st.dataframe(filtered[[c for c in target_cols if c in filtered.columns]].head(10).round(2), width="stretch", hide_index=True)
 
-with tab_overview:
+with tab_dashboard:
     st.subheader("Recruitment board")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2121,7 +2174,7 @@ with tab_overview:
                 width="stretch",
             )
 
-with tab_roles:
+with tab_find:
     st.subheader("Position ranking boards")
     role = st.segmented_control("Role board", position_groups, default=position_groups[0], width="stretch")
     role_df = filtered.loc[filtered["PositionGroup"].eq(role)].sort_values("RoleFitScore", ascending=False)
@@ -2149,7 +2202,7 @@ with tab_roles:
         with right:
             st.pyplot(render_score_distribution(role_df, "ScoutFitScore"), clear_figure=True)
 
-with tab_shortlist:
+with tab_find:
     st.subheader("Ranked shortlist")
     shortlist_cols = [
         "PlayerName",
@@ -2175,20 +2228,48 @@ with tab_shortlist:
         "TierReason",
     ]
     view_cols = [c for c in shortlist_cols if c in filtered.columns]
-    add_pick = st.selectbox(
-        "Add player to shortlist basket",
-        filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"])
-        .sort_values("ScoutFitScore", ascending=False)["_label"]
-        .tolist(),
-    )
-    add_cols = st.columns([1, 1, 3])
-    with add_cols[0]:
-        if st.button("Add selected", type="primary", width="stretch"):
-            add_to_shortlist(add_pick.split(" | ")[0])
-    with add_cols[1]:
-        st.button("Clear basket", width="stretch", on_click=clear_shortlist)
-    with add_cols[2]:
-        st.caption(f"{len(st.session_state.get('shortlist_players', []))} players in shortlist basket")
+    if filtered.empty:
+        st.info("No players match the active filters.")
+    else:
+        picker_cols = [
+            "PlayerName",
+            "TeamName",
+            "PositionGroup",
+            "BundleLabel",
+            "AgeYears",
+            "ScoutFitScore",
+            "MarketTier",
+            "Readiness",
+            "RiskBand",
+            "FitDrivers",
+        ]
+        shortlist_picker = filtered[[c for c in picker_cols if c in filtered.columns]].head(75).copy()
+        shortlist_picker.insert(0, "Add", False)
+        edited_picker = st.data_editor(
+            shortlist_picker.round(2),
+            width="stretch",
+            hide_index=True,
+            key="shortlist_picker",
+            disabled=[c for c in shortlist_picker.columns if c != "Add"],
+            column_config={
+                "Add": st.column_config.CheckboxColumn("Add", help="Tick players to add to the shortlist basket."),
+                "PlayerName": st.column_config.TextColumn("Player"),
+                "TeamName": st.column_config.TextColumn("Team"),
+                "PositionGroup": st.column_config.TextColumn("Role"),
+                "BundleLabel": st.column_config.TextColumn("League"),
+                "AgeYears": st.column_config.NumberColumn("Age", format="%.1f"),
+                "ScoutFitScore": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+        add_cols = st.columns([1, 1, 3])
+        with add_cols[0]:
+            if st.button("Add checked", type="primary", width="stretch"):
+                for player_name in edited_picker.loc[edited_picker["Add"], "PlayerName"].astype(str):
+                    add_to_shortlist(player_name)
+        with add_cols[1]:
+            st.button("Clear basket", width="stretch", on_click=clear_shortlist)
+        with add_cols[2]:
+            st.caption(f"{len(st.session_state.get('shortlist_players', []))} players in shortlist basket")
 
     shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("ScoutFitScore", ascending=False)
     if not shortlist_df.empty:
@@ -2293,7 +2374,7 @@ with tab_compare:
             )
             st.altair_chart(chart, width="stretch")
 
-with tab_player:
+with tab_profile:
     st.subheader("Player lab")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2392,7 +2473,7 @@ with tab_player:
             hide_index=True,
         )
 
-with tab_analytics:
+with tab_dashboard:
     st.subheader("Advanced visuals")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2468,7 +2549,7 @@ with tab_analytics:
         percentile_df = pd.DataFrame(percentile_rows)
         st.dataframe(percentile_df.round(1), width="stretch", hide_index=True)
 
-with tab_market:
+with tab_dashboard:
     st.subheader("Market map")
     if filtered.empty:
         st.info("No players match the active filters.")
@@ -2506,7 +2587,7 @@ with tab_market:
         )
         st.dataframe(score_summary, width="stretch", hide_index=True)
 
-with tab_data_room:
+with tab_data:
     st.subheader("Model data room")
     st.markdown(
         """
@@ -2665,7 +2746,7 @@ with tab_data_room:
         st.info("Player Scores workbook not loaded.")
 
 
-with tab_exports:
+with tab_reports:
     st.subheader("Report builder")
     export_cols = [
         c
@@ -2787,7 +2868,7 @@ with tab_exports:
     )
 
 def render_transfer_market_dashboard(df: pd.DataFrame):
-    st.header("🌐 Transfer Market Intelligence")
+    st.header("Transfer Market Intelligence")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -2845,17 +2926,3 @@ def render_transfer_market_dashboard(df: pd.DataFrame):
         hide_index=True,
         use_container_width=True
     )
-st.markdown("""
-    <style>
-    .metric-card {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 5px solid #2a9d8f;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        margin-bottom: 10px;
-    }
-    .metric-label { color: #667085; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
-    .metric-value { color: #10212b; font-size: 1.5rem; font-weight: 700; }
-    </style>
-""", unsafe_allow_html=True)
