@@ -1081,36 +1081,10 @@ st.markdown(
     }
 
     .hero {
-        border: 1px solid #182733;
-        border-radius: 2px;
-        padding: 26px 28px;
-        background:
-            linear-gradient(135deg, rgba(46, 196, 166, .18) 0%, rgba(46, 196, 166, 0) 38%),
-            linear-gradient(180deg, #07111a 0%, #10212b 100%);
-        color: white;
-        margin-bottom: 14px;
-        box-shadow: none;
-        min-height: 430px;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 24px;
-        align-items: center;
-        overflow: hidden;
-        position: relative;
-    }
-
-    .hero:after {
-        content: "";
-        position: absolute;
-        right: -80px;
-        bottom: -72px;
-        width: 540px;
-        height: 300px;
-        border: 1px solid rgba(124, 234, 213, .14);
-        background:
-            linear-gradient(90deg, transparent 0 18%, rgba(255,255,255,.06) 18% 19%, transparent 19% 39%, rgba(255,255,255,.06) 39% 40%, transparent 40% 60%, rgba(255,255,255,.06) 60% 61%, transparent 61% 82%, rgba(255,255,255,.06) 82% 83%, transparent 83%),
-            linear-gradient(0deg, transparent 0 22%, rgba(255,255,255,.05) 22% 23%, transparent 23% 48%, rgba(255,255,255,.05) 48% 49%, transparent 49% 74%, rgba(255,255,255,.05) 74% 75%, transparent 75%);
-        transform: rotate(-8deg);
+        max-width: 760px;
+        margin: 16vh auto 28px auto;
+        color: var(--ink);
+        text-align: center;
     }
 
     .hero-content,
@@ -1120,7 +1094,7 @@ st.markdown(
     }
 
     .hero-kicker {
-        color: #7cead5;
+        color: #66737d;
         font-size: .62rem;
         font-weight: 950;
         text-transform: uppercase;
@@ -1128,20 +1102,21 @@ st.markdown(
     }
 
     .hero h1 {
-        color: white;
-        margin: 10px 0 10px 0;
-        max-width: 900px;
-        font-size: clamp(3rem, 7vw, 6.8rem);
-        line-height: .88;
-        letter-spacing: -.05em;
+        color: var(--ink);
+        margin: 12px auto 10px auto;
+        max-width: 760px;
+        font-size: clamp(2.4rem, 5vw, 4.8rem);
+        line-height: .96;
+        letter-spacing: 0;
     }
 
     .hero p {
         margin: 0;
-        max-width: 720px;
-        color: #c4d0d6;
-        font-size: 1rem;
-        line-height: 1.48;
+        max-width: 560px;
+        margin: 0 auto;
+        color: #66737d;
+        font-size: .95rem;
+        line-height: 1.5;
     }
 
     .home-nav {
@@ -1214,9 +1189,10 @@ st.markdown(
 
     .landing-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 9px;
-        margin-top: 14px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        max-width: 760px;
+        margin: 0 auto;
     }
 
     .landing-card {
@@ -1632,21 +1608,22 @@ st.markdown(
 )
 
 if "show_scouting_workspace" not in st.session_state:
-    st.session_state["show_scouting_workspace"] = True
+    st.session_state["show_scouting_workspace"] = False
 
 if not st.session_state["show_scouting_workspace"]:
     st.markdown(
         """
         <div class="hero">
             <div class="hero-content">
-                <div class="hero-kicker">Hradeck scouting</div>
-                <h1>Scouting | Recruitment | Goalkeepers | Team</h1>
-                <p>Football recruitment intelligence for turning model outputs into clearer priorities. Start with the scouting room today; recruitment, goalkeepers, and team tools are being built next.</p>
+                <div class="hero-kicker">Hradeck</div>
+                <h1>Football intelligence workspace</h1>
+                <p>Choose a workspace to continue.</p>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    st.markdown("<div class='landing-grid'>", unsafe_allow_html=True)
     landing_cols = st.columns(4)
     with landing_cols[0]:
         st.button("Scouting", type="primary", width="stretch", on_click=enter_scouting_workspace)
@@ -1656,6 +1633,7 @@ if not st.session_state["show_scouting_workspace"]:
         st.button("Goalkeepers", width="stretch", on_click=show_under_development, args=("Goalkeepers",))
     with landing_cols[3]:
         st.button("Team", width="stretch", on_click=show_under_development, args=("Team",))
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if st.session_state.get("landing_notice"):
         st.info(st.session_state["landing_notice"])
