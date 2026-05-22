@@ -1022,7 +1022,7 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-WORKSPACES = ["Scouting", "Recruitment", "Goalkeepers", "Team"]
+WORKSPACES = ["Scouting", "Recruitment", "Goalkeepers", "Team", "Model"]
 
 
 def set_workspace(section: str) -> None:
@@ -1036,7 +1036,7 @@ def enter_scouting_workspace() -> None:
 
 
 def render_workspace_nav(location: str = "top") -> None:
-    nav_cols = st.columns(4)
+    nav_cols = st.columns(len(WORKSPACES))
     active = st.session_state.get("active_workspace", "Scouting")
     for idx, section in enumerate(WORKSPACES):
         with nav_cols[idx]:
@@ -1062,6 +1062,141 @@ def czech_market(df: pd.DataFrame) -> pd.DataFrame:
 def hradec_squad(df: pd.DataFrame) -> pd.DataFrame:
     team = df.get("TeamName", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
     return df.loc[team.str.contains("hradec|kralove|králové", regex=True)].copy()
+
+
+def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
+    st.markdown("<div class='workspace-label'>Model workspace</div>", unsafe_allow_html=True)
+    st.subheader("Smart club model")
+
+    smart_df = metadata.get("smart_club", pd.DataFrame()).copy()
+    if smart_df.empty:
+        st.info("Smart Club Closeness workbook not loaded.")
+        return
+
+    score_col = "SmartClubClosenessScore"
+    model_col = "SmartClubModel"
+    required_cols = {model_col, score_col}
+    if not required_cols.issubset(smart_df.columns):
+        st.info("Smart Club Closeness workbook is loaded, but the expected model and closeness columns were not found.")
+        st.dataframe(smart_df.head(50), width="stretch", hide_index=True)
+        return
+
+    smart_df[score_col] = pd.to_numeric(smart_df[score_col], errors="coerce")
+    smart_df = smart_df.dropna(subset=[model_col, score_col])
+    if smart_df.empty:
+        st.info("Smart Club Closeness workbook has no usable model rows after cleaning.")
+        return
+
+    summary = (
+        smart_df.groupby(model_col)
+        .agg(
+            Players=("PlayerName", "count"),
+            MedianCloseness=(score_col, "median"),
+            BestCloseness=(score_col, "max"),
+            EliteLinks=(score_col, lambda values: values.ge(90).sum()),
+        )
+        .round(1)
+        .reset_index()
+        .sort_values(["MedianCloseness", "BestCloseness"], ascending=False)
+    )
+
+    metric_cols = st.columns(4)
+    with metric_cols[0]:
+        metric_card("Club models", f"{summary[model_col].nunique():,}", "smart-club profiles")
+    with metric_cols[1]:
+        metric_card("Player links", f"{len(smart_df):,}", "model comparisons")
+    with metric_cols[2]:
+        metric_card("Median closeness", f"{smart_df[score_col].median():.1f}", "all links")
+    with metric_cols[3]:
+        metric_card("90+ links", f"{smart_df[score_col].ge(90).sum():,}", "elite model matches")
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.subheader("Club model ranking")
+        st.dataframe(
+            summary,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
+                "BestCloseness": st.column_config.ProgressColumn("Best", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+
+    with right:
+        selected_model = st.selectbox("Club model", summary[model_col].tolist())
+        selected = smart_df.loc[smart_df[model_col].eq(selected_model)].copy()
+        st.subheader("Position spread")
+        if "PositionGroup" in selected.columns:
+            position_summary = (
+                selected.groupby("PositionGroup")
+                .agg(Players=("PlayerName", "count"), MedianCloseness=(score_col, "median"))
+                .round(1)
+                .reset_index()
+                .sort_values("Players", ascending=False)
+            )
+            st.dataframe(
+                position_summary,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
+                },
+            )
+        else:
+            st.info("No position detail found for this club model.")
+
+    st.subheader(f"Top matches for {selected_model}")
+    top_cols = [
+        col
+        for col in [
+            "SmartClubRank",
+            "PlayerName",
+            "TeamName",
+            "PositionGroup",
+            "LeagueLabel",
+            "AgeYears",
+            "MinutesPlayed",
+            "SmartClubClosenessScore",
+        ]
+        if col in selected.columns
+    ]
+    sort_cols = [score_col] + (["PlayerName"] if "PlayerName" in selected.columns else [])
+    top_matches = selected.sort_values(sort_cols, ascending=[False] + ([True] if len(sort_cols) > 1 else [])).head(100)
+    st.dataframe(
+        top_matches[top_cols],
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "SmartClubClosenessScore": st.column_config.ProgressColumn("Closeness", min_value=0, max_value=100, format="%.1f"),
+            "AgeYears": st.column_config.NumberColumn("Age", format="%.1f"),
+            "MinutesPlayed": st.column_config.NumberColumn("Minutes", format="%d"),
+        },
+    )
+
+    style_df = metadata.get("player_styles", pd.DataFrame()).copy()
+    if not style_df.empty and "SmartClubTop3" in style_df.columns:
+        related_styles = style_df.loc[
+            style_df["SmartClubTop3"].fillna("").astype(str).str.contains(str(selected_model), case=False, regex=False)
+        ].copy()
+        if not related_styles.empty:
+            st.subheader("Style notes linked to this model")
+            style_cols = [
+                col
+                for col in [
+                    "PlayerName",
+                    "TeamName",
+                    "PositionGroup",
+                    "PrimaryPlayerStyle",
+                    "SecondaryPlayerStyle",
+                    "ClosestArchetype",
+                    "WhyThisClubStyle",
+                    "SmartClubTop3",
+                    "SmartClubClosenessTier",
+                ]
+                if col in related_styles.columns
+            ]
+            st.dataframe(related_styles[style_cols].head(50), width="stretch", hide_index=True)
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
@@ -1395,9 +1530,9 @@ st.markdown(
 
     .landing-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 10px;
-        max-width: 760px;
+        max-width: 920px;
         margin: 0 auto;
     }
 
@@ -1832,15 +1967,16 @@ if not st.session_state["show_scouting_workspace"]:
         unsafe_allow_html=True,
     )
     st.markdown("<div class='landing-grid'>", unsafe_allow_html=True)
-    landing_cols = st.columns(4)
-    with landing_cols[0]:
-        st.button("Scouting", type="primary", width="stretch", on_click=set_workspace, args=("Scouting",))
-    with landing_cols[1]:
-        st.button("Recruitment", width="stretch", on_click=set_workspace, args=("Recruitment",))
-    with landing_cols[2]:
-        st.button("Goalkeepers", width="stretch", on_click=set_workspace, args=("Goalkeepers",))
-    with landing_cols[3]:
-        st.button("Team", width="stretch", on_click=set_workspace, args=("Team",))
+    landing_cols = st.columns(len(WORKSPACES))
+    for idx, section in enumerate(WORKSPACES):
+        with landing_cols[idx]:
+            st.button(
+                section,
+                type="primary" if section == "Scouting" else "secondary",
+                width="stretch",
+                on_click=set_workspace,
+                args=(section,),
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.session_state.get("landing_notice"):
@@ -1853,7 +1989,9 @@ active_workspace = st.session_state.get("active_workspace", "Scouting")
 data = load_default_data()
 model_metadata = load_model_metadata()
 if active_workspace != "Scouting":
-    if active_workspace == "Team":
+    if active_workspace == "Model":
+        render_model_workspace(data, model_metadata)
+    elif active_workspace == "Team":
         render_team_workspace(data)
     else:
         st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
