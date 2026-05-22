@@ -1290,6 +1290,194 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     )
 
 
+def render_recruitment_workspace(data: pd.DataFrame) -> None:
+    recruitment_df = add_scouting_fields(data, BALANCED_WEIGHTS)
+    recruitment_df = recruitment_df.loc[~recruitment_df["PositionGroup"].astype(str).eq("GK")].copy()
+
+    st.markdown("<div class='workspace-label'>Recruitment workspace</div>", unsafe_allow_html=True)
+    st.subheader("Recruitment case board")
+
+    if recruitment_df.empty:
+        st.info("No outfield recruitment rows were found in the loaded model outputs.")
+        return
+
+    value_score = safe_col(recruitment_df, "ValueRecruitmentScore")
+    resale_score = safe_col(recruitment_df, "AgeResaleScore")
+    style_score = safe_col(recruitment_df, "FCHKStyleScore", safe_col(recruitment_df, "SmartClubScore").median())
+    smart_club_score = safe_col(recruitment_df, "SmartClubScore", style_score.median())
+    success_score = safe_col(recruitment_df, "SuccessProbability")
+    readiness_score = safe_col(recruitment_df, "PerformanceReliabilityScore")
+    wage_risk = safe_col(recruitment_df, "WageRisk")
+    fee_risk = safe_col(recruitment_df, "FeeRisk")
+
+    recruitment_df["RecruitmentCaseScore"] = (
+        value_score * 0.24
+        + resale_score * 0.20
+        + style_score * 0.18
+        + smart_club_score * 0.14
+        + success_score * 0.14
+        + readiness_score * 0.10
+        - wage_risk * 0.04
+        - fee_risk * 0.04
+    ).clip(0, 100)
+    recruitment_df["StyleFit"] = np.where(style_score.ge(70), "Strong", np.where(style_score.ge(55), "Useful", "Question"))
+    recruitment_df["ResaleProfile"] = np.where(resale_score.ge(70), "Upside", np.where(resale_score.ge(55), "Neutral", "Limited"))
+    recruitment_df["CostRisk"] = np.select(
+        [fee_risk.ge(70) | wage_risk.ge(70), fee_risk.ge(50) | wage_risk.ge(50)],
+        ["High", "Medium"],
+        default="Low",
+    )
+    recruitment_df["RecruitmentNote"] = (
+        "Value "
+        + value_score.round(0).astype(int).astype(str)
+        + " · resale "
+        + resale_score.round(0).astype(int).astype(str)
+        + " · style "
+        + style_score.round(0).astype(int).astype(str)
+        + " · cost risk "
+        + recruitment_df["CostRisk"].astype(str)
+    )
+
+    recruitment_df = recruitment_df.sort_values(["RecruitmentCaseScore", "ValueRecruitmentScore"], ascending=False)
+
+    metric_cols = st.columns(5)
+    with metric_cols[0]:
+        metric_card("Recruitment pool", f"{len(recruitment_df):,}", "outfield players")
+    with metric_cols[1]:
+        metric_card("Median value", f"{value_score.median():.1f}", "transfer value")
+    with metric_cols[2]:
+        metric_card("Median resale", f"{resale_score.median():.1f}", "age upside")
+    with metric_cols[3]:
+        metric_card("Strong style fit", f"{recruitment_df['StyleFit'].eq('Strong').sum():,}", "FCHK / smart-club")
+    with metric_cols[4]:
+        metric_card("Low cost risk", f"{recruitment_df['CostRisk'].eq('Low').sum():,}", "fee + wage")
+
+    st.markdown(
+        """
+        <div class="note-box">
+            This view ranks recruitment cases: value, resale upside, FCHK style fit, smart-club fit, success probability, readiness, and cost risk.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    filter_cols = st.columns([1, 1, 1])
+    with filter_cols[0]:
+        role_options = sorted(recruitment_df["PositionGroup"].dropna().astype(str).unique())
+        selected_roles = st.multiselect("Roles", role_options, default=role_options, key="recruitment_roles_filter")
+    with filter_cols[1]:
+        min_resale = st.slider("Minimum resale score", 0, 100, 45, key="recruitment_resale_floor")
+    with filter_cols[2]:
+        style_options = ["Strong", "Useful", "Question"]
+        selected_style_fits = st.multiselect("Style fit", style_options, default=style_options, key="recruitment_style_filter")
+
+    filtered_recruitment = recruitment_df.loc[
+        recruitment_df["PositionGroup"].astype(str).isin(selected_roles)
+        & recruitment_df["AgeResaleScore"].ge(min_resale)
+        & recruitment_df["StyleFit"].isin(selected_style_fits)
+    ].copy()
+
+    left, right = st.columns([1.2, 1])
+    with left:
+        st.subheader("Best recruitment cases")
+        board_cols = [
+            "PlayerName",
+            "TeamName",
+            "PositionGroup",
+            "BundleLabel",
+            "AgeYears",
+            "RecruitmentCaseScore",
+            "ValueRecruitmentScore",
+            "AgeResaleScore",
+            "FCHKStyleScore",
+            "SmartClubScore",
+            "SuccessProbability",
+            "ResaleProfile",
+            "StyleFit",
+            "CostRisk",
+            "PrimaryPlayerStyle",
+            "SmartClubTop3",
+            "RecruitmentNote",
+        ]
+        board = filtered_recruitment[[c for c in board_cols if c in filtered_recruitment.columns]].head(100).rename(
+            columns={
+                "PlayerName": "Player",
+                "TeamName": "Team",
+                "PositionGroup": "Role",
+                "BundleLabel": "League",
+                "AgeYears": "Age",
+                "RecruitmentCaseScore": "Case",
+                "ValueRecruitmentScore": "Value",
+                "AgeResaleScore": "Resale",
+                "FCHKStyleScore": "FCHK Style",
+                "SmartClubScore": "Smart Club",
+                "SuccessProbability": "Success",
+                "PrimaryPlayerStyle": "Playing Style",
+                "SmartClubTop3": "Style Clubs",
+                "RecruitmentNote": "Why",
+            }
+        )
+        st.dataframe(
+            board.round(2),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Case": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
+                "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
+                "Resale": st.column_config.ProgressColumn("Resale", min_value=0, max_value=100, format="%.1f"),
+                "FCHK Style": st.column_config.ProgressColumn("FCHK Style", min_value=0, max_value=100, format="%.1f"),
+                "Smart Club": st.column_config.ProgressColumn("Smart Club", min_value=0, max_value=100, format="%.1f"),
+                "Success": st.column_config.ProgressColumn("Success", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+
+    with right:
+        st.subheader("Recruitment shape")
+        shape = (
+            filtered_recruitment.groupby(["PositionGroup", "StyleFit"])
+            .agg(Players=("PlayerName", "count"), MedianCase=("RecruitmentCaseScore", "median"), MedianResale=("AgeResaleScore", "median"))
+            .round(1)
+            .reset_index()
+            .sort_values("MedianCase", ascending=False)
+        )
+        st.dataframe(
+            shape,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "MedianCase": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
+                "MedianResale": st.column_config.ProgressColumn("Resale", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+
+        chart_df = filtered_recruitment[
+            ["PlayerName", "TeamName", "PositionGroup", "RecruitmentCaseScore", "AgeResaleScore", "FCHKStyleScore", "CostRisk"]
+        ].dropna()
+        if not chart_df.empty:
+            case_chart = (
+                alt.Chart(chart_df.head(300))
+                .mark_circle(size=72, opacity=0.78)
+                .encode(
+                    x=alt.X("AgeResaleScore:Q", title="Resale upside"),
+                    y=alt.Y("FCHKStyleScore:Q", title="Playing-style fit"),
+                    color=alt.Color("CostRisk:N", title="Cost risk", scale=alt.Scale(domain=["Low", "Medium", "High"], range=["#2a9d8f", "#f4a261", "#e76f51"])),
+                    shape=alt.Shape("PositionGroup:N", title="Role"),
+                    tooltip=[
+                        "PlayerName",
+                        "TeamName",
+                        "PositionGroup",
+                        alt.Tooltip("RecruitmentCaseScore:Q", format=".1f"),
+                        alt.Tooltip("AgeResaleScore:Q", format=".1f"),
+                        alt.Tooltip("FCHKStyleScore:Q", format=".1f"),
+                        "CostRisk",
+                    ],
+                )
+                .properties(height=340)
+                .interactive()
+            )
+            st.altair_chart(case_chart, width="stretch")
+
+
 def render_team_workspace(data: pd.DataFrame) -> None:
     team_df = add_scouting_fields(data, BALANCED_WEIGHTS)
     czech_df = czech_market(team_df)
@@ -2090,6 +2278,8 @@ model_metadata = load_model_metadata()
 if active_workspace != "Scouting":
     if active_workspace == "Model":
         render_model_workspace(data, model_metadata)
+    elif active_workspace == "Recruitment":
+        render_recruitment_workspace(data)
     elif active_workspace == "Goalkeepers":
         render_goalkeepers_workspace(data)
     elif active_workspace == "Team":
