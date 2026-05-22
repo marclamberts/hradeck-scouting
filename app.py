@@ -2421,6 +2421,95 @@ st.markdown(
         margin-top: 3px;
     }
 
+    .quality-hero {
+        border: 1px solid #071118;
+        background:
+            linear-gradient(90deg, rgba(255,255,255,.055) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(255,255,255,.05) 1px, transparent 1px),
+            linear-gradient(135deg, rgba(0,184,148,.22), transparent 44%),
+            #071118;
+        background-size: 28px 28px, 28px 28px, auto, auto;
+        color: white;
+        padding: 14px;
+        margin-bottom: 10px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);
+        gap: 12px;
+        align-items: end;
+    }
+
+    .quality-title {
+        color: white;
+        font-size: 1.6rem;
+        font-weight: 950;
+        line-height: 1;
+    }
+
+    .quality-copy {
+        color: #c8d5dc;
+        font-size: .74rem;
+        line-height: 1.35;
+        margin-top: 6px;
+    }
+
+    .quality-signal {
+        border-left: 1px solid rgba(255,255,255,.18);
+        padding-left: 12px;
+    }
+
+    .quality-signal-label {
+        color: #9fb0ba;
+        font-size: .55rem;
+        font-weight: 950;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+    }
+
+    .quality-signal-value {
+        color: var(--green);
+        font-size: 1.3rem;
+        font-weight: 950;
+        margin-top: 4px;
+    }
+
+    .quality-card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin: 10px 0;
+    }
+
+    .quality-player-card {
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--teal);
+        background: rgba(255,255,255,.98);
+        padding: 10px;
+        min-height: 96px;
+    }
+
+    .quality-rank {
+        color: var(--teal);
+        font-size: .55rem;
+        font-weight: 950;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+    }
+
+    .quality-player-name {
+        color: var(--navy);
+        font-size: 1rem;
+        font-weight: 950;
+        line-height: 1.05;
+        margin-top: 4px;
+    }
+
+    .quality-player-meta {
+        color: var(--muted);
+        font-size: .66rem;
+        line-height: 1.25;
+        margin-top: 4px;
+    }
+
     @media (max-width: 900px) {
         .hero,
         .homepage,
@@ -2430,7 +2519,9 @@ st.markdown(
         .landing-grid,
         .scouting-command,
         .cockpit-grid,
-        .role-rail {
+        .role-rail,
+        .quality-hero,
+        .quality-card-grid {
             grid-template-columns: 1fr;
         }
 
@@ -2696,7 +2787,25 @@ if filtered.empty:
 quality_tab, player_tab, compare_tab, export_tab = st.tabs(["Quality", "Player Lab", "Compare", "Export"])
 
 with quality_tab:
-    st.subheader("Quality Board")
+    top_quality_player = filtered.iloc[0]
+    st.markdown(
+        f"""
+        <div class="quality-hero">
+            <div>
+                <div class="scouting-kicker">Quality command</div>
+                <div class="quality-title">Rank the football, not the deal.</div>
+                <div class="quality-copy">Quality combines role fit, impact, decision-making, reliability, and repeatable strengths. Use this tab as the first pass before opening Player Lab.</div>
+            </div>
+            <div class="quality-signal">
+                <div class="quality-signal-label">Board leader</div>
+                <div class="quality-signal-value">{escape(str(top_quality_player['PlayerName']))}</div>
+                <div class="cockpit-note">Quality {top_quality_player['QualityScore']:.1f} · {escape(str(top_quality_player['PositionGroup']))} · {escape(str(top_quality_player['TeamName']))}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     summary_cols = st.columns(4)
     with summary_cols[0]:
         metric_card("Players", f"{len(filtered):,}", "in current quality scope")
@@ -2706,6 +2815,19 @@ with quality_tab:
         metric_card("High quality", f"{high_quality_count:,}", "elite + high quality")
     with summary_cols[3]:
         metric_card("Best role", str(best_role), "by median quality")
+
+    top_cards = "".join(
+        f"""
+        <div class="quality-player-card">
+            <div class="quality-rank">Rank {idx}</div>
+            <div class="quality-player-name">{escape(str(row.PlayerName))}</div>
+            <div class="quality-player-meta">{escape(str(row.TeamName))} · {escape(str(row.PositionGroup))} · quality {row.QualityScore:.1f}</div>
+            <div class="quality-player-meta">{escape(str(row.QualityDrivers))}</div>
+        </div>
+        """
+        for idx, row in enumerate(filtered.head(3).itertuples(index=False), start=1)
+    )
+    st.markdown(f"<div class='quality-card-grid'>{top_cards}</div>", unsafe_allow_html=True)
 
     left, right = st.columns([1.35, 1])
     with left:
@@ -2778,14 +2900,31 @@ with quality_tab:
             alt.Chart(role_quality)
             .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
             .encode(
-                x=alt.X("PositionGroup:N", title="Role"),
+                x=alt.X("PositionGroup:N", title="Role", sort="-y"),
                 y=alt.Y("MedianQuality:Q", title="Median quality", scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color("PositionGroup:N", legend=None, scale=alt.Scale(domain=list(POSITION_COLORS), range=list(POSITION_COLORS.values()))),
+                color=alt.Color("MedianQuality:Q", legend=None, scale=alt.Scale(domain=[35, 75], range=["#2e6fba", "#00b894", "#8bd450"])),
                 tooltip=["PositionGroup", "Players", alt.Tooltip("MedianQuality:Q", format=".1f"), alt.Tooltip("TopQuality:Q", format=".1f")],
             )
             .properties(height=260)
         )
         st.altair_chart(chart, width="stretch")
+
+        st.subheader("Quality Tier Mix")
+        tier_order = ["Elite", "High quality", "Good", "Useful", "Monitor"]
+        tier_mix = filtered["QualityTier"].value_counts().reindex(tier_order).fillna(0).astype(int).reset_index()
+        tier_mix.columns = ["Tier", "Players"]
+        tier_chart = (
+            alt.Chart(tier_mix)
+            .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
+            .encode(
+                y=alt.Y("Tier:N", title=None, sort=tier_order),
+                x=alt.X("Players:Q", title="Players"),
+                color=alt.Color("Tier:N", legend=None, scale=alt.Scale(domain=tier_order, range=["#8bd450", "#00b894", "#2e6fba", "#ffb020", "#657481"])),
+                tooltip=["Tier", "Players"],
+            )
+            .properties(height=210)
+        )
+        st.altair_chart(tier_chart, width="stretch")
 
 with player_tab:
     st.subheader("Player Lab")
