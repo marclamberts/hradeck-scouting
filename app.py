@@ -2612,9 +2612,13 @@ if not st.session_state["show_scouting_workspace"]:
         padding: 0 !important;
         max-width: 100% !important;
     }
-    /* Remove the top deploy/hamburger bar gap */
     header[data-testid="stHeader"] { background: transparent !important; }
     div[data-testid="stToolbar"]   { display: none !important; }
+    /* Workspace card columns — add horizontal breathing room */
+    div[data-testid="stHorizontalBlock"] {
+        padding: 0 48px !important;
+        gap: 14px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -2707,7 +2711,6 @@ if not st.session_state["show_scouting_workspace"]:
         "Team":        ("🏟️", "Team Intelligence", "Squad gaps, Czech market benchmarks & watchlist"),
         "Model":       ("🔬", "Model & Data",      "Smart club closeness, data coverage & confidence bands"),
     }
-    st.markdown('<div style="padding: 0 48px 8px;">', unsafe_allow_html=True)
     landing_cols = st.columns(len(WORKSPACES), gap="medium")
     for idx, section in enumerate(WORKSPACES):
         icon, title, desc = _workspace_meta.get(section, ("⚽", section, ""))
@@ -2727,7 +2730,6 @@ if not st.session_state["show_scouting_workspace"]:
                 on_click=set_workspace,
                 args=(section,),
             )
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Bottom feature strip ──────────────────────────────────────────────────
     st.markdown(f"""
