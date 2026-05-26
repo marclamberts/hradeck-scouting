@@ -6,7 +6,11 @@ from io import BytesIO
 from pathlib import Path
 from textwrap import shorten
 
+import json
+from datetime import date as _date
+
 APP_DIR = Path(__file__).parent
+SHORTLIST_FILE = APP_DIR / "data" / "shortlist.json"
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/hradeck_scouting_matplotlib")
 
 import numpy as np
@@ -1110,6 +1114,35 @@ def render_european_map(market_df: pd.DataFrame) -> alt.Chart:
     )
 
 
+def generate_scout_report(player: pd.Series, ref_df: pd.DataFrame) -> str:
+    """Call Claude API to generate a 150-word scout report for a player."""
+    try:
+        import anthropic as _anthropic
+        _client = _anthropic.Anthropic()
+        _pos_df = ref_df.loc[ref_df["PositionGroup"].eq(player["PositionGroup"])]
+        _pctile = percentile_rank(_pos_df["QualityScore"].dropna(), float(player["QualityScore"]))
+        _prompt = (
+            f"You are a professional football scout. Write a concise 150-word scouting report.\n\n"
+            f"Player: {player['PlayerName']} | Team: {player['TeamName']} | League: {player.get('BundleLabel','?')}\n"
+            f"Position: {player['PositionGroup']} | Age: {player['AgeYears']:.1f} | Minutes: {int(player['MinutesPlayed']):,}\n"
+            f"Quality: {player['QualityScore']:.1f} ({_pctile:.0f}th pctile for {player['PositionGroup']}) | "
+            f"Role Fit: {player.get('RoleFitScore',0):.1f} | Impact: {player.get('ProfileScore',0):.1f} | "
+            f"Decision: {player.get('DecisionScore',0):.1f} | Reliability: {player.get('PerformanceReliabilityScore',0):.1f}\n"
+            f"Risk: {player.get('RiskBand','?')} | Archetype: {player.get('Archetype','?')} | Tier: {player.get('QualityTier','?')}\n"
+            f"Key drivers: {player.get('QualityDrivers','?')}\n\n"
+            f"Write as a scout would: strengths, playing style, reliability/risk, and a signing verdict for "
+            f"FC Hradec Králové (Czech top-flight club). Plain prose, no bullet points, ~150 words."
+        )
+        _msg = _client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=450,
+            messages=[{"role": "user", "content": _prompt}],
+        )
+        return _msg.content[0].text
+    except Exception as _e:
+        return f"Report generation failed: {_e}"
+
+
 def download_name(prefix: str, suffix: str) -> str:
     return f"fchk_{prefix.lower().replace(' ', '_')}.{suffix}"
 
@@ -1133,14 +1166,38 @@ def reset_filters() -> None:
     st.session_state["quick_mode"] = "Full board"
 
 
-def add_to_shortlist(player_name: str) -> None:
-    shortlist = set(st.session_state.get("shortlist_players", []))
-    shortlist.add(player_name)
-    st.session_state["shortlist_players"] = sorted(shortlist)
+def _load_shortlist_file() -> dict:
+    try:
+        if SHORTLIST_FILE.exists():
+            return json.loads(SHORTLIST_FILE.read_text())
+    except Exception:
+        pass
+    return {}
 
+def _save_shortlist_file(data: dict) -> None:
+    try:
+        SHORTLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SHORTLIST_FILE.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+def add_to_shortlist(player_name: str, priority: str = "Watch", notes: str = "") -> None:
+    sl = st.session_state.get("shortlist_data", {})
+    if player_name not in sl:
+        sl[player_name] = {"priority": priority, "notes": notes, "added": str(_date.today())}
+    else:
+        # update priority/notes if provided
+        if priority != "Watch" or notes:
+            sl[player_name]["priority"] = priority
+            sl[player_name]["notes"] = notes
+    st.session_state["shortlist_data"] = sl
+    st.session_state["shortlist_players"] = list(sl.keys())
+    _save_shortlist_file(sl)
 
 def clear_shortlist() -> None:
+    st.session_state["shortlist_data"] = {}
     st.session_state["shortlist_players"] = []
+    _save_shortlist_file({})
 
 
 def set_quick_mode(mode: str) -> None:
@@ -2670,6 +2727,11 @@ st.markdown(
 )
 
 
+# Load persistent shortlist from disk on first run
+if "shortlist_data" not in st.session_state:
+    st.session_state["shortlist_data"] = _load_shortlist_file()
+    st.session_state["shortlist_players"] = list(st.session_state["shortlist_data"].keys())
+
 if "show_scouting_workspace" not in st.session_state:
     st.session_state["show_scouting_workspace"] = False
 if "active_workspace" not in st.session_state:
@@ -3100,8 +3162,17 @@ with player_tab:
         f'</div>',
         unsafe_allow_html=True,
     )
-    if st.button("Add player to shortlist", type="primary"):
-        add_to_shortlist(player["PlayerName"])
+    _sl_add_cols = st.columns([1, 1, 2])
+    with _sl_add_cols[0]:
+        _sl_priority = st.selectbox("Priority", ["Watch", "Hot", "Observed"], key=f"sl_pri_{selected_label[:20]}")
+    with _sl_add_cols[1]:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        if st.button("➕ Add to shortlist", type="primary", use_container_width=True):
+            _sl_notes_val = st.session_state.get(f"sl_notes_{selected_label[:20]}", "")
+            add_to_shortlist(player["PlayerName"], priority=_sl_priority, notes=_sl_notes_val)
+            st.success(f"Added {player['PlayerName']} to shortlist as {_sl_priority}")
+    with _sl_add_cols[2]:
+        st.text_input("Scout note (optional)", key=f"sl_notes_{selected_label[:20]}", placeholder="E.g. Watched vs Sparta, strong in press…")
     lab_left, lab_right = st.columns([1, 1])
     with lab_left:
         st.pyplot(render_player_pizza(df.loc[df["PositionGroup"].eq(player["PositionGroup"])], player), clear_figure=True)
