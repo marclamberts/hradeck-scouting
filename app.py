@@ -2740,24 +2740,19 @@ if filtered.empty:
     st.stop()
 
 # ── Quick-mode filter chips ─────────────────────────────────────────────────
+# Use on_click= so set_quick_mode runs BEFORE widgets are instantiated (avoids
+# "cannot modify key after widget is rendered" StreamlitAPIException).
 st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick filter:</span></div>", unsafe_allow_html=True)
 qm_cols = st.columns([1, 1, 1, 1, 2])
+_qm = st.session_state.get("quick_mode", "Full board")
 with qm_cols[0]:
-    if st.button("⚡ Full board", type="secondary" if st.session_state.get("quick_mode") != "Full board" else "primary", width="stretch"):
-        set_quick_mode("Full board")
-        st.rerun()
+    st.button("⚡ Full board",  type="primary" if _qm == "Full board"      else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
 with qm_cols[1]:
-    if st.button("🌱 U23 quality", type="secondary" if st.session_state.get("quick_mode") != "U23 quality" else "primary", width="stretch"):
-        set_quick_mode("U23 quality")
-        st.rerun()
+    st.button("🌱 U23 quality", type="primary" if _qm == "U23 quality"     else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
 with qm_cols[2]:
-    if st.button("🏆 Elite only", type="secondary" if st.session_state.get("quick_mode") != "Elite quality" else "primary", width="stretch"):
-        set_quick_mode("Elite quality")
-        st.rerun()
+    st.button("🏆 Elite only",  type="primary" if _qm == "Elite quality"   else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
 with qm_cols[3]:
-    if st.button("🛡 Reliable", type="secondary" if st.session_state.get("quick_mode") != "Reliable quality" else "primary", width="stretch"):
-        set_quick_mode("Reliable quality")
-        st.rerun()
+    st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
 with qm_cols[4]:
     _shortlist_count = len(st.session_state.get("shortlist_players", []))
     st.markdown(
