@@ -2926,6 +2926,47 @@ with qm_cols[4]:
         unsafe_allow_html=True,
     )
 
+# ── KPI Cockpit ────────────────────────────────────────────────────────────────
+_role_stats = (
+    filtered.groupby("PositionGroup")
+    .agg(Count=("PlayerName", "count"), MedQ=("QualityScore", "median"))
+    .round(1).reset_index().sort_values("MedQ", ascending=False)
+)
+_cockpit_pct = f"{len(filtered)*100//max(len(df),1)}%"
+_hq_pct = f"{high_quality_count*100//max(len(filtered),1)}%"
+st.markdown(
+    '<div class="scouting-cockpit"><div class="cockpit-grid">'
+    f'<div class="cockpit-tile"><div class="cockpit-label">Filtered players</div>'
+    f'<div class="cockpit-value">{len(filtered):,}</div>'
+    f'<div class="cockpit-note">{_cockpit_pct} of {len(df):,} in model</div></div>'
+    f'<div class="cockpit-tile"><div class="cockpit-label">Elite / High quality</div>'
+    f'<div class="cockpit-value">{high_quality_count}</div>'
+    f'<div class="cockpit-note">{_hq_pct} of filtered set</div></div>'
+    f'<div class="cockpit-tile"><div class="cockpit-label">Median quality</div>'
+    f'<div class="cockpit-value">{median_quality}</div>'
+    f'<div class="cockpit-note">Median impact: {median_impact}</div></div>'
+    f'<div class="cockpit-tile"><div class="cockpit-label">No. 1 ranked</div>'
+    f'<div class="cockpit-value" style="font-size:.95rem;line-height:1.25;">{escape(leader_name)}</div>'
+    f'<div class="cockpit-note">Quality {leader_score}</div></div>'
+    f'<div class="cockpit-tile"><div class="cockpit-label">Strongest role</div>'
+    f'<div class="cockpit-value">{escape(str(best_role))}</div>'
+    f'<div class="cockpit-note">Highest median quality</div></div>'
+    '</div></div>',
+    unsafe_allow_html=True,
+)
+# Role rail — one tile per position showing median quality + player count
+_rr_html = '<div class="role-rail">'
+for _, _rr in _role_stats.iterrows():
+    _rr_html += (
+        f'<div class="role-cell">'
+        f'<div class="role-cell-role">{escape(str(_rr["PositionGroup"]))}</div>'
+        f'<div class="role-cell-score">{_rr["MedQ"]:.0f}</div>'
+        f'<div class="role-cell-count">{int(_rr["Count"])} players</div>'
+        f'</div>'
+    )
+_rr_html += '</div>'
+st.markdown(_rr_html, unsafe_allow_html=True)
+
 quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, export_tab = st.tabs(
     ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "📥 Export"]
 )
@@ -2967,6 +3008,22 @@ with quality_tab:
             "QualityDrivers": "Drivers",
         }
     )
+    # Tier distribution pills
+    _tier_order = ["Elite", "High quality", "Standard", "Developing"]
+    _tier_cls   = {"Elite": "teal", "High quality": "teal", "Standard": "", "Developing": ""}
+    _tcounts    = filtered["QualityTier"].value_counts().to_dict() if "QualityTier" in filtered.columns else {}
+    _empty_str  = ""
+    _tier_pills = "".join(
+        f'<span class="pill {_tier_cls.get(t, _empty_str)}">{t}: {_tcounts.get(t,0)}</span>'
+        for t in _tier_order if _tcounts.get(t, 0) > 0
+    )
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'
+        f'<span style="color:var(--faint);font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;">Tiers:</span>'
+        f'<div class="pill-row" style="margin:0;">{_tier_pills}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     st.dataframe(
         quality_board.round(2),
         use_container_width=True,
@@ -2984,9 +3041,9 @@ with quality_tab:
     )
 
 with player_tab:
-    st.subheader("Player Lab")
+    st.markdown("<div class='workspace-label'>🔬 Player Lab — deep dive profile & radar</div>", unsafe_allow_html=True)
     player_options = filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"]).sort_values("QualityScore", ascending=False)
-    selected_label = st.selectbox("Player", player_options["_label"].tolist())
+    selected_label = st.selectbox("Select player", player_options["_label"].tolist())
     player = player_options.loc[player_options["_label"].eq(selected_label)].iloc[0]
     _risk_cls = {"Low": "teal", "Moderate": "amber", "Elevated": "amber", "High": "red"}.get(str(player.get("RiskBand", "")), "")
     st.markdown(
@@ -3008,20 +3065,55 @@ with player_tab:
     metric_cols[2].metric("Impact", f"{player['ProfileScore']:.1f}")
     metric_cols[3].metric("Decision", f"{player['DecisionScore']:.1f}")
     metric_cols[4].metric("Position Pctl", f"{percentile_rank(df.loc[df['PositionGroup'].eq(player['PositionGroup']), 'QualityScore'], player['QualityScore']):.0f}")
-    st.markdown(f"<div class='note-box'>Quality drivers: {escape(str(player['QualityDrivers']))}. Reliability: {escape(str(player['Readiness']))}; risk: {escape(str(player['RiskBand']))}.</div>", unsafe_allow_html=True)
+    _pnote = profile_note(player)
+    _pstrengths = player_strengths(player)
+    st.markdown(
+        f'<div class="note-box">'
+        f'<strong style="color:var(--teal);">Profile:</strong> {escape(_pnote)}<br>'
+        f'<strong style="color:var(--teal);">Strengths:</strong> {escape(_pstrengths)}<br>'
+        f'<strong style="color:var(--muted);">Drivers:</strong> {escape(str(player["QualityDrivers"]))} &nbsp;·&nbsp; '
+        f'Reliability: {escape(str(player["Readiness"]))} &nbsp;·&nbsp; Risk: {escape(str(player["RiskBand"]))}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     if st.button("Add player to shortlist", type="primary"):
         add_to_shortlist(player["PlayerName"])
     lab_left, lab_right = st.columns([1, 1])
     with lab_left:
         st.pyplot(render_player_pizza(df.loc[df["PositionGroup"].eq(player["PositionGroup"])], player), clear_figure=True)
     with lab_right:
+        st.markdown("<div class='workspace-label' style='font-size:.58rem;margin-bottom:8px;'>Top per-90 metrics</div>", unsafe_allow_html=True)
         per90_cols = [c for c in filtered.columns if c.endswith("_per90") or c.startswith("Imp_")]
-        per90 = pd.DataFrame({"Metric": per90_cols, "Value": [float(player[c]) for c in per90_cols]}).sort_values("Value", ascending=False).head(30)
-        st.dataframe(per90.round(3), width="stretch", hide_index=True)
+        _per90_labels = {c: c.replace("_per90","").replace("Imp_","").replace("_"," ").title() for c in per90_cols}
+        per90 = (
+            pd.DataFrame({"Metric": [_per90_labels[c] for c in per90_cols], "Value": [float(player[c]) for c in per90_cols], "Pctile": [percentile_rank(filtered[c].dropna(), float(player[c])) for c in per90_cols]})
+            .sort_values("Value", ascending=False).head(20).round(2)
+        )
+        st.dataframe(
+            per90,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Value": st.column_config.NumberColumn("Value", format="%.2f"),
+                "Pctile": st.column_config.ProgressColumn("Pctile %", min_value=0, max_value=100, format="%.0f"),
+            },
+        )
     comparable = similar_players(df, player, same_position=True, n=12)
-    st.subheader("Closest Quality Profiles")
+    st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:14px 0 8px;'>Closest quality profiles</div>", unsafe_allow_html=True)
     similar_cols = ["PlayerName", "TeamName", "PositionGroup", "AgeYears", "MinutesPlayed", "SimilarityScore", "QualityScore", "RoleFitScore", "ProfileScore", "Archetype"]
-    st.dataframe(comparable[[c for c in similar_cols if c in comparable.columns]].round(2), width="stretch", hide_index=True)
+    st.dataframe(
+        comparable[[c for c in similar_cols if c in comparable.columns]].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","MinutesPlayed":"Minutes","SimilarityScore":"Similarity","QualityScore":"Quality","RoleFitScore":"Role Fit","ProfileScore":"Impact"}).round(2),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Quality":   st.column_config.ProgressColumn("Quality",   min_value=0, max_value=100, format="%.1f"),
+            "Role Fit":  st.column_config.ProgressColumn("Role Fit",  min_value=0, max_value=100, format="%.1f"),
+            "Impact":    st.column_config.ProgressColumn("Impact",    min_value=0, max_value=100, format="%.1f"),
+            "Similarity":st.column_config.ProgressColumn("Similarity",min_value=0, max_value=1,   format="%.2f"),
+            "Age":       st.column_config.NumberColumn("Age", format="%.1f"),
+            "Minutes":   st.column_config.NumberColumn("Minutes", format="%d"),
+        },
+    )
 
 with hradec_tab:
     st.markdown("<div class='workspace-label'>🎯 Hradec Kralove — best external targets</div>", unsafe_allow_html=True)
@@ -3080,6 +3172,38 @@ with hradec_tab:
                 "Age":          st.column_config.NumberColumn("Age", format="%.1f"),
             },
         )
+
+        # Position need chart
+        _need_df = (
+            targets_view.groupby("PositionGroup")
+            .agg(Count=("PlayerName","count"), AvgFit=("HradecTargetScore","mean"), Need=("PositionNeed","first"))
+            .reset_index().sort_values("AvgFit", ascending=False)
+        )
+        if not _need_df.empty:
+            _need_chart = (
+                alt.Chart(_need_df)
+                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                .encode(
+                    y=alt.Y("PositionGroup:N", sort="-x", title=None,
+                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
+                    x=alt.X("AvgFit:Q", title="Average Hradec Fit Score",
+                            scale=alt.Scale(domain=[0,100]),
+                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                    color=alt.Color("AvgFit:Q",
+                                    scale=alt.Scale(domain=[30,90], range=["#1e3a5f","#10d4aa"]),
+                                    legend=None),
+                    tooltip=[
+                        alt.Tooltip("PositionGroup:N", title="Position"),
+                        alt.Tooltip("Count:Q", title="Candidates"),
+                        alt.Tooltip("AvgFit:Q", format=".1f", title="Avg Fit Score"),
+                        alt.Tooltip("Need:N", title="Squad need"),
+                    ],
+                )
+                .properties(height=240, title=alt.TitleParams("Avg Hradec fit by position", color="#8fa3b1", fontSize=12))
+                .configure_view(fill="#0f1623", stroke=None)
+                .configure(background="#080c14")
+            )
+            st.altair_chart(_need_chart, use_container_width=True)
 
         # Best XI
         xi_order = ["CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
@@ -3192,7 +3316,7 @@ with intel_tab:
         st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, use_container_width=True)
 
 with compare_tab:
-    st.subheader("Compare Players")
+    st.markdown("<div class='workspace-label'>⚖️ Side-by-side comparison</div>", unsafe_allow_html=True)
     compare_options = filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"]).sort_values("QualityScore", ascending=False)["_label"].tolist()
     selected_compare = st.multiselect("Select 2-4 players", compare_options, default=compare_options[: min(3, len(compare_options))], max_selections=4)
     compare_names = [label.split(" | ")[0] for label in selected_compare]
@@ -3200,10 +3324,22 @@ with compare_tab:
     if len(compare_df) < 2:
         st.info("Pick at least two players to compare.")
     else:
-        st.dataframe(
-            compare_df[["PlayerName", "TeamName", "PositionGroup", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "QualityDrivers"]].round(2),
-            use_container_width=True, hide_index=True,
-        )
+        # Per-player profile cards
+        _card_cols = st.columns(len(compare_df))
+        for _ci, (_ci_idx, _cp) in enumerate(compare_df.iterrows()):
+            with _card_cols[_ci]:
+                _cp_risk_cls = {"Low":"teal","Moderate":"amber","Elevated":"amber","High":"red"}.get(str(_cp.get("RiskBand","")), "")
+                st.markdown(
+                    f'<div class="profile-card">'
+                    f'<div class="profile-name">{escape(str(_cp["PlayerName"]))}</div>'
+                    f'<div class="profile-meta">{escape(str(_cp["TeamName"]))} · {escape(str(_cp["PositionGroup"]))} · {_cp["AgeYears"]:.0f} yrs</div>'
+                    f'<div class="pill-row">'
+                    f'<span class="pill teal">Q {_cp["QualityScore"]:.1f}</span>'
+                    f'<span class="pill">Fit {_cp["RoleFitScore"]:.1f}</span>'
+                    f'<span class="pill {_cp_risk_cls}">{escape(str(_cp.get("RiskBand","?")))}</span>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
         compare_scores = compare_df[["PlayerName", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "PerformanceReliabilityScore"]].melt(id_vars="PlayerName", var_name="Metric", value_name="Score")
         compare_chart = (
             alt.Chart(compare_scores)
@@ -3223,7 +3359,7 @@ with compare_tab:
         st.altair_chart(compare_chart, use_container_width=True)
 
 with export_tab:
-    st.subheader("Export Quality Work")
+    st.markdown("<div class='workspace-label'>📥 Export — board CSV, PDF report, shortlist</div>", unsafe_allow_html=True)
     export_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed", "QualityScore", "QualityTier", "RoleFitScore", "ProfileScore", "DecisionScore", "PerformanceReliabilityScore", "Readiness", "RiskBand", "Archetype", "QualityDrivers", "RiskFlags"] if c in filtered.columns]
     export_df = filtered[export_cols].round(3)
     shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("QualityScore", ascending=False)
