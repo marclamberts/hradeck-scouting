@@ -1822,12 +1822,38 @@ st.markdown(
     .stApp { background: var(--bg) !important; color: var(--ink); }
 
     .block-container {
-        padding-top: .8rem;
-        padding-bottom: 2.5rem;
+        padding-top: .5rem;
+        padding-bottom: 2rem;
         max-width: 100% !important;
         padding-left: 1.2rem !important;
         padding-right: 1.2rem !important;
     }
+
+    /* ── TIGHTEN STREAMLIT'S BUILT-IN VERTICAL RHYTHM ────────── */
+    /* Each rendered widget/markdown sits in an .element-container;
+       Streamlit's default gap is ~1rem — pull it in to 0.45rem    */
+    div[data-testid="stVerticalBlock"] > div.element-container,
+    div[data-testid="stVerticalBlockBorderWrapper"]
+        > div[data-testid="stVerticalBlock"]
+        > div.element-container {
+        margin-bottom: 0.45rem !important;
+    }
+    /* The stVerticalBlock flex gap itself */
+    div[data-testid="stVerticalBlock"] { gap: 0 !important; }
+    /* Tabs content — a little more breathing room inside each tab */
+    div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container {
+        margin-bottom: 0.6rem !important;
+    }
+    /* Reduce the large bottom margin st.subheader / h2 adds */
+    h2 { margin-bottom: 6px !important; padding-bottom: 4px; }
+    h3 { margin-bottom: 4px !important; }
+    /* Columns: tighten default gap between col children */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"]
+        > div.element-container {
+        margin-bottom: 0.4rem !important;
+    }
+    /* Reduce st.metric bottom margin */
+    div[data-testid="stMetric"] { margin-bottom: 0 !important; }
 
     /* make dataframes truly full-width */
     [data-testid="stDataFrame"] > div { width: 100% !important; }
@@ -1883,12 +1909,12 @@ st.markdown(
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        margin: 0 0 14px 0;
+        margin: 0 0 6px 0;
         align-items: center;
     }
     .quick-chip-label {
         color: var(--faint);
-        font-size: .65rem;
+        font-size: .62rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .1em;
@@ -1964,15 +1990,15 @@ st.markdown(
 
     /* ── WORKSPACE LABEL ─────────────────────────────────────── */
     .workspace-label {
-        border-left: 3px solid var(--teal);
+        border-left: 2px solid var(--teal);
         color: var(--teal);
-        font-size: .64rem;
+        font-size: .6rem;
         font-weight: 800;
         letter-spacing: .16em;
         text-transform: uppercase;
-        margin: 6px 0 14px 0;
-        padding: 5px 0 5px 12px;
-        background: rgba(16,212,170,.07);
+        margin: 2px 0 8px 0;
+        padding: 4px 0 4px 10px;
+        background: rgba(16,212,170,.06);
         border-radius: 0 4px 4px 0;
     }
 
@@ -1982,92 +2008,90 @@ st.markdown(
         border-left: 3px solid var(--teal);
         background: var(--surface);
         border-radius: 6px;
-        padding: 11px 16px;
-        margin: 0 0 16px 0;
+        padding: 7px 13px;
+        margin: 0 0 8px 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
         box-shadow: var(--shadow-sm);
     }
-    .intel-strip-title { color: var(--ink); font-size: .85rem; font-weight: 800; letter-spacing: .04em; }
-    .intel-strip-meta  { color: var(--faint); font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .intel-strip-title { color: var(--ink); font-size: .82rem; font-weight: 800; letter-spacing: .03em; }
+    .intel-strip-meta  { color: var(--faint); font-size: .63rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 
     /* ── METRIC / KPI CARDS ──────────────────────────────────── */
     .metric-card {
         border: 1px solid var(--border);
-        border-top: 3px solid var(--teal);
+        border-top: 2px solid var(--teal);
         background: var(--surface);
-        padding: 14px 16px;
-        min-height: 84px;
+        padding: 10px 13px;
         border-radius: 6px;
         box-shadow: var(--shadow-sm);
-        transition: border-top-color .2s;
+        transition: border-top-color .18s;
     }
     .metric-card:hover { border-top-color: var(--teal-dim); }
-    .metric-label  { color: var(--faint); font-size: .6rem; text-transform: uppercase; letter-spacing: .13em; font-weight: 700; }
-    .metric-value  { margin-top: 4px; color: var(--ink); font-size: 1.5rem; font-weight: 900; line-height: 1; }
-    .metric-caption{ color: var(--muted); font-size: .68rem; margin-top: 5px; line-height: 1.35; }
+    .metric-label  { color: var(--faint); font-size: .57rem; text-transform: uppercase; letter-spacing: .13em; font-weight: 700; }
+    .metric-value  { margin-top: 3px; color: var(--ink); font-size: 1.35rem; font-weight: 900; line-height: 1; }
+    .metric-caption{ color: var(--muted); font-size: .64rem; margin-top: 3px; line-height: 1.3; }
 
     /* ── COCKPIT KPIs ────────────────────────────────────────── */
-    .scouting-cockpit { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 14px; margin: 0 0 16px 0; box-shadow: var(--shadow-sm); }
-    .cockpit-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
+    .scouting-cockpit { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 10px 11px; margin: 0 0 10px 0; box-shadow: var(--shadow-sm); }
+    .cockpit-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; }
     .cockpit-tile {
         border: 1px solid var(--border);
         background: var(--raised);
         border-radius: 6px;
-        padding: 14px 12px;
-        min-height: 82px;
+        padding: 10px 12px 9px;
+        min-height: 66px;
         position: relative;
         overflow: hidden;
-        transition: border-color .2s;
+        transition: border-color .18s;
     }
     .cockpit-tile:hover { border-color: var(--border2); }
     .cockpit-tile::after {
         content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
         background: linear-gradient(90deg, var(--teal), transparent);
     }
-    .cockpit-label { color: var(--faint); font-size: .58rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-    .cockpit-value { color: var(--ink); font-size: 1.45rem; font-weight: 900; line-height: 1; margin-top: 6px; }
-    .cockpit-note  { color: var(--muted); font-size: .65rem; line-height: 1.35; margin-top: 5px; }
+    .cockpit-label { color: var(--faint); font-size: .56rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .cockpit-value { color: var(--ink); font-size: 1.3rem; font-weight: 900; line-height: 1; margin-top: 4px; }
+    .cockpit-note  { color: var(--muted); font-size: .61rem; line-height: 1.3; margin-top: 3px; }
 
     /* ── ROLE RAIL ───────────────────────────────────────────── */
-    .role-rail { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 8px; margin: 0 0 16px 0; }
+    .role-rail { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; margin: 0 0 10px 0; }
     .role-cell {
         border: 1px solid var(--border);
-        border-top: 3px solid var(--teal);
+        border-top: 2px solid var(--teal);
         background: var(--raised);
         border-radius: 6px;
-        padding: 10px 10px 8px;
-        min-height: 64px;
-        transition: border-top-color .2s;
+        padding: 7px 9px 6px;
+        min-height: 52px;
+        transition: border-top-color .18s;
     }
-    .role-cell-role  { color: var(--faint); font-size: .58rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-    .role-cell-score { color: var(--ink); font-size: 1.1rem; font-weight: 900; line-height: 1; margin-top: 5px; }
-    .role-cell-count { color: var(--faint); font-size: .64rem; margin-top: 3px; }
+    .role-cell-role  { color: var(--faint); font-size: .54rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .role-cell-score { color: var(--ink); font-size: 1rem; font-weight: 900; line-height: 1; margin-top: 3px; }
+    .role-cell-count { color: var(--faint); font-size: .6rem; margin-top: 2px; }
 
     /* ── PROFILE CARD ────────────────────────────────────────── */
     .profile-card {
         border: 1px solid var(--border);
-        border-left: 4px solid var(--teal);
+        border-left: 3px solid var(--teal);
         background: var(--surface);
-        padding: 16px 18px;
-        min-height: 100px;
+        padding: 11px 14px;
         border-radius: 6px;
         box-shadow: var(--shadow-sm);
     }
-    .profile-name { color: var(--ink); font-weight: 900; font-size: 1.05rem; line-height: 1.1; }
-    .profile-meta { color: var(--muted); font-size: .75rem; margin-top: 5px; line-height: 1.5; }
-    .pill-row { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .profile-name { color: var(--ink); font-weight: 900; font-size: 1rem; line-height: 1.1; }
+    .profile-meta { color: var(--muted); font-size: .72rem; margin-top: 3px; line-height: 1.4; }
+    .pill-row { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
     .pill {
         border: 1px solid var(--border2);
         color: var(--muted);
         background: var(--raised);
-        padding: 4px 10px;
-        font-size: .62rem;
+        padding: 3px 8px;
+        font-size: .59rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .07em;
+        letter-spacing: .06em;
         border-radius: 20px;
     }
     .pill.teal  { border-color: rgba(16,212,170,.5);  color: var(--teal);  background: rgba(16,212,170,.1); }
@@ -2077,16 +2101,16 @@ st.markdown(
     /* ── NOTE BOX ────────────────────────────────────────────── */
     .note-box {
         border: 1px solid var(--border);
-        border-left: 4px solid var(--teal);
-        background: rgba(16,212,170,.06);
-        padding: 12px 14px;
+        border-left: 3px solid var(--teal);
+        background: rgba(16,212,170,.05);
+        padding: 9px 12px;
         color: var(--muted);
-        font-size: .78rem;
-        line-height: 1.55;
+        font-size: .75rem;
+        line-height: 1.5;
         border-radius: 0 6px 6px 0;
     }
 
-    .section-card { border: 1px solid var(--border); background: var(--surface); padding: 14px; border-radius: 6px; }
+    .section-card { border: 1px solid var(--border); background: var(--surface); padding: 10px 12px; border-radius: 6px; }
 
     /* ── SCOUTING COMMAND ────────────────────────────────────── */
     .scouting-command {
@@ -2112,12 +2136,12 @@ st.markdown(
     .quality-hero {
         background: linear-gradient(135deg, #162035 0%, #1c2537 100%);
         border: 1px solid var(--border2);
-        border-radius: 10px;
-        padding: 18px 20px;
-        margin-bottom: 16px;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
         display: grid;
         grid-template-columns: minmax(0,1.3fr) minmax(200px,.7fr);
-        gap: 16px;
+        gap: 14px;
         align-items: center;
         box-shadow: var(--shadow-sm);
     }
@@ -2161,13 +2185,13 @@ st.markdown(
         background: var(--raised) !important;
         color: var(--muted) !important;
         font-weight: 700 !important;
-        font-size: .74rem;
+        font-size: .72rem;
         letter-spacing: .05em;
         text-transform: uppercase;
         box-shadow: none !important;
         transition: all .18s !important;
-        padding: 0 14px !important;
-        min-height: 38px;
+        padding: 0 12px !important;
+        min-height: 32px;
     }
     .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
         background: rgba(16,212,170,.15) !important;
@@ -2181,13 +2205,13 @@ st.markdown(
     }
 
     /* Tabs */
-    div[data-testid="stTabs"] { border-bottom: 1px solid var(--border); }
+    div[data-testid="stTabs"] { border-bottom: 1px solid var(--border); margin-bottom: 0 !important; }
     div[data-testid="stTabs"] button {
         font-weight: 700 !important;
-        font-size: .72rem !important;
+        font-size: .7rem !important;
         letter-spacing: .06em;
         color: var(--faint) !important;
-        padding: 10px 16px !important;
+        padding: 8px 14px !important;
         border-radius: 0 !important;
         transition: color .18s !important;
     }
