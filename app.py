@@ -1014,6 +1014,102 @@ def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", t
     return buffer.getvalue()
 
 
+def hradec_recruitment_targets(df: pd.DataFrame, top_n: int = 50) -> pd.DataFrame:
+    """Score every external player on how well they'd address Hradec Kralove's squad needs."""
+    hradec = hradec_squad(df)
+    external = df.loc[
+        ~df["TeamName"].fillna("").astype(str).str.lower().str.contains("hradec|kralove|králové", regex=True)
+    ].copy()
+
+    if hradec.empty or external.empty:
+        external["HradecTargetScore"] = safe_col(external, "QualityScore")
+        external["PositionNeed"] = "Unknown"
+        return external.sort_values("HradecTargetScore", ascending=False).head(top_n)
+
+    hradec_pos_quality = hradec.groupby("PositionGroup")["QualityScore"].median()
+    hradec_pos_count = hradec.groupby("PositionGroup")["PlayerName"].count()
+
+    def target_score(row: pd.Series) -> float:
+        pos = str(row.get("PositionGroup", ""))
+        quality = float(pd.to_numeric(row.get("QualityScore", 0), errors="coerce") or 0)
+        value = float(pd.to_numeric(row.get("ValueRecruitmentScore", 50), errors="coerce") or 50)
+        resale = float(pd.to_numeric(row.get("AgeResaleScore", 50), errors="coerce") or 50)
+        smart = float(pd.to_numeric(row.get("SmartClubScore", 50), errors="coerce") or 50)
+        reliability = float(pd.to_numeric(row.get("PerformanceReliabilityScore", 50), errors="coerce") or 50)
+        hradec_q = float(hradec_pos_quality.get(pos, 50))
+        count = int(hradec_pos_count.get(pos, 3))
+        # Boost for positions where Hradec is weak or thin
+        gap_bonus = max(0.0, (65.0 - hradec_q) / 65.0) * 20
+        depth_bonus = max(0.0, (4.0 - count) / 4.0) * 10
+        base = quality * 0.38 + value * 0.18 + resale * 0.12 + smart * 0.16 + reliability * 0.16
+        return float(np.clip(base + gap_bonus + depth_bonus, 0, 130))
+
+    external["HradecTargetScore"] = external.apply(target_score, axis=1)
+
+    def need_label(pos: str) -> str:
+        q = float(hradec_pos_quality.get(pos, 55))
+        c = int(hradec_pos_count.get(pos, 3))
+        if c == 0:
+            return "🔴 No depth"
+        if q < 48 or c <= 1:
+            return "🔴 High need"
+        if q < 55 or c <= 2:
+            return "🟡 Medium need"
+        return "🟢 Covered"
+
+    external["PositionNeed"] = external["PositionGroup"].apply(need_label)
+    return external.sort_values("HradecTargetScore", ascending=False).head(top_n)
+
+
+def render_european_map(market_df: pd.DataFrame) -> alt.Chart:
+    """Altair bubble map of Europe coloured by scout priority score."""
+    background = alt.Chart({"values": [{}]}).mark_geoshape(
+        fill="#0a1220", stroke="#1e2d3d", strokeWidth=0.4
+    ).properties(width=700, height=440).project("mercator")
+
+    bubbles = (
+        alt.Chart(market_df)
+        .mark_circle(opacity=0.88, stroke="#080c14", strokeWidth=1)
+        .encode(
+            longitude="lon:Q",
+            latitude="lat:Q",
+            size=alt.Size(
+                "Players:Q",
+                scale=alt.Scale(range=[40, 700]),
+                legend=alt.Legend(title="Players", orient="bottom-right", labelColor="#8fa3b1", titleColor="#8fa3b1"),
+            ),
+            color=alt.Color(
+                "GoScore:Q",
+                scale=alt.Scale(domain=[30, 75], range=["#1e2d3d", "#00d4a8"]),
+                legend=alt.Legend(title="Scout priority", orient="bottom-left", labelColor="#8fa3b1", titleColor="#8fa3b1"),
+            ),
+            tooltip=[
+                alt.Tooltip("Country:N", title="Country"),
+                alt.Tooltip("Players:Q", title="Players"),
+                alt.Tooltip("MedianScore:Q", title="Median quality", format=".1f"),
+                alt.Tooltip("HighQualityShare:Q", title="High quality %", format=".1f"),
+                alt.Tooltip("GoScore:Q", title="Scout priority", format=".1f"),
+                alt.Tooltip("Recommendation:N", title="Action"),
+                alt.Tooltip("MedianAge:Q", title="Median age", format=".1f"),
+            ],
+        )
+    )
+
+    labels = (
+        alt.Chart(market_df.loc[market_df["GoScore"] >= 55])
+        .mark_text(fontSize=9, fontWeight="bold", dy=-14, color="#e8edf3")
+        .encode(longitude="lon:Q", latitude="lat:Q", text="Country:N")
+    )
+
+    return (
+        (bubbles + labels)
+        .properties(width=700, height=440)
+        .project(type="mercator", center=[15, 52], scale=480)
+        .configure_view(fill="#080c14", stroke=None)
+        .configure(background="#080c14")
+    )
+
+
 def download_name(prefix: str, suffix: str) -> str:
     return f"fchk_{prefix.lower().replace(' ', '_')}.{suffix}"
 
@@ -1161,7 +1257,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
         st.subheader("Club model ranking")
         st.dataframe(
             summary,
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
@@ -1183,7 +1279,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
             )
             st.dataframe(
                 position_summary,
-                width="stretch",
+                use_container_width=True,
                 hide_index=True,
                 column_config={
                     "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
@@ -1211,7 +1307,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     top_matches = selected.sort_values(sort_cols, ascending=[False] + ([True] if len(sort_cols) > 1 else [])).head(100)
     st.dataframe(
         top_matches[top_cols],
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         column_config={
             "SmartClubClosenessScore": st.column_config.ProgressColumn("Closeness", min_value=0, max_value=100, format="%.1f"),
@@ -1487,7 +1583,7 @@ def render_recruitment_workspace(data: pd.DataFrame) -> None:
         )
         st.dataframe(
             shape,
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "MedianCase": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
@@ -1520,7 +1616,7 @@ def render_recruitment_workspace(data: pd.DataFrame) -> None:
                 .properties(height=340)
                 .interactive()
             )
-            st.altair_chart(case_chart, width="stretch")
+            st.altair_chart(case_chart, use_container_width=True)
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
@@ -1693,7 +1789,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
             .reset_index()
             .sort_values(["LeagueLabel", "MedianFit"], ascending=[True, False])
         )
-        st.dataframe(league_summary, width="stretch", hide_index=True)
+        st.dataframe(league_summary, use_container_width=True, hide_index=True)
 
 
 st.markdown(
@@ -1725,7 +1821,32 @@ st.markdown(
     .block-container {
         padding-top: 1rem;
         padding-bottom: 2rem;
-        max-width: 96%;
+        max-width: 100% !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    /* make dataframes fill the full container width */
+    [data-testid="stDataFrame"] > div {
+        width: 100% !important;
+    }
+
+    /* ── QUICK MODE CHIPS ────────────────────────────────────── */
+    .quick-chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 16px 0;
+        align-items: center;
+    }
+
+    .quick-chip-label {
+        color: var(--faint);
+        font-size: .58rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        margin-right: 4px;
     }
 
     h1, h2, h3 {
@@ -2618,7 +2739,38 @@ if filtered.empty:
     st.info("No players match the current quality controls. Loosen the filters in the sidebar to open Player Lab.")
     st.stop()
 
-quality_tab, player_tab, compare_tab, export_tab = st.tabs(["Quality", "Player Lab", "Compare", "Export"])
+# ── Quick-mode filter chips ─────────────────────────────────────────────────
+st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick filter:</span></div>", unsafe_allow_html=True)
+qm_cols = st.columns([1, 1, 1, 1, 2])
+with qm_cols[0]:
+    if st.button("⚡ Full board", type="secondary" if st.session_state.get("quick_mode") != "Full board" else "primary", width="stretch"):
+        set_quick_mode("Full board")
+        st.rerun()
+with qm_cols[1]:
+    if st.button("🌱 U23 quality", type="secondary" if st.session_state.get("quick_mode") != "U23 quality" else "primary", width="stretch"):
+        set_quick_mode("U23 quality")
+        st.rerun()
+with qm_cols[2]:
+    if st.button("🏆 Elite only", type="secondary" if st.session_state.get("quick_mode") != "Elite quality" else "primary", width="stretch"):
+        set_quick_mode("Elite quality")
+        st.rerun()
+with qm_cols[3]:
+    if st.button("🛡 Reliable", type="secondary" if st.session_state.get("quick_mode") != "Reliable quality" else "primary", width="stretch"):
+        set_quick_mode("Reliable quality")
+        st.rerun()
+with qm_cols[4]:
+    _shortlist_count = len(st.session_state.get("shortlist_players", []))
+    st.markdown(
+        f"<div style='padding:6px 0;color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'>"
+        f"Shortlist: <span style='color:var(--teal)'>{_shortlist_count} player{'s' if _shortlist_count != 1 else ''}</span> · "
+        f"Showing <span style='color:var(--ink)'>{len(filtered):,}</span> of {len(df):,}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, export_tab = st.tabs(
+    ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "📥 Export"]
+)
 
 with quality_tab:
     quality_cols = [
@@ -2659,16 +2811,17 @@ with quality_tab:
     )
     st.dataframe(
         quality_board.round(2),
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
+        height=600,
         column_config={
-            "Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
-            "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
-            "Impact": st.column_config.ProgressColumn("Impact", min_value=0, max_value=100, format="%.1f"),
-            "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f"),
+            "Quality":     st.column_config.ProgressColumn("Quality",     min_value=0, max_value=100, format="%.1f"),
+            "Role Fit":    st.column_config.ProgressColumn("Role Fit",    min_value=0, max_value=100, format="%.1f"),
+            "Impact":      st.column_config.ProgressColumn("Impact",      min_value=0, max_value=100, format="%.1f"),
+            "Decision":    st.column_config.ProgressColumn("Decision",    min_value=0, max_value=100, format="%.1f"),
             "Reliability": st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
-            "Age": st.column_config.NumberColumn("Age", format="%.1f"),
-            "Minutes": st.column_config.NumberColumn("Minutes", format="%d"),
+            "Age":         st.column_config.NumberColumn("Age", format="%.1f"),
+            "Minutes":     st.column_config.NumberColumn("Minutes", format="%d"),
         },
     )
 
@@ -2712,6 +2865,174 @@ with player_tab:
     similar_cols = ["PlayerName", "TeamName", "PositionGroup", "AgeYears", "MinutesPlayed", "SimilarityScore", "QualityScore", "RoleFitScore", "ProfileScore", "Archetype"]
     st.dataframe(comparable[[c for c in similar_cols if c in comparable.columns]].round(2), width="stretch", hide_index=True)
 
+with hradec_tab:
+    st.markdown("<div class='workspace-label'>🎯 Hradec Kralove — best external targets</div>", unsafe_allow_html=True)
+    targets_df = hradec_recruitment_targets(df, top_n=60)
+    if targets_df.empty:
+        st.info("No external targets found — check that the model data includes players outside Hradec.")
+    else:
+        hm_cols = st.columns(4)
+        priority_count = (targets_df["PositionNeed"].str.startswith("🔴")).sum()
+        with hm_cols[0]:
+            metric_card("Targets ranked", f"{len(targets_df)}", "by Hradec fit score")
+        with hm_cols[1]:
+            metric_card("High-need positions", f"{priority_count}", "🔴 roles to fill")
+        with hm_cols[2]:
+            top_t = targets_df.iloc[0]
+            metric_card("Top target", str(top_t["PlayerName"]), f"{top_t['PositionGroup']} · {top_t['HradecTargetScore']:.1f}")
+        with hm_cols[3]:
+            metric_card("Median target score", f"{targets_df['HradecTargetScore'].median():.1f}", "vs 0–100 scale")
+
+        st.markdown(
+            "<div class='note-box'>Targets scored on: quality (38%) + smart-club style fit (16%) + transfer value (18%) + age/resale (12%) + reliability (16%), "
+            "with bonus weight for positions where Hradec is thin or below Czech market median.</div>",
+            unsafe_allow_html=True,
+        )
+
+        # Position filter chips
+        pos_options = sorted(targets_df["PositionGroup"].dropna().astype(str).unique())
+        sel_pos = st.multiselect("Filter by position", pos_options, default=pos_options, key="hradec_pos_filter")
+        targets_view = targets_df.loc[targets_df["PositionGroup"].astype(str).isin(sel_pos)].copy()
+
+        board_cols = [c for c in [
+            "PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears",
+            "HradecTargetScore", "PositionNeed", "QualityScore", "ValueRecruitmentScore",
+            "AgeResaleScore", "SmartClubScore", "PerformanceReliabilityScore",
+            "RiskBand", "Archetype",
+        ] if c in targets_view.columns]
+
+        st.dataframe(
+            targets_view[board_cols].rename(columns={
+                "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
+                "BundleLabel": "League", "AgeYears": "Age",
+                "HradecTargetScore": "Hradec Fit ▼", "PositionNeed": "Need",
+                "QualityScore": "Quality", "ValueRecruitmentScore": "Value",
+                "AgeResaleScore": "Resale", "SmartClubScore": "Style Fit",
+                "PerformanceReliabilityScore": "Reliability", "RiskBand": "Risk",
+            }).round(1),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Hradec Fit ▼": st.column_config.ProgressColumn("Hradec Fit ▼", min_value=0, max_value=130, format="%.1f"),
+                "Quality":      st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
+                "Value":        st.column_config.ProgressColumn("Value",   min_value=0, max_value=100, format="%.1f"),
+                "Resale":       st.column_config.ProgressColumn("Resale",  min_value=0, max_value=100, format="%.1f"),
+                "Style Fit":    st.column_config.ProgressColumn("Style Fit", min_value=0, max_value=100, format="%.1f"),
+                "Reliability":  st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
+                "Age":          st.column_config.NumberColumn("Age", format="%.1f"),
+            },
+        )
+
+        # Best XI
+        xi_order = ["CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
+        xi_used: set[str] = set()
+        xi_rows = []
+        for slot in xi_order:
+            cands = targets_view.loc[targets_view["PositionGroup"].eq(slot) & ~targets_view["PlayerName"].isin(xi_used)]
+            if cands.empty:
+                continue
+            pick = cands.iloc[0]
+            xi_used.add(pick["PlayerName"])
+            xi_rows.append({
+                "Role": slot, "Player": pick["PlayerName"], "Team": pick["TeamName"],
+                "Age": round(pick["AgeYears"], 1), "Hradec Fit": round(pick["HradecTargetScore"], 1),
+                "Quality": round(pick["QualityScore"], 1), "Need": pick.get("PositionNeed", ""),
+            })
+        if xi_rows:
+            st.subheader("Suggested Best XI from targets")
+            st.dataframe(pd.DataFrame(xi_rows), use_container_width=True, hide_index=True)
+
+with intel_tab:
+    st.markdown("<div class='workspace-label'>🌍 League & market intelligence</div>", unsafe_allow_html=True)
+
+    # ── European market map ─────────────────────────────────────
+    st.subheader("European scout priority map")
+    market_df = european_market_map_frame(df, metric="QualityScore")
+    if not market_df.empty:
+        map_col, map_info_col = st.columns([2.2, 1])
+        with map_col:
+            try:
+                st.altair_chart(render_european_map(market_df), use_container_width=True)
+            except Exception as e:
+                st.warning(f"Map could not render: {e}")
+        with map_info_col:
+            st.markdown("<div class='note-box'>Bubble size = player count. Colour = scout priority score (quality + high-quality share + depth). Labels show countries with priority ≥ 55.</div>", unsafe_allow_html=True)
+            top_markets = market_df.head(8)[["Country", "Players", "MedianScore", "GoScore", "Recommendation"]].rename(
+                columns={"MedianScore": "Median Q", "GoScore": "Priority"}
+            )
+            st.dataframe(top_markets.round(1), use_container_width=True, hide_index=True)
+
+    # ── League quality bar chart ────────────────────────────────
+    st.subheader("Quality by league")
+    league_summary = (
+        filtered.groupby("BundleLabel")
+        .agg(
+            Players=("PlayerName", "count"),
+            MedianQuality=("QualityScore", "median"),
+            MedianRoleFit=("RoleFitScore", "median"),
+            EliteCount=("QualityTier", lambda x: x.isin(["Elite", "High quality"]).sum()),
+            MedianAge=("AgeYears", "median"),
+        )
+        .round(1)
+        .reset_index()
+        .sort_values("MedianQuality", ascending=False)
+    )
+    league_summary["ElitePct"] = (league_summary["EliteCount"] / league_summary["Players"] * 100).round(1)
+
+    if not league_summary.empty:
+        top30 = league_summary.head(30)
+        bar_chart = (
+            alt.Chart(top30)
+            .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
+            .encode(
+                y=alt.Y("BundleLabel:N", sort="-x", title=None, axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=11)),
+                x=alt.X("MedianQuality:Q", title="Median quality score", scale=alt.Scale(domain=[0, 80]),
+                         axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                color=alt.Color("ElitePct:Q", scale=alt.Scale(domain=[0, 30], range=["#1e2d3d", "#00d4a8"]),
+                                 legend=alt.Legend(title="Elite %", labelColor="#8fa3b1", titleColor="#8fa3b1")),
+                tooltip=[
+                    alt.Tooltip("BundleLabel:N", title="League"),
+                    alt.Tooltip("Players:Q", title="Players"),
+                    alt.Tooltip("MedianQuality:Q", format=".1f", title="Median quality"),
+                    alt.Tooltip("ElitePct:Q", format=".1f", title="Elite %"),
+                    alt.Tooltip("MedianAge:Q", format=".1f", title="Median age"),
+                ],
+            )
+            .properties(height=max(320, len(top30) * 20))
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(bar_chart, use_container_width=True)
+
+    # ── Full league table ───────────────────────────────────────
+    with st.expander("Full league table", expanded=False):
+        st.dataframe(
+            league_summary.rename(columns={"BundleLabel": "League", "MedianQuality": "Median Q",
+                                            "MedianRoleFit": "Median Fit", "EliteCount": "Elite",
+                                            "ElitePct": "Elite %", "MedianAge": "Median Age"}).round(1),
+            use_container_width=True, hide_index=True,
+            column_config={
+                "Median Q":   st.column_config.ProgressColumn("Median Q",   min_value=0, max_value=100, format="%.1f"),
+                "Median Fit": st.column_config.ProgressColumn("Median Fit", min_value=0, max_value=100, format="%.1f"),
+            },
+        )
+
+    # ── Score distribution ──────────────────────────────────────
+    st.subheader("Score distribution (filtered players)")
+    dist_col1, dist_col2 = st.columns(2)
+    with dist_col1:
+        dist_metric = st.selectbox("Metric", ["QualityScore", "RoleFitScore", "ProfileScore",
+                                               "DecisionScore", "PerformanceReliabilityScore",
+                                               "CompositeRecruitmentScore"], key="dist_metric_intel")
+        st.pyplot(render_score_distribution(filtered, dist_metric), clear_figure=True, use_container_width=True)
+    with dist_col2:
+        st.pyplot(render_position_boxplot(filtered, dist_metric), clear_figure=True, use_container_width=True)
+
+    # ── League heatmap ──────────────────────────────────────────
+    with st.expander("League depth heatmap", expanded=False):
+        hm_metric = st.selectbox("Heatmap metric", ["QualityScore", "RoleFitScore", "CompositeRecruitmentScore"], key="hm_metric")
+        st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, use_container_width=True)
+
 with compare_tab:
     st.subheader("Compare Players")
     compare_options = filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"]).sort_values("QualityScore", ascending=False)["_label"].tolist()
@@ -2721,10 +3042,27 @@ with compare_tab:
     if len(compare_df) < 2:
         st.info("Pick at least two players to compare.")
     else:
-        st.dataframe(compare_df[["PlayerName", "TeamName", "PositionGroup", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "QualityDrivers"]].round(2), width="stretch", hide_index=True)
+        st.dataframe(
+            compare_df[["PlayerName", "TeamName", "PositionGroup", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "QualityDrivers"]].round(2),
+            use_container_width=True, hide_index=True,
+        )
         compare_scores = compare_df[["PlayerName", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "PerformanceReliabilityScore"]].melt(id_vars="PlayerName", var_name="Metric", value_name="Score")
-        compare_chart = alt.Chart(compare_scores).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(x=alt.X("Metric:N", title=None, axis=alt.Axis(labelAngle=-30)), y=alt.Y("Score:Q", scale=alt.Scale(domain=[0, 100])), color=alt.Color("PlayerName:N", title="Player"), xOffset="PlayerName:N", tooltip=["PlayerName", "Metric", alt.Tooltip("Score:Q", format=".1f")]).properties(height=360)
-        st.altair_chart(compare_chart, width="stretch")
+        compare_chart = (
+            alt.Chart(compare_scores)
+            .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+            .encode(
+                x=alt.X("Metric:N", title=None, axis=alt.Axis(labelAngle=-30, labelColor="#8fa3b1", gridColor="#1e2d3d")),
+                y=alt.Y("Score:Q", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
+                color=alt.Color("PlayerName:N", title="Player",
+                                scale=alt.Scale(range=["#00d4a8","#f59e0b","#8b5cf6","#ef4444"])),
+                xOffset="PlayerName:N",
+                tooltip=["PlayerName", "Metric", alt.Tooltip("Score:Q", format=".1f")],
+            )
+            .properties(height=420)
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(compare_chart, use_container_width=True)
 
 with export_tab:
     st.subheader("Export Quality Work")
