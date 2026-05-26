@@ -2622,86 +2622,45 @@ if not st.session_state["show_scouting_workspace"]:
     </style>
     """, unsafe_allow_html=True)
 
-    # ── Hero ─────────────────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div class="lp-wrapper">
-
-      <!-- ═══ HERO ════════════════════════════════════════════════════════ -->
-      <div class="lp-hero">
-        <div class="lp-hero-left">
-          <div class="lp-badge">⚽ FCHK Model V3 · Hradeck Scouting</div>
-          <h1 class="lp-title">Player Quality<br><span class="lp-title-accent">Command Room</span></h1>
-          <p class="lp-sub">Professional-grade football scouting and recruitment intelligence.<br>
-          Every decision backed by data — from Czech leagues to Europe.</p>
-
-          <div class="lp-stats">
-            <div class="lp-stat">
-              <span class="lp-stat-n">{_n_players:,}</span>
-              <span class="lp-stat-l">Players</span>
-            </div>
-            <div class="lp-stat-div"></div>
-            <div class="lp-stat">
-              <span class="lp-stat-n">{_n_leagues}</span>
-              <span class="lp-stat-l">Leagues</span>
-            </div>
-            <div class="lp-stat-div"></div>
-            <div class="lp-stat">
-              <span class="lp-stat-n">{_n_positions}</span>
-              <span class="lp-stat-l">Positions</span>
-            </div>
-            <div class="lp-stat-div"></div>
-            <div class="lp-stat">
-              <span class="lp-stat-n">12</span>
-              <span class="lp-stat-l">Score Dims</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="lp-hero-right">
-          <div class="lp-pitch">
-            <!-- stylised football pitch SVG -->
-            <svg viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;opacity:.55;">
-              <rect x="2" y="2" width="396" height="256" rx="4" fill="none" stroke="#10d4aa" stroke-width="1.5"/>
-              <line x1="200" y1="2" x2="200" y2="258" stroke="#10d4aa" stroke-width="1"/>
-              <circle cx="200" cy="130" r="36" fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <circle cx="200" cy="130" r="3" fill="#10d4aa"/>
-              <!-- Left penalty box -->
-              <rect x="2" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <rect x="2" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <circle cx="56" cy="130" r="2" fill="#10d4aa"/>
-              <!-- Right penalty box -->
-              <rect x="332" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <rect x="376" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <circle cx="344" cy="130" r="2" fill="#10d4aa"/>
-              <!-- Corner arcs -->
-              <path d="M2 14 A12 12 0 0 1 14 2"    fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <path d="M386 2 A12 12 0 0 1 398 14"  fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <path d="M398 246 A12 12 0 0 1 386 258" fill="none" stroke="#10d4aa" stroke-width="1"/>
-              <path d="M14 258 A12 12 0 0 1 2 246"  fill="none" stroke="#10d4aa" stroke-width="1"/>
-            </svg>
-            <div class="lp-pitch-label">FCHK Intelligence Engine</div>
-          </div>
-
-          <div class="lp-feature-pills">
-            <span class="lp-pill">📊 Quality scoring</span>
-            <span class="lp-pill">🎯 Position fit</span>
-            <span class="lp-pill">🌍 European scouting</span>
-            <span class="lp-pill">🧤 GK analysis</span>
-            <span class="lp-pill teal">⚡ Real-time filters</span>
-            <span class="lp-pill">📥 PDF &amp; CSV export</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ SECTION LABEL ════════════════════════════════════════════════ -->
-      <div class="lp-section-header">
-        <span class="lp-section-line"></span>
-        <span class="lp-section-text">Choose your workspace</span>
-        <span class="lp-section-line"></span>
-      </div>
-
-    </div>
-    """, unsafe_allow_html=True)
+    # ── Hero (no blank lines — blank lines break CommonMark HTML blocks) ─────
+    _pitch_svg = '<svg viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;opacity:.55;"><rect x="2" y="2" width="396" height="256" rx="4" fill="none" stroke="#10d4aa" stroke-width="1.5"/><line x1="200" y1="2" x2="200" y2="258" stroke="#10d4aa" stroke-width="1"/><circle cx="200" cy="130" r="36" fill="none" stroke="#10d4aa" stroke-width="1"/><circle cx="200" cy="130" r="3" fill="#10d4aa"/><rect x="2" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/><rect x="2" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/><circle cx="56" cy="130" r="2" fill="#10d4aa"/><rect x="332" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/><rect x="376" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/><circle cx="344" cy="130" r="2" fill="#10d4aa"/><path d="M2 14 A12 12 0 0 1 14 2" fill="none" stroke="#10d4aa" stroke-width="1"/><path d="M386 2 A12 12 0 0 1 398 14" fill="none" stroke="#10d4aa" stroke-width="1"/><path d="M398 246 A12 12 0 0 1 386 258" fill="none" stroke="#10d4aa" stroke-width="1"/><path d="M14 258 A12 12 0 0 1 2 246" fill="none" stroke="#10d4aa" stroke-width="1"/></svg>'
+    st.markdown(
+        f'<div class="lp-wrapper">'
+        f'<div class="lp-hero">'
+        f'<div class="lp-hero-left">'
+        f'<div class="lp-badge">&#x26BD; FCHK Model V3 &middot; Hradeck Scouting</div>'
+        f'<h1 class="lp-title">Player Quality<br><span class="lp-title-accent">Command Room</span></h1>'
+        f'<p class="lp-sub">Professional-grade football scouting and recruitment intelligence. Every decision backed by data &mdash; from Czech leagues to Europe.</p>'
+        f'<div class="lp-stats">'
+        f'<div class="lp-stat"><span class="lp-stat-n">{_n_players:,}</span><span class="lp-stat-l">Players</span></div>'
+        f'<div class="lp-stat-div"></div>'
+        f'<div class="lp-stat"><span class="lp-stat-n">{_n_leagues}</span><span class="lp-stat-l">Leagues</span></div>'
+        f'<div class="lp-stat-div"></div>'
+        f'<div class="lp-stat"><span class="lp-stat-n">{_n_positions}</span><span class="lp-stat-l">Positions</span></div>'
+        f'<div class="lp-stat-div"></div>'
+        f'<div class="lp-stat"><span class="lp-stat-n">12</span><span class="lp-stat-l">Score Dims</span></div>'
+        f'</div>'
+        f'</div>'
+        f'<div class="lp-hero-right">'
+        f'<div class="lp-pitch">{_pitch_svg}<div class="lp-pitch-label">FCHK Intelligence Engine</div></div>'
+        f'<div class="lp-feature-pills">'
+        f'<span class="lp-pill">&#x1F4CA; Quality scoring</span>'
+        f'<span class="lp-pill">&#x1F3AF; Position fit</span>'
+        f'<span class="lp-pill">&#x1F30D; European scouting</span>'
+        f'<span class="lp-pill">&#x1F9E4; GK analysis</span>'
+        f'<span class="lp-pill teal">&#x26A1; Real-time filters</span>'
+        f'<span class="lp-pill">&#x1F4E5; PDF &amp; CSV export</span>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+        f'<div class="lp-section-header">'
+        f'<span class="lp-section-line"></span>'
+        f'<span class="lp-section-text">Choose your workspace</span>'
+        f'<span class="lp-section-line"></span>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     # ── Dashboard icon cards ──────────────────────────────────────────────────
     _workspace_meta = {
@@ -2716,12 +2675,11 @@ if not st.session_state["show_scouting_workspace"]:
         icon, title, desc = _workspace_meta.get(section, ("⚽", section, ""))
         is_primary = section == "Scouting"
         with landing_cols[idx]:
-            st.markdown(f"""
-            <div class="dash-card {'dash-card--primary' if is_primary else ''}">
-                <div class="dash-card-icon">{icon}</div>
-                <div class="dash-card-title">{title}</div>
-                <div class="dash-card-desc">{desc}</div>
-            </div>""", unsafe_allow_html=True)
+            _card_cls = "dash-card dash-card--primary" if is_primary else "dash-card"
+            st.markdown(
+                f'<div class="{_card_cls}"><div class="dash-card-icon">{icon}</div><div class="dash-card-title">{title}</div><div class="dash-card-desc">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
             st.button(
                 f"{'→  ' if is_primary else ''}Open {title}",
                 key=f"landing_{section}",
@@ -2732,38 +2690,15 @@ if not st.session_state["show_scouting_workspace"]:
             )
 
     # ── Bottom feature strip ──────────────────────────────────────────────────
-    st.markdown(f"""
-    <div class="lp-strip">
-      <div class="lp-strip-item">
-        <div class="lp-strip-icon">⚡</div>
-        <div class="lp-strip-body">
-          <div class="lp-strip-title">Instant quality lenses</div>
-          <div class="lp-strip-desc">Switch between Balanced, Technique, Ready and Upside presets — or set your own weights.</div>
-        </div>
-      </div>
-      <div class="lp-strip-item">
-        <div class="lp-strip-icon">🎯</div>
-        <div class="lp-strip-body">
-          <div class="lp-strip-title">Hradec-fit algorithm</div>
-          <div class="lp-strip-desc">Every external player scored on exactly how well they'd address your squad's positional gaps.</div>
-        </div>
-      </div>
-      <div class="lp-strip-item">
-        <div class="lp-strip-icon">🌍</div>
-        <div class="lp-strip-body">
-          <div class="lp-strip-title">European market map</div>
-          <div class="lp-strip-desc">Interactive bubble map of scout-priority by country — see where to send your scouts next.</div>
-        </div>
-      </div>
-      <div class="lp-strip-item">
-        <div class="lp-strip-icon">📥</div>
-        <div class="lp-strip-body">
-          <div class="lp-strip-title">Board-ready exports</div>
-          <div class="lp-strip-desc">One-click PDF scouting reports and CSV exports for every filtered view and shortlist.</div>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="lp-strip">'
+        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x26A1;</div><div class="lp-strip-body"><div class="lp-strip-title">Instant quality lenses</div><div class="lp-strip-desc">Switch between Balanced, Technique, Ready and Upside presets &mdash; or set your own weights.</div></div></div>'
+        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x1F3AF;</div><div class="lp-strip-body"><div class="lp-strip-title">Hradec-fit algorithm</div><div class="lp-strip-desc">Every external player scored on exactly how well they&rsquo;d address your squad&rsquo;s positional gaps.</div></div></div>'
+        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x1F30D;</div><div class="lp-strip-body"><div class="lp-strip-title">European market map</div><div class="lp-strip-desc">Interactive bubble map of scout-priority by country &mdash; see where to send your scouts next.</div></div></div>'
+        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x1F4E5;</div><div class="lp-strip-body"><div class="lp-strip-title">Board-ready exports</div><div class="lp-strip-desc">One-click PDF scouting reports and CSV exports for every filtered view and shortlist.</div></div></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     if st.session_state.get("landing_notice"):
         st.info(st.session_state["landing_notice"])
