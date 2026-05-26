@@ -3053,6 +3053,12 @@ for _, _rr in _role_stats.iterrows():
 _rr_html += '</div>'
 st.markdown(_rr_html, unsafe_allow_html=True)
 
+# Clickable position focus — filters entire board to one role
+_pos_options = ["All positions"] + sorted(filtered["PositionGroup"].dropna().astype(str).unique().tolist())
+_pos_focus = st.segmented_control("Position focus", _pos_options, default="All positions", key="pos_focus_rail")
+if _pos_focus and _pos_focus != "All positions":
+    filtered = filtered.loc[filtered["PositionGroup"].eq(_pos_focus)].copy()
+
 quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, export_tab = st.tabs(
     ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "📥 Export"]
 )
@@ -3193,6 +3199,62 @@ with player_tab:
                 "Pctile": st.column_config.ProgressColumn("Pctile %", min_value=0, max_value=100, format="%.0f"),
             },
         )
+    # AI Scout Report
+    _api_key_set = bool(os.getenv("ANTHROPIC_API_KEY", ""))
+    _report_key = f"scout_report_{player['PlayerName']}"
+    with st.expander("🤖 AI Scout Report" + (" (set ANTHROPIC_API_KEY to enable)" if not _api_key_set else ""), expanded=False):
+        if not _api_key_set:
+            st.info("Set the ANTHROPIC_API_KEY environment variable to generate AI scouting reports.")
+        else:
+            if st.button("Generate scout report", key=f"gen_report_{selected_label[:20]}", type="primary"):
+                with st.spinner("Writing report…"):
+                    _report = generate_scout_report(player, df)
+                    st.session_state[_report_key] = _report
+            if _report_key in st.session_state:
+                st.markdown(
+                    f'<div class="note-box" style="font-size:.82rem;line-height:1.7;">{escape(st.session_state[_report_key])}</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # Age-quality development curve
+    _age_pos_df = df.loc[df["PositionGroup"].eq(player["PositionGroup"]) & df["QualityScore"].notna() & df["AgeYears"].notna()][["PlayerName","AgeYears","QualityScore"]].copy()
+    if len(_age_pos_df) > 10:
+        _age_base = (
+            alt.Chart(_age_pos_df)
+            .mark_circle(opacity=0.25, size=28, color="#2e4a6e")
+            .encode(
+                x=alt.X("AgeYears:Q", title="Age", scale=alt.Scale(domain=[16, 38]), axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d", titleColor="#8fa3b1")),
+                y=alt.Y("QualityScore:Q", title="Quality", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d", titleColor="#8fa3b1")),
+                tooltip=["PlayerName:N", alt.Tooltip("AgeYears:Q", format=".1f", title="Age"), alt.Tooltip("QualityScore:Q", format=".1f", title="Quality")],
+            )
+        )
+        _age_trend = (
+            alt.Chart(_age_pos_df)
+            .transform_regression("AgeYears", "QualityScore", method="poly", order=3)
+            .mark_line(color="#f5a623", opacity=0.55, strokeWidth=2, strokeDash=[5, 3])
+            .encode(x="AgeYears:Q", y="QualityScore:Q")
+        )
+        _age_highlight = (
+            alt.Chart(pd.DataFrame([{"AgeYears": float(player["AgeYears"]), "QualityScore": float(player["QualityScore"]), "Name": str(player["PlayerName"])}]))
+            .mark_circle(opacity=1, size=130, color="#10d4aa")
+            .encode(
+                x="AgeYears:Q", y="QualityScore:Q",
+                tooltip=[alt.Tooltip("Name:N"), alt.Tooltip("AgeYears:Q", format=".1f", title="Age"), alt.Tooltip("QualityScore:Q", format=".1f", title="Quality")],
+            )
+        )
+        _age_label = (
+            alt.Chart(pd.DataFrame([{"AgeYears": float(player["AgeYears"]), "QualityScore": float(player["QualityScore"]), "Name": str(player["PlayerName"])}]))
+            .mark_text(color="#10d4aa", fontSize=11, dx=10, dy=-8, align="left")
+            .encode(x="AgeYears:Q", y="QualityScore:Q", text="Name:N")
+        )
+        _age_chart = (
+            (_age_base + _age_trend + _age_highlight + _age_label)
+            .properties(height=260, title=alt.TitleParams(f"{player['PositionGroup']} age–quality curve (all leagues)", color="#8fa3b1", fontSize=11))
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(_age_chart, use_container_width=True)
+
     comparable = similar_players(df, player, same_position=True, n=12)
     st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:14px 0 8px;'>Closest quality profiles</div>", unsafe_allow_html=True)
     similar_cols = ["PlayerName", "TeamName", "PositionGroup", "AgeYears", "MinutesPlayed", "SimilarityScore", "QualityScore", "RoleFitScore", "ProfileScore", "Archetype"]
@@ -3435,6 +3497,15 @@ with compare_tab:
                     f'</div></div>',
                     unsafe_allow_html=True,
                 )
+        # Side-by-side radar charts for exactly 2 players
+        if len(compare_df) == 2:
+            _radar_cols = st.columns(2)
+            for _ri, (_, _rp) in enumerate(compare_df.iterrows()):
+                with _radar_cols[_ri]:
+                    _rp_pos_df = df.loc[df["PositionGroup"].eq(_rp["PositionGroup"])]
+                    st.pyplot(render_player_pizza(_rp_pos_df, _rp), clear_figure=True)
+            st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:6px 0 6px;'>Score breakdown</div>", unsafe_allow_html=True)
+
         compare_scores = compare_df[["PlayerName", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "PerformanceReliabilityScore"]].melt(id_vars="PlayerName", var_name="Metric", value_name="Score")
         compare_chart = (
             alt.Chart(compare_scores)
@@ -3463,6 +3534,9 @@ with export_tab:
         st.download_button("Download board CSV", data=export_df.to_csv(index=False).encode("utf-8"), file_name="fchk_quality_board.csv", mime="text/csv", width="stretch")
     with export_right:
         st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", width="stretch")
+    _sl_data = st.session_state.get("shortlist_data", {})
+    _sl_names = list(_sl_data.keys())
+    shortlist_df = df.loc[df["PlayerName"].isin(_sl_names)].sort_values("QualityScore", ascending=False)
     if not shortlist_df.empty:
         st.markdown(
             f'<div class="workspace-label" style="font-size:.58rem;margin:18px 0 8px;">'
@@ -3470,19 +3544,31 @@ with export_tab:
             f'</div>',
             unsafe_allow_html=True,
         )
-        sl_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","QualityScore","QualityTier","RoleFitScore","RiskBand","Archetype"] if c in shortlist_df.columns]
+        # Merge in priority/notes/added from shortlist_data
+        _sl_meta = pd.DataFrame([
+            {"PlayerName": k, "Priority": v.get("priority","Watch"), "Notes": v.get("notes",""), "Added": v.get("added","")}
+            for k, v in _sl_data.items()
+        ])
+        shortlist_enriched = shortlist_df.merge(_sl_meta, on="PlayerName", how="left")
+        sl_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","QualityScore","QualityTier","RoleFitScore","RiskBand","Priority","Notes","Added"] if c in shortlist_enriched.columns]
+        _priority_order = {"Hot": 0, "Watch": 1, "Observed": 2}
+        shortlist_enriched["_pri_ord"] = shortlist_enriched["Priority"].map(_priority_order).fillna(3)
+        shortlist_enriched = shortlist_enriched.sort_values(["_pri_ord", "QualityScore"], ascending=[True, False])
         st.dataframe(
-            shortlist_df[sl_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","QualityScore":"Quality","QualityTier":"Tier","RoleFitScore":"Role Fit","RiskBand":"Risk"}).round(2),
+            shortlist_enriched[sl_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","QualityScore":"Quality","QualityTier":"Tier","RoleFitScore":"Role Fit","RiskBand":"Risk"}).round(2),
             use_container_width=True, hide_index=True,
             column_config={
                 "Quality":  st.column_config.ProgressColumn("Quality",  min_value=0, max_value=100, format="%.1f"),
                 "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
                 "Age":      st.column_config.NumberColumn("Age", format="%.1f"),
+                "Priority": st.column_config.SelectboxColumn("Priority", options=["Hot","Watch","Observed"], width="small"),
+                "Notes":    st.column_config.TextColumn("Notes", width="medium"),
             },
         )
         sl_exp_left, sl_exp_right = st.columns(2)
+        _sl_csv_cols = [c for c in export_cols if c in shortlist_enriched.columns]
         with sl_exp_left:
-            st.download_button("Download shortlist CSV", data=shortlist_df[[c for c in export_cols if c in shortlist_df.columns]].to_csv(index=False).encode("utf-8"), file_name="fchk_shortlist.csv", mime="text/csv", use_container_width=True)
+            st.download_button("Download shortlist CSV", data=shortlist_enriched[_sl_csv_cols + [c for c in ["Priority","Notes","Added"] if c in shortlist_enriched.columns]].to_csv(index=False).encode("utf-8"), file_name="fchk_shortlist.csv", mime="text/csv", use_container_width=True)
         with sl_exp_right:
             if st.button("Clear shortlist", use_container_width=True):
                 clear_shortlist()
