@@ -2282,6 +2282,63 @@ st.markdown(
     ::-webkit-scrollbar-track { background: var(--surface); }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+    /* ═══════════════════════════════════════════════════════════
+       DASHBOARD ICON CARDS  (landing page)
+    ═══════════════════════════════════════════════════════════ */
+    .dash-card {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 28px 18px 22px;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+        transition: border-color .2s, box-shadow .2s, transform .15s;
+        cursor: default;
+        margin-bottom: 0px;
+        min-height: 210px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+    .dash-card:hover {
+        border-color: var(--teal);
+        box-shadow: 0 0 0 1px var(--teal), var(--shadow);
+        transform: translateY(-2px);
+    }
+    .dash-card--primary {
+        border-color: var(--teal);
+        background: linear-gradient(160deg, rgba(16,212,170,.12) 0%, var(--surface) 55%);
+    }
+    .dash-card--primary:hover {
+        box-shadow: 0 0 0 2px var(--teal), var(--shadow);
+    }
+    .dash-card-icon {
+        font-size: 3.6rem;
+        line-height: 1;
+        filter: drop-shadow(0 2px 8px rgba(0,0,0,.4));
+    }
+    .dash-card-title {
+        color: var(--ink);
+        font-size: 1rem;
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -.01em;
+    }
+    .dash-card-desc {
+        color: var(--faint);
+        font-size: .72rem;
+        line-height: 1.45;
+        max-width: 160px;
+    }
+
+    /* tighten the gap between the card and its button */
+    .dash-card + div[data-testid="stButton"],
+    .dash-card + div > div[data-testid="stButton"] {
+        margin-top: 0 !important;
+    }
 </style>
     """,
     unsafe_allow_html=True,
@@ -2326,29 +2383,33 @@ if not st.session_state["show_scouting_workspace"]:
         """,
         unsafe_allow_html=True,
     )
-    landing_cols = st.columns(len(WORKSPACES))
-    _descriptions = {
-        "Scouting": "Quality board, player profiles & comparisons",
-        "Recruitment": "Value, resale & style-fit cases",
-        "Goalkeepers": "GK-exclusive boards & metrics",
-        "Team": "Squad gaps & Czech market view",
-        "Model": "Smart club model & data coverage",
+    _workspace_meta = {
+        "Scouting":    ("📊", "Scouting Board",    "Quality rankings, player profiles, comparisons & exports"),
+        "Recruitment": ("💼", "Recruitment",        "Value, resale, style-fit & cost-risk cases"),
+        "Goalkeepers": ("🧤", "Goalkeepers",        "GK-exclusive boards, metrics & reliability"),
+        "Team":        ("🏟️", "Team Intelligence",  "Squad gaps, Czech market & watchlist"),
+        "Model":       ("🔬", "Model",              "Smart club closeness & data coverage"),
     }
+    landing_cols = st.columns(len(WORKSPACES))
     for idx, section in enumerate(WORKSPACES):
+        icon, title, desc = _workspace_meta.get(section, ("⚽", section, ""))
+        is_primary = section == "Scouting"
         with landing_cols[idx]:
             st.markdown(
-                f"""<div class="landing-card">
-                    <div class="landing-card-label">{section}</div>
-                    <div class="landing-card-title">{section}</div>
-                    <div class="landing-card-copy">{_descriptions.get(section, '')}</div>
-                </div>""",
+                f"""
+                <div class="dash-card {'dash-card--primary' if is_primary else ''}">
+                    <div class="dash-card-icon">{icon}</div>
+                    <div class="dash-card-title">{title}</div>
+                    <div class="dash-card-desc">{desc}</div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             st.button(
-                f"Open {section}",
+                f"Open {title}",
                 key=f"landing_{section}",
-                type="primary" if section == "Scouting" else "secondary",
-                width="stretch",
+                type="primary" if is_primary else "secondary",
+                use_container_width=True,
                 on_click=set_workspace,
                 args=(section,),
             )
