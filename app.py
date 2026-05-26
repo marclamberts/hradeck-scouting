@@ -2339,6 +2339,252 @@ st.markdown(
     .dash-card + div > div[data-testid="stButton"] {
         margin-top: 0 !important;
     }
+
+    /* ═══════════════════════════════════════════════════════════
+       FULL-BLEED LANDING PAGE  (.lp-*)
+    ═══════════════════════════════════════════════════════════ */
+
+    /* outer shell */
+    .lp-wrapper {
+        width: 100%;
+        background: var(--bg);
+        padding: 0;
+    }
+
+    /* ── HERO ─────────────────────────────────────────────── */
+    .lp-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+        gap: 0;
+        min-height: 58vh;
+        padding: 56px 60px 48px;
+        background: linear-gradient(135deg, #0d1625 0%, #111827 50%, #162035 100%);
+        border-bottom: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+    }
+    /* subtle teal glow top-right */
+    .lp-hero::before {
+        content: "";
+        position: absolute;
+        top: -120px; right: -60px;
+        width: 500px; height: 500px;
+        background: radial-gradient(circle, rgba(16,212,170,.13) 0%, transparent 65%);
+        pointer-events: none;
+    }
+    /* subtle blue glow bottom-left */
+    .lp-hero::after {
+        content: "";
+        position: absolute;
+        bottom: -80px; left: 10%;
+        width: 400px; height: 400px;
+        background: radial-gradient(circle, rgba(96,165,250,.07) 0%, transparent 65%);
+        pointer-events: none;
+    }
+
+    .lp-hero-left {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-right: 40px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .lp-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--teal);
+        font-size: .65rem;
+        font-weight: 800;
+        letter-spacing: .22em;
+        text-transform: uppercase;
+        background: rgba(16,212,170,.1);
+        border: 1px solid rgba(16,212,170,.25);
+        border-radius: 20px;
+        padding: 5px 14px;
+        margin-bottom: 22px;
+        width: fit-content;
+    }
+
+    .lp-title {
+        color: #fff !important;
+        font-size: clamp(2.4rem, 4.5vw, 4rem);
+        font-weight: 900;
+        line-height: 1.02;
+        letter-spacing: -.02em;
+        margin: 0 0 18px 0;
+    }
+    .lp-title-accent { color: var(--teal); }
+
+    .lp-sub {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.7;
+        max-width: 500px;
+        margin: 0 0 32px 0;
+    }
+
+    /* stats row inside hero-left */
+    .lp-stats {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex-wrap: wrap;
+    }
+    .lp-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 24px 0 0;
+    }
+    .lp-stat-n {
+        color: #fff;
+        font-size: 2rem;
+        font-weight: 900;
+        line-height: 1;
+    }
+    .lp-stat-l {
+        color: var(--faint);
+        font-size: .62rem;
+        font-weight: 700;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+    }
+    .lp-stat-div {
+        width: 1px;
+        height: 36px;
+        background: var(--border2);
+        margin: 0 24px 0 0;
+        flex-shrink: 0;
+    }
+
+    /* right side: pitch + pills */
+    .lp-hero-right {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .lp-pitch {
+        width: 100%;
+        max-width: 380px;
+        background: rgba(16,212,170,.04);
+        border: 1px solid rgba(16,212,170,.2);
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+    .lp-pitch-label {
+        color: var(--teal);
+        font-size: .6rem;
+        font-weight: 800;
+        letter-spacing: .2em;
+        text-transform: uppercase;
+    }
+
+    .lp-feature-pills {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        max-width: 380px;
+    }
+    .lp-pill {
+        background: var(--surface);
+        border: 1px solid var(--border2);
+        color: var(--muted);
+        font-size: .68rem;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 20px;
+        letter-spacing: .04em;
+    }
+    .lp-pill.teal {
+        background: rgba(16,212,170,.12);
+        border-color: rgba(16,212,170,.4);
+        color: var(--teal);
+    }
+
+    /* ── SECTION DIVIDER ──────────────────────────────────── */
+    .lp-section-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 28px 60px 20px;
+        background: var(--bg);
+    }
+    .lp-section-line {
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+    }
+    .lp-section-text {
+        color: var(--faint);
+        font-size: .62rem;
+        font-weight: 800;
+        letter-spacing: .22em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    /* ── BOTTOM FEATURE STRIP ─────────────────────────────── */
+    .lp-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+        border-top: 1px solid var(--border);
+        margin-top: 32px;
+        background: var(--surface);
+    }
+    .lp-strip-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 26px 28px;
+        border-right: 1px solid var(--border);
+    }
+    .lp-strip-item:last-child { border-right: none; }
+    .lp-strip-icon {
+        font-size: 1.6rem;
+        line-height: 1;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .lp-strip-body { display: flex; flex-direction: column; gap: 5px; }
+    .lp-strip-title {
+        color: var(--ink);
+        font-size: .88rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+    .lp-strip-desc {
+        color: var(--faint);
+        font-size: .72rem;
+        line-height: 1.5;
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────────────── */
+    @media (max-width: 960px) {
+        .lp-hero { grid-template-columns: 1fr; padding: 32px 24px; min-height: auto; }
+        .lp-hero-right { display: none; }
+        .lp-hero-left { padding-right: 0; }
+        .lp-section-header { padding: 20px 24px 14px; }
+        .lp-strip { grid-template-columns: 1fr 1fr; }
+        .lp-strip-item { border-bottom: 1px solid var(--border); }
+    }
+    @media (max-width: 600px) {
+        .lp-title { font-size: 2rem; }
+        .lp-strip { grid-template-columns: 1fr; }
+    }
 </style>
     """,
     unsafe_allow_html=True,
@@ -2355,64 +2601,167 @@ if not st.session_state["show_scouting_workspace"]:
     _n_players = len(_ldata)
     _n_leagues = _ldata["BundleLabel"].nunique() if "BundleLabel" in _ldata.columns else 0
     _n_positions = _ldata["PositionGroup"].nunique() if "PositionGroup" in _ldata.columns else 0
-    st.markdown(
-        f"""
-        <div class="hero">
-            <div class="hero-kicker">⚽ Hradeck Scouting Intelligence · FCHK Model V3</div>
-            <h1>Player <span>Quality</span> Command Room</h1>
-            <p>Scouting, recruitment, goalkeeper, team and model intelligence — all in one place. Built for fast football decisions.</p>
-            <div class="hero-stats">
-                <div class="hero-stat-item">
-                    <div class="hero-stat-value">{_n_players:,}</div>
-                    <div class="hero-stat-label">Players indexed</div>
-                </div>
-                <div class="hero-stat-item">
-                    <div class="hero-stat-value">{_n_leagues}</div>
-                    <div class="hero-stat-label">Leagues loaded</div>
-                </div>
-                <div class="hero-stat-item">
-                    <div class="hero-stat-value">{_n_positions}</div>
-                    <div class="hero-stat-label">Position groups</div>
-                </div>
-                <div class="hero-stat-item">
-                    <div class="hero-stat-value">12</div>
-                    <div class="hero-stat-label">Score dimensions</div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    _workspace_meta = {
-        "Scouting":    ("📊", "Scouting Board",    "Quality rankings, player profiles, comparisons & exports"),
-        "Recruitment": ("💼", "Recruitment",        "Value, resale, style-fit & cost-risk cases"),
-        "Goalkeepers": ("🧤", "Goalkeepers",        "GK-exclusive boards, metrics & reliability"),
-        "Team":        ("🏟️", "Team Intelligence",  "Squad gaps, Czech market & watchlist"),
-        "Model":       ("🔬", "Model",              "Smart club closeness & data coverage"),
+    _n_high = int(_ldata.get("QualityTier", pd.Series()).isin(["High quality", "Elite"]).sum()) if "QualityTier" in _ldata.columns else 0
+
+    # ── Landing-page full-bleed overrides ────────────────────────────────────
+    # Hide sidebar, remove container padding so the page fills the viewport.
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"]  { display: none !important; }
+    .block-container {
+        padding: 0 !important;
+        max-width: 100% !important;
     }
-    landing_cols = st.columns(len(WORKSPACES))
+    /* Remove the top deploy/hamburger bar gap */
+    header[data-testid="stHeader"] { background: transparent !important; }
+    div[data-testid="stToolbar"]   { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Hero ─────────────────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div class="lp-wrapper">
+
+      <!-- ═══ HERO ════════════════════════════════════════════════════════ -->
+      <div class="lp-hero">
+        <div class="lp-hero-left">
+          <div class="lp-badge">⚽ FCHK Model V3 · Hradeck Scouting</div>
+          <h1 class="lp-title">Player Quality<br><span class="lp-title-accent">Command Room</span></h1>
+          <p class="lp-sub">Professional-grade football scouting and recruitment intelligence.<br>
+          Every decision backed by data — from Czech leagues to Europe.</p>
+
+          <div class="lp-stats">
+            <div class="lp-stat">
+              <span class="lp-stat-n">{_n_players:,}</span>
+              <span class="lp-stat-l">Players</span>
+            </div>
+            <div class="lp-stat-div"></div>
+            <div class="lp-stat">
+              <span class="lp-stat-n">{_n_leagues}</span>
+              <span class="lp-stat-l">Leagues</span>
+            </div>
+            <div class="lp-stat-div"></div>
+            <div class="lp-stat">
+              <span class="lp-stat-n">{_n_positions}</span>
+              <span class="lp-stat-l">Positions</span>
+            </div>
+            <div class="lp-stat-div"></div>
+            <div class="lp-stat">
+              <span class="lp-stat-n">12</span>
+              <span class="lp-stat-l">Score Dims</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp-hero-right">
+          <div class="lp-pitch">
+            <!-- stylised football pitch SVG -->
+            <svg viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;opacity:.55;">
+              <rect x="2" y="2" width="396" height="256" rx="4" fill="none" stroke="#10d4aa" stroke-width="1.5"/>
+              <line x1="200" y1="2" x2="200" y2="258" stroke="#10d4aa" stroke-width="1"/>
+              <circle cx="200" cy="130" r="36" fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <circle cx="200" cy="130" r="3" fill="#10d4aa"/>
+              <!-- Left penalty box -->
+              <rect x="2" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <rect x="2" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <circle cx="56" cy="130" r="2" fill="#10d4aa"/>
+              <!-- Right penalty box -->
+              <rect x="332" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <rect x="376" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <circle cx="344" cy="130" r="2" fill="#10d4aa"/>
+              <!-- Corner arcs -->
+              <path d="M2 14 A12 12 0 0 1 14 2"    fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <path d="M386 2 A12 12 0 0 1 398 14"  fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <path d="M398 246 A12 12 0 0 1 386 258" fill="none" stroke="#10d4aa" stroke-width="1"/>
+              <path d="M14 258 A12 12 0 0 1 2 246"  fill="none" stroke="#10d4aa" stroke-width="1"/>
+            </svg>
+            <div class="lp-pitch-label">FCHK Intelligence Engine</div>
+          </div>
+
+          <div class="lp-feature-pills">
+            <span class="lp-pill">📊 Quality scoring</span>
+            <span class="lp-pill">🎯 Position fit</span>
+            <span class="lp-pill">🌍 European scouting</span>
+            <span class="lp-pill">🧤 GK analysis</span>
+            <span class="lp-pill teal">⚡ Real-time filters</span>
+            <span class="lp-pill">📥 PDF &amp; CSV export</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SECTION LABEL ════════════════════════════════════════════════ -->
+      <div class="lp-section-header">
+        <span class="lp-section-line"></span>
+        <span class="lp-section-text">Choose your workspace</span>
+        <span class="lp-section-line"></span>
+      </div>
+
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Dashboard icon cards ──────────────────────────────────────────────────
+    _workspace_meta = {
+        "Scouting":    ("📊", "Scouting Board",   "Quality rankings, player profiles, radar charts & comparisons"),
+        "Recruitment": ("💼", "Recruitment",       "Transfer value, resale upside, style-fit & cost-risk cases"),
+        "Goalkeepers": ("🧤", "Goalkeepers",       "GK-exclusive boards, shot-stopping metrics & reliability"),
+        "Team":        ("🏟️", "Team Intelligence", "Squad gaps, Czech market benchmarks & watchlist"),
+        "Model":       ("🔬", "Model & Data",      "Smart club closeness, data coverage & confidence bands"),
+    }
+    st.markdown('<div style="padding: 0 48px 8px;">', unsafe_allow_html=True)
+    landing_cols = st.columns(len(WORKSPACES), gap="medium")
     for idx, section in enumerate(WORKSPACES):
         icon, title, desc = _workspace_meta.get(section, ("⚽", section, ""))
         is_primary = section == "Scouting"
         with landing_cols[idx]:
-            st.markdown(
-                f"""
-                <div class="dash-card {'dash-card--primary' if is_primary else ''}">
-                    <div class="dash-card-icon">{icon}</div>
-                    <div class="dash-card-title">{title}</div>
-                    <div class="dash-card-desc">{desc}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"""
+            <div class="dash-card {'dash-card--primary' if is_primary else ''}">
+                <div class="dash-card-icon">{icon}</div>
+                <div class="dash-card-title">{title}</div>
+                <div class="dash-card-desc">{desc}</div>
+            </div>""", unsafe_allow_html=True)
             st.button(
-                f"Open {title}",
+                f"{'→  ' if is_primary else ''}Open {title}",
                 key=f"landing_{section}",
                 type="primary" if is_primary else "secondary",
                 use_container_width=True,
                 on_click=set_workspace,
                 args=(section,),
             )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Bottom feature strip ──────────────────────────────────────────────────
+    st.markdown(f"""
+    <div class="lp-strip">
+      <div class="lp-strip-item">
+        <div class="lp-strip-icon">⚡</div>
+        <div class="lp-strip-body">
+          <div class="lp-strip-title">Instant quality lenses</div>
+          <div class="lp-strip-desc">Switch between Balanced, Technique, Ready and Upside presets — or set your own weights.</div>
+        </div>
+      </div>
+      <div class="lp-strip-item">
+        <div class="lp-strip-icon">🎯</div>
+        <div class="lp-strip-body">
+          <div class="lp-strip-title">Hradec-fit algorithm</div>
+          <div class="lp-strip-desc">Every external player scored on exactly how well they'd address your squad's positional gaps.</div>
+        </div>
+      </div>
+      <div class="lp-strip-item">
+        <div class="lp-strip-icon">🌍</div>
+        <div class="lp-strip-body">
+          <div class="lp-strip-title">European market map</div>
+          <div class="lp-strip-desc">Interactive bubble map of scout-priority by country — see where to send your scouts next.</div>
+        </div>
+      </div>
+      <div class="lp-strip-item">
+        <div class="lp-strip-icon">📥</div>
+        <div class="lp-strip-body">
+          <div class="lp-strip-title">Board-ready exports</div>
+          <div class="lp-strip-desc">One-click PDF scouting reports and CSV exports for every filtered view and shortlist.</div>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     if st.session_state.get("landing_notice"):
         st.info(st.session_state["landing_notice"])
