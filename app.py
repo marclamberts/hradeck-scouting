@@ -3369,5 +3369,26 @@ with export_tab:
     with export_right:
         st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", width="stretch")
     if not shortlist_df.empty:
-        st.subheader("Current Shortlist")
-        st.dataframe(shortlist_df[[c for c in export_cols if c in shortlist_df.columns]].round(2), width="stretch", hide_index=True)
+        st.markdown(
+            f'<div class="workspace-label" style="font-size:.58rem;margin:18px 0 8px;">'
+            f'Shortlist — {len(shortlist_df)} player{"s" if len(shortlist_df)!=1 else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        sl_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","QualityScore","QualityTier","RoleFitScore","RiskBand","Archetype"] if c in shortlist_df.columns]
+        st.dataframe(
+            shortlist_df[sl_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","QualityScore":"Quality","QualityTier":"Tier","RoleFitScore":"Role Fit","RiskBand":"Risk"}).round(2),
+            use_container_width=True, hide_index=True,
+            column_config={
+                "Quality":  st.column_config.ProgressColumn("Quality",  min_value=0, max_value=100, format="%.1f"),
+                "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
+                "Age":      st.column_config.NumberColumn("Age", format="%.1f"),
+            },
+        )
+        sl_exp_left, sl_exp_right = st.columns(2)
+        with sl_exp_left:
+            st.download_button("Download shortlist CSV", data=shortlist_df[[c for c in export_cols if c in shortlist_df.columns]].to_csv(index=False).encode("utf-8"), file_name="fchk_shortlist.csv", mime="text/csv", use_container_width=True)
+        with sl_exp_right:
+            if st.button("Clear shortlist", use_container_width=True):
+                clear_shortlist()
+                st.rerun()
