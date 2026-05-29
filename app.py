@@ -2611,11 +2611,13 @@ def render_search_workspace(data: pd.DataFrame) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Two charts side by side ───────────────────────────────────────────────
-    pizza_col, bars_col = st.columns(2, gap="large")
+    # ── Charts ────────────────────────────────────────────────────────────────
+    has_impect_model = bool(pos_group)
+    has_wyscout_loaded = _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty
 
-    with pizza_col:
-        st.markdown(
+    def _render_pizza_section(container=None):
+        target = container if container is not None else st
+        target.markdown(
             f"<div style='color:var(--muted);font-size:.75rem;font-weight:700;text-transform:uppercase;"
             f"letter-spacing:.06em;margin-bottom:6px;'>IMPECT model · percentile vs {pos_group} pool</div>",
             unsafe_allow_html=True,
@@ -2623,20 +2625,21 @@ def render_search_workspace(data: pd.DataFrame) -> None:
         pos_pool_impect = data.loc[data["PositionGroup"].astype(str).eq(pos_group)].copy()
         try:
             fig_pizza = render_player_pizza(pos_pool_impect, impect_row)
-            st.pyplot(fig_pizza, use_container_width=True)
+            target.pyplot(fig_pizza, use_container_width=True)
             plt.close(fig_pizza)
         except Exception as _ex:
-            st.info(f"Pizza chart unavailable: {_ex}")
+            target.info(f"Pizza chart unavailable: {_ex}")
 
-    with bars_col:
-        st.markdown(
+    def _render_bars_section(container=None):
+        target = container if container is not None else st
+        target.markdown(
             "<div style='color:var(--muted);font-size:.75rem;font-weight:700;text-transform:uppercase;"
             "letter-spacing:.06em;margin-bottom:6px;'>Wyscout raw metrics · percentile bars</div>",
             unsafe_allow_html=True,
         )
-        if _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty:
+        if has_wyscout_loaded:
             if _ws_conf_loaded != "HIGH":
-                st.markdown(
+                target.markdown(
                     f"<span style='color:var(--amber);font-size:.72rem;'>Link: {_ws_conf_loaded} — verify manually</span>",
                     unsafe_allow_html=True,
                 )
@@ -2645,18 +2648,32 @@ def render_search_workspace(data: pd.DataFrame) -> None:
                 _ws_name_loaded, _ws_team_loaded, _ws_file_loaded,
             )
             if _fig_bars:
-                st.pyplot(_fig_bars, use_container_width=True)
+                target.pyplot(_fig_bars, use_container_width=True)
                 plt.close(_fig_bars)
             else:
-                st.info("No Wyscout metrics available for this position.")
+                target.info("No Wyscout metrics available for this position.")
         elif has_wyscout:
-            st.info(f"Wyscout data unavailable ({_ws_file_loaded}).")
+            target.info(f"Wyscout data unavailable ({_ws_file_loaded}).")
         else:
-            st.markdown(
+            target.markdown(
                 "<div class='note-box'>No Wyscout link for this player "
                 "(league may not be in Wyscout DB, or link confidence too low).</div>",
                 unsafe_allow_html=True,
             )
+
+    if has_impect_model and has_wyscout_loaded:
+        # Both sources — side by side
+        pizza_col, bars_col = st.columns(2, gap="large")
+        _render_pizza_section(pizza_col)
+        _render_bars_section(bars_col)
+    elif has_wyscout_loaded:
+        # Wyscout only — bars full width
+        _render_bars_section()
+    else:
+        # IMPECT only — pizza full width (or no-Wyscout note inside bars section)
+        _render_pizza_section()
+        if has_impect_model:
+            _render_bars_section()
 
     # ── Stats tables ──────────────────────────────────────────────────────────
     _exp_left, _exp_right = st.columns(2, gap="large")
