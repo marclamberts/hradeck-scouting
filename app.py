@@ -2757,9 +2757,9 @@ st.markdown(
     }
 
     /* ── WORKSPACE NAV PILLS ─────────────────────────────────── */
-    /* stLayoutWrapper is the direct next sibling of the spacer's element-container;
-       stHorizontalBlock lives one level deeper inside it */
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stLayoutWrapper"] [data-testid="stHorizontalBlock"] {
+    /* Target the horizontal columns row that holds workspace nav buttons.
+       Uses the stable st-key-workspace_main_* class Streamlit adds from button keys. */
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
         background: var(--raised) !important;
         border: 1px solid var(--border) !important;
         border-radius: 10px !important;
@@ -2767,7 +2767,7 @@ st.markdown(
         gap: 2px !important;
         margin-bottom: 10px !important;
     }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stLayoutWrapper"] .stButton > button {
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
         min-height: 28px !important;
         height: 28px !important;
         font-size: .65rem !important;
@@ -2781,13 +2781,13 @@ st.markdown(
         text-transform: none !important;
         box-shadow: none !important;
     }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stLayoutWrapper"] .stButton > button[kind="primary"] {
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
         background: #ffffff !important;
         color: var(--teal) !important;
         font-weight: 700 !important;
         box-shadow: 0 1px 3px rgba(0,0,0,.08) !important;
     }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stLayoutWrapper"] .stButton > button:hover {
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
         background: rgba(13,158,125,.08) !important;
         color: var(--teal) !important;
     }
