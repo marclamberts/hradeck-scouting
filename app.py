@@ -1502,6 +1502,13 @@ def set_quick_mode(mode: str) -> None:
 
 
 WORKSPACES = ["Recruitment", "Scouting", "Goalkeepers", "Team", "Model"]
+_WORKSPACE_ICONS = {
+    "Recruitment": ("🎯", "Rankings & cases"),
+    "Scouting":    ("🔍", "Wyscout database"),
+    "Goalkeepers": ("🧤", "GK boards"),
+    "Team":        ("🏟", "Squad & Czech market"),
+    "Model":       ("🤖", "Smart club model"),
+}
 WYSCOUT_DB_DIR = APP_DIR / "data" / "Wyscout DB"
 
 
@@ -1517,14 +1524,16 @@ def enter_scouting_workspace() -> None:
 
 def render_workspace_nav(location: str = "top") -> None:
     st.markdown("<div class='workspace-nav-spacer'></div>", unsafe_allow_html=True)
-    nav_cols = st.columns(len(WORKSPACES))
-    active = st.session_state.get("active_workspace", "Scouting")
+    active = st.session_state.get("active_workspace", "Recruitment")
+    nav_cols = st.columns(len(WORKSPACES), gap="small")
     for idx, section in enumerate(WORKSPACES):
+        icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
+        is_active = active == section
         with nav_cols[idx]:
             st.button(
-                section,
+                f"{icon}  {section}\n{desc}",
                 key=f"workspace_{location}_{section}",
-                type="primary" if active == section else "secondary",
+                type="primary" if is_active else "secondary",
                 width="stretch",
                 on_click=set_workspace,
                 args=(section,),
@@ -2955,6 +2964,52 @@ st.markdown(
        STREAMLIT WIDGET OVERRIDES
     ═══════════════════════════════════════════════════════════ */
 
+    /* ── SIDEBAR SECTIONS ───────────────────────────────────── */
+    .sbar-hdr {
+        color: var(--faint);
+        font-size: .56rem;
+        font-weight: 800;
+        letter-spacing: .2em;
+        text-transform: uppercase;
+        margin: 14px 0 3px 0;
+        padding-bottom: 5px;
+        border-bottom: 1px solid var(--border);
+    }
+    .sbar-active-bar {
+        background: rgba(13,158,125,.08);
+        border: 1px solid rgba(13,158,125,.22);
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin: 8px 0 4px 0;
+        color: var(--teal);
+        font-size: .62rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+    }
+
+    /* ── WORKSPACE NAV CARDS ────────────────────────────────── */
+    .wnav-wrap {
+        display: contents; /* transparent wrapper */
+    }
+    /* Target the horizontal button row that follows workspace-nav-spacer */
+    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button {
+        min-height: 58px !important;
+        font-size: .74rem !important;
+        padding: 0 8px !important;
+        line-height: 1.4 !important;
+        border-radius: 8px !important;
+    }
+    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
+        border-top: 3px solid var(--teal) !important;
+        font-weight: 800 !important;
+    }
+    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button[kind="secondary"] {
+        border-top: 3px solid var(--border) !important;
+    }
+    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button:hover {
+        border-top-color: var(--teal) !important;
+    }
+
     /* Buttons */
     .stButton > button, .stDownloadButton > button {
         border-radius: 6px !important;
@@ -3650,10 +3705,13 @@ bundle_groups = sorted(df["BundleLabel"].dropna().astype(str).unique())
 archetype_groups = sorted(df["Archetype"].dropna().astype(str).unique())
 
 with st.sidebar:
-    st.subheader("Quality Controls")
-    search = st.text_input("Search", key="search_filter", placeholder="Player or club")
+    # ── Search ──────────────────────────────────────────────────
+    search = st.text_input("", key="search_filter", placeholder="🔍  Search player or club…")
+
+    # ── Positions ───────────────────────────────────────────────
+    st.markdown("<div class='sbar-hdr'>Positions</div>", unsafe_allow_html=True)
     saved_positions = st.session_state.get("positions_filter")
-    if saved_positions and any(position not in position_groups for position in saved_positions):
+    if saved_positions and any(p not in position_groups for p in saved_positions):
         st.session_state["positions_filter"] = position_groups
     positions = st.multiselect("Roles", position_groups, default=position_groups, key="positions_filter")
     _profile_opts: list[str] = []
@@ -3664,13 +3722,20 @@ with st.sidebar:
         profiles = st.multiselect("Player profiles", _profile_opts, default=_profile_opts, key="profiles_filter")
     else:
         profiles = []
+
+    # ── Market ──────────────────────────────────────────────────
+    st.markdown("<div class='sbar-hdr'>Market</div>", unsafe_allow_html=True)
     bundles = st.multiselect("Leagues", bundle_groups, default=bundle_groups, key="bundles_filter")
-    archetypes = st.multiselect("Archetypes", archetype_groups, default=archetype_groups, key="archetypes_filter")
     if "CountryLabel" in df.columns:
         _country_opts = sorted(df["CountryLabel"].dropna().astype(str).replace("", "Unknown").unique())
         countries = st.multiselect("Country", _country_opts, default=_country_opts, key="countries_filter")
     else:
+        _country_opts: list[str] = []
         countries = []
+    archetypes = st.multiselect("Archetypes", archetype_groups, default=archetype_groups, key="archetypes_filter")
+
+    # ── Player criteria ──────────────────────────────────────────
+    st.markdown("<div class='sbar-hdr'>Player criteria</div>", unsafe_allow_html=True)
     u23_only = st.toggle("U23 only", value=False, key="u23_filter")
     age_range = st.slider(
         "Age",
@@ -3681,17 +3746,56 @@ with st.sidebar:
         key="age_filter",
     )
     minutes_range = st.slider(
-        "Minutes",
+        "Min. minutes",
         int(df["MinutesPlayed"].min()),
         int(df["MinutesPlayed"].max()),
         (900, int(df["MinutesPlayed"].max())),
         step=100,
         key="minutes_filter",
     )
-    quality_floor = st.slider("Quality floor", 0, 100, 35, key="quality_floor")
-    role_floor = st.slider("Role-fit floor", 0, 100, 35, key="fit_floor")
-    reliability_floor = st.slider("Reliability floor", 0, 100, 45, key="reliability_floor")
-    max_risk = st.slider("Max security risk/90", 0.0, 25.0, 18.0, step=0.5, key="max_risk")
+
+    # ── Score thresholds (collapsed) ────────────────────────────
+    _q_floor_val     = st.session_state.get("quality_floor", 35)
+    _fit_floor_val   = st.session_state.get("fit_floor", 35)
+    _rel_floor_val   = st.session_state.get("reliability_floor", 45)
+    _risk_val        = st.session_state.get("max_risk", 18.0)
+    _thresh_modified = sum([
+        _q_floor_val != 35,
+        _fit_floor_val != 35,
+        _rel_floor_val != 45,
+        float(_risk_val) != 18.0,
+    ])
+    _thresh_lbl = f"⚙ Thresholds  ({_thresh_modified} modified)" if _thresh_modified else "⚙ Thresholds"
+    with st.expander(_thresh_lbl, expanded=bool(_thresh_modified)):
+        quality_floor     = st.slider("Quality floor", 0, 100, 35, key="quality_floor")
+        role_floor        = st.slider("Role-fit floor", 0, 100, 35, key="fit_floor")
+        reliability_floor = st.slider("Reliability floor", 0, 100, 45, key="reliability_floor")
+        max_risk          = st.slider("Max risk/90", 0.0, 25.0, 18.0, step=0.5, key="max_risk")
+
+    # ── Active filters count + Reset ────────────────────────────
+    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+    _active_count = sum([
+        len(positions) < len(position_groups),
+        bool(_profile_opts) and len(profiles) < len(_profile_opts),
+        len(bundles) < len(bundle_groups),
+        len(archetypes) < len(archetype_groups),
+        bool(_country_opts) and len(countries) < len(_country_opts),
+        bool(u23_only),
+        age_range[0] > float(np.floor(df["AgeYears"].min())),
+        age_range[1] < float(np.ceil(df["AgeYears"].max())),
+        minutes_range[0] > int(df["MinutesPlayed"].min()),
+        quality_floor != 35,
+        role_floor != 35,
+        reliability_floor != 45,
+        float(max_risk) != 18.0,
+        bool(search),
+    ])
+    if _active_count:
+        st.markdown(
+            f"<div class='sbar-active-bar'>⚡ {_active_count} active filter{'s' if _active_count != 1 else ''} — board is narrowed</div>",
+            unsafe_allow_html=True,
+        )
+    st.button("✕  Reset all filters", on_click=reset_filters, type="secondary", width="stretch", key="sidebar_reset_btn")
 
 mask = (
     df["PositionGroup"].astype(str).isin(positions)
@@ -3724,29 +3828,40 @@ median_quality = "n/a" if filtered.empty else f"{filtered['QualityScore'].median
 median_impact = "n/a" if filtered.empty else f"{filtered['ProfileScore'].median():.1f}"
 
 if filtered.empty:
-    st.info("No players match the current quality controls. Loosen the filters in the sidebar to open Player Lab.")
+    st.markdown(
+        "<div class='intel-strip' style='border-left-color:var(--amber);margin-top:12px;'>"
+        "<div>"
+        "<div class='intel-strip-title' style='color:var(--amber);'>No players match the current filters</div>"
+        "<div class='intel-strip-meta' style='margin-top:4px;'>Try: lowering Quality floor · broadening Roles · increasing Age range · using Reset all filters in the sidebar</div>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 # ── Quick-mode filter chips ─────────────────────────────────────────────────
 # Use on_click= so set_quick_mode runs BEFORE widgets are instantiated (avoids
 # "cannot modify key after widget is rendered" StreamlitAPIException).
-st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick filter:</span></div>", unsafe_allow_html=True)
-qm_cols = st.columns([1, 1, 1, 1, 2])
+_shortlist_count = len(st.session_state.get("shortlist_players", []))
 _qm = st.session_state.get("quick_mode", "Full board")
-with qm_cols[0]:
-    st.button("⚡ Full board",  type="primary" if _qm == "Full board"      else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
-with qm_cols[1]:
-    st.button("🌱 U23 quality", type="primary" if _qm == "U23 quality"     else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
-with qm_cols[2]:
-    st.button("🏆 Elite only",  type="primary" if _qm == "Elite quality"   else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
-with qm_cols[3]:
-    st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
-with qm_cols[4]:
-    _shortlist_count = len(st.session_state.get("shortlist_players", []))
+_qm_row, _stat_row = st.columns([3, 1])
+with _qm_row:
+    st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick view:</span></div>", unsafe_allow_html=True)
+    qm_cols = st.columns(4)
+    with qm_cols[0]:
+        st.button("⚡ Full board",  type="primary" if _qm == "Full board"       else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
+    with qm_cols[1]:
+        st.button("🌱 U23",         type="primary" if _qm == "U23 quality"      else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
+    with qm_cols[2]:
+        st.button("🏆 Elite",       type="primary" if _qm == "Elite quality"    else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
+    with qm_cols[3]:
+        st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
+with _stat_row:
     st.markdown(
-        f"<div style='padding:6px 0;color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'>"
-        f"Shortlist: <span style='color:var(--teal)'>{_shortlist_count} player{'s' if _shortlist_count != 1 else ''}</span> · "
-        f"Showing <span style='color:var(--ink)'>{len(filtered):,}</span> of {len(df):,}"
+        f"<div style='padding:8px 0 0;text-align:right;'>"
+        f"<div style='color:var(--ink);font-size:1.1rem;font-weight:900;line-height:1;'>{len(filtered):,}</div>"
+        f"<div style='color:var(--faint);font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:2px;'>of {len(df):,} players</div>"
+        f"<div style='color:var(--teal);font-size:.58rem;font-weight:700;margin-top:1px;'>★ {_shortlist_count} shortlisted</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -3873,8 +3988,17 @@ with quality_tab:
 
 with player_tab:
     st.markdown("<div class='workspace-label'>🔬 Player Lab — deep dive profile & radar</div>", unsafe_allow_html=True)
-    player_options = filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"]).sort_values("QualityScore", ascending=False)
-    selected_label = st.selectbox("Select player", player_options["_label"].tolist())
+    _plab_sorted = filtered.sort_values("QualityScore", ascending=False)
+    _plab_labels = (
+        _plab_sorted["PlayerName"].fillna("").astype(str) + "  ·  "
+        + _plab_sorted["TeamName"].fillna("").astype(str) + "   ["
+        + _plab_sorted["PositionGroup"].fillna("").astype(str) + "  "
+        + _plab_sorted["AgeYears"].round(1).astype(str) + "y  Q "
+        + _plab_sorted["QualityScore"].round(0).astype(int).astype(str) + "]"
+    ).tolist()
+    player_options = _plab_sorted.copy()
+    player_options["_label"] = _plab_labels
+    selected_label = st.selectbox("Select player", _plab_labels)
     player = player_options.loc[player_options["_label"].eq(selected_label)].iloc[0]
     _risk_cls = {"Low": "teal", "Moderate": "amber", "Elevated": "amber", "High": "red"}.get(str(player.get("RiskBand", "")), "")
     st.markdown(
