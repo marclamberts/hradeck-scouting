@@ -2022,28 +2022,6 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
         age_max = float(np.ceil(keeper_df["AgeYears"].max()))
         age_range = st.slider("Age range", age_min, age_max, (age_min, age_max), step=0.5, key="gk_age_filter")
 
-    st.markdown("<div class='page-title'>Goalkeepers</div><div class='page-subtitle'>GK-specific fit, reliability &amp; shot-stopping scores</div>", unsafe_allow_html=True)
-
-    top_keeper = keeper_df.head(1)
-    metric_cols = st.columns(4)
-    with metric_cols[0]:
-        metric_card("Goalkeepers", f"{len(keeper_df):,}", "dedicated GK pool")
-    with metric_cols[1]:
-        metric_card("Best fit", f"{top_keeper.iloc[0]['ScoutFitScore']:.1f}", str(top_keeper.iloc[0]["PlayerName"]))
-    with metric_cols[2]:
-        metric_card("Median reliability", f"{keeper_df['PerformanceReliabilityScore'].median():.1f}", "sample confidence")
-    with metric_cols[3]:
-        metric_card("U23 keepers", f"{keeper_df['IsU23Target'].fillna(False).sum():,}", "age upside")
-
-    st.markdown(
-        """
-        <div class="note-box">
-            Goalkeepers are kept separate so the board only compares GK profiles with other GK profiles.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     gk_filtered = keeper_df.loc[
         keeper_df["BundleLabel"].astype(str).isin(selected_leagues)
         & keeper_df["AgeYears"].between(age_range[0], age_range[1])
@@ -2188,34 +2166,12 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🏟 Team Intelligence</div><div class='sidebar-brand-meta'>Squad gaps &amp; Czech market</div></div>", unsafe_allow_html=True)
         st.markdown("<div class='note-box' style='font-size:.69rem;'>Compare Hradec&#39;s squad vs the Czech market to find recruitment priorities.</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='page-title'>Team Intelligence</div><div class='page-subtitle'>Hradec squad read vs Czech market benchmarks</div>", unsafe_allow_html=True)
-
     h_top = hradec_df.sort_values("ScoutFitScore", ascending=False).head(1)
     cz_top = external_czech.sort_values("ScoutFitScore", ascending=False).head(1)
-    team_cols = st.columns(5)
-    with team_cols[0]:
-        metric_card("Czech players", f"{len(czech_df):,}", "Fortuna + Chance Narodni")
-    with team_cols[1]:
-        metric_card("Czech leagues", f"{czech_df['LeagueLabel'].nunique():,}", "loaded in model")
-    with team_cols[2]:
-        metric_card("Hradec squad", f"{len(hradec_df):,}", "players in model")
-    with team_cols[3]:
-        metric_card("Hradec median fit", "n/a" if hradec_df.empty else f"{hradec_df['ScoutFitScore'].median():.1f}", "balanced model")
-    with team_cols[4]:
-        metric_card("Best Hradec", "n/a" if h_top.empty else str(h_top.iloc[0]["PlayerName"]), "current top signal")
 
     if hradec_df.empty:
         st.info("No FC Hradec Kralove rows were found in the loaded model outputs.")
         return
-
-    st.markdown(
-        """
-        <div class="note-box">
-            Team view is intentionally compact: first understand Hradec's own squad, then compare it with the Czech market, then use the gaps to decide where to scout.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     squad_cols = [
         "PlayerName",
@@ -3421,6 +3377,17 @@ with st.sidebar:
         )
     st.button("✕  Reset all filters", on_click=reset_filters, type="secondary", width="stretch", key="sidebar_reset_btn")
 
+    # ── Quick view ──────────────────────────────────────────────
+    st.markdown("<div class='sbar-hdr'>Quick view</div>", unsafe_allow_html=True)
+    _qm_sidebar = st.session_state.get("quick_mode", "Full board")
+    _qs_cols = st.columns(2)
+    with _qs_cols[0]:
+        st.button("Full board",  key="qm_full",     type="primary" if _qm_sidebar == "Full board"       else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
+        st.button("Elite",       key="qm_elite",    type="primary" if _qm_sidebar == "Elite quality"    else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
+    with _qs_cols[1]:
+        st.button("U23",         key="qm_u23",      type="primary" if _qm_sidebar == "U23 quality"      else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
+        st.button("Reliable",    key="qm_reliable", type="primary" if _qm_sidebar == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
+
 mask = (
     df["PositionGroup"].astype(str).isin(positions)
     & df["BundleLabel"].astype(str).isin(bundles)
@@ -3463,87 +3430,25 @@ if filtered.empty:
     )
     st.stop()
 
-# ── Quick-mode filter chips ─────────────────────────────────────────────────
-# Use on_click= so set_quick_mode runs BEFORE widgets are instantiated (avoids
-# "cannot modify key after widget is rendered" StreamlitAPIException).
 _shortlist_count = len(st.session_state.get("shortlist_players", []))
-_qm = st.session_state.get("quick_mode", "Full board")
-_qm_a, _qm_b, _qm_c, _qm_d, _stat = st.columns([1, 1, 1, 1, 1])
-with _qm_a:
-    st.button("Full board",  key="qm_full",     type="primary" if _qm == "Full board"       else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
-with _qm_b:
-    st.button("U23",         key="qm_u23",      type="primary" if _qm == "U23 quality"      else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
-with _qm_c:
-    st.button("Elite",       key="qm_elite",    type="primary" if _qm == "Elite quality"    else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
-with _qm_d:
-    st.button("Reliable",    key="qm_reliable", type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
-with _stat:
-    st.markdown(
-        f"<div style='text-align:right;padding:6px 0;'>"
-        f"<span style='color:var(--ink);font-size:1rem;font-weight:900;'>{len(filtered):,}</span>"
-        f"<span style='color:var(--faint);font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-left:5px;'>of {len(df):,}</span>"
-        f"<br><span style='color:var(--teal);font-size:.62rem;font-weight:700;'>★ {_shortlist_count} shortlisted</span>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
 
 quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, case_tab, export_tab = st.tabs(
     ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "💼 Case Analysis", "📥 Export"]
 )
 
 with quality_tab:
-    # Position focus — filters board to one role (quality_tab only)
+    # Position focus
     _pos_options = ["All positions"] + sorted(filtered["PositionGroup"].dropna().astype(str).unique().tolist())
-    _pos_focus = st.segmented_control("Position", _pos_options, default="All positions", key="pos_focus_rail")
+    _pos_focus = st.segmented_control("Position", _pos_options, default="All positions", key="pos_focus_rail", label_visibility="collapsed")
     _tab_filtered = filtered.loc[filtered["PositionGroup"].eq(_pos_focus)].copy() if _pos_focus and _pos_focus != "All positions" else filtered
 
-    # ── KPI Cockpit ────────────────────────────────────────────────────────
-    _role_stats = (
-        _tab_filtered.groupby("PositionGroup")
-        .agg(Count=("PlayerName", "count"), MedQ=("QualityScore", "median"))
-        .round(1).reset_index().sort_values("MedQ", ascending=False)
-    )
-    _tab_high_quality_count = 0 if _tab_filtered.empty else int(_tab_filtered["QualityTier"].isin(["High quality", "Elite"]).sum())
-    _tab_median_quality = "n/a" if _tab_filtered.empty else f"{_tab_filtered['QualityScore'].median():.1f}"
-    _tab_median_impact = "n/a" if _tab_filtered.empty else f"{_tab_filtered['ProfileScore'].median():.1f}"
-    _tab_leader = _tab_filtered.head(1)
-    _tab_leader_name = "No player" if _tab_leader.empty else str(_tab_leader.iloc[0]["PlayerName"])
-    _tab_leader_score = "n/a" if _tab_leader.empty else f"{_tab_leader.iloc[0]['QualityScore']:.1f}"
-    _tab_best_role = "n/a" if _tab_filtered.empty else _tab_filtered.groupby("PositionGroup")["QualityScore"].median().sort_values(ascending=False).index[0]
-    _cockpit_pct = f"{len(_tab_filtered)*100//max(len(df),1)}%"
-    _hq_pct = f"{_tab_high_quality_count*100//max(len(_tab_filtered),1)}%"
+    _sl_badge = f"  ·  <strong style='color:var(--teal);'>★ {_shortlist_count} shortlisted</strong>" if _shortlist_count else ""
     st.markdown(
-        '<div class="scouting-cockpit"><div class="cockpit-grid">'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Filtered players</div>'
-        f'<div class="cockpit-value">{len(_tab_filtered):,}</div>'
-        f'<div class="cockpit-note">{_cockpit_pct} of {len(df):,} in model</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Elite / High quality</div>'
-        f'<div class="cockpit-value">{_tab_high_quality_count}</div>'
-        f'<div class="cockpit-note">{_hq_pct} of filtered set</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Median quality</div>'
-        f'<div class="cockpit-value">{_tab_median_quality}</div>'
-        f'<div class="cockpit-note">Median impact: {_tab_median_impact}</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">No. 1 ranked</div>'
-        f'<div class="cockpit-value" style="font-size:.95rem;line-height:1.25;">{escape(_tab_leader_name)}</div>'
-        f'<div class="cockpit-note">Quality {_tab_leader_score}</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Strongest role</div>'
-        f'<div class="cockpit-value">{escape(str(_tab_best_role))}</div>'
-        f'<div class="cockpit-note">Highest median quality</div></div>'
-        '</div></div>',
+        f"<div style='font-size:.68rem;color:var(--faint);margin-bottom:6px;'>"
+        f"<strong style='color:var(--ink);'>{len(_tab_filtered):,}</strong> players{_sl_badge}"
+        f"</div>",
         unsafe_allow_html=True,
     )
-    # Role rail — one tile per position showing median quality + player count
-    _rr_html = '<div class="role-rail">'
-    for _, _rr in _role_stats.iterrows():
-        _rr_html += (
-            f'<div class="role-cell">'
-            f'<div class="role-cell-role">{escape(str(_rr["PositionGroup"]))}</div>'
-            f'<div class="role-cell-score">{_rr["MedQ"]:.0f}</div>'
-            f'<div class="role-cell-count">{int(_rr["Count"])} players</div>'
-            f'</div>'
-        )
-    _rr_html += '</div>'
-    st.markdown(_rr_html, unsafe_allow_html=True)
 
     quality_cols = [
         "PlayerName",
