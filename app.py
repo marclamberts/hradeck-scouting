@@ -1282,7 +1282,8 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-WORKSPACES = ["Scouting", "Recruitment", "Goalkeepers", "Team", "Model"]
+WORKSPACES = ["Recruitment", "Scouting", "Goalkeepers", "Team", "Model"]
+WYSCOUT_DB_DIR = APP_DIR / "data" / "Wyscout DB"
 
 
 def set_workspace(section: str) -> None:
@@ -1292,7 +1293,7 @@ def set_workspace(section: str) -> None:
 
 
 def enter_scouting_workspace() -> None:
-    set_workspace("Scouting")
+    set_workspace("Recruitment")
 
 
 def render_workspace_nav(location: str = "top") -> None:
@@ -1323,6 +1324,213 @@ def czech_market(df: pd.DataFrame) -> pd.DataFrame:
 def hradec_squad(df: pd.DataFrame) -> pd.DataFrame:
     team = df.get("TeamName", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
     return df.loc[team.str.contains("hradec|kralove|králové", regex=True)].copy()
+
+
+def _load_wyscout_file(path: Path) -> pd.DataFrame:
+    suffix = path.suffix.lower()
+    if suffix in (".xlsx", ".xls"):
+        try:
+            return _clean_columns(pd.read_excel(path))
+        except Exception:
+            xl = pd.ExcelFile(path)
+            frames = []
+            for sheet in xl.sheet_names:
+                try:
+                    frames.append(_clean_columns(pd.read_excel(xl, sheet_name=sheet)))
+                except Exception:
+                    pass
+            return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    elif suffix == ".csv":
+        for enc in ("utf-8", "latin-1", "cp1252"):
+            try:
+                return _clean_columns(pd.read_csv(path, encoding=enc))
+            except Exception:
+                continue
+    return pd.DataFrame()
+
+
+def render_scouting_workspace() -> None:
+    st.markdown("<div class='workspace-label'>🔍 Scouting — Wyscout database browser</div>", unsafe_allow_html=True)
+
+    wyscout_files = sorted([
+        p for p in WYSCOUT_DB_DIR.glob("*")
+        if p.suffix.lower() in (".xlsx", ".xls", ".csv") and not p.name.startswith("~")
+    ], key=lambda p: p.name.lower())
+
+    if not wyscout_files:
+        st.markdown(
+            '<div class="note-box" style="border-left-color:var(--amber);">'
+            '<strong style="color:var(--amber);">No Wyscout files found.</strong><br>'
+            'Upload your exported Wyscout Excel or CSV files to:<br>'
+            '<code style="color:var(--teal);background:rgba(16,212,170,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code><br><br>'
+            'Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong>. '
+            'Any Wyscout export works — player lists, match data, league exports.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # File selector
+    file_names = [p.name for p in wyscout_files]
+    _ws_key = "wyscout_selected_file"
+    selected_name = st.selectbox("Data file", file_names, key=_ws_key)
+    selected_path = WYSCOUT_DB_DIR / selected_name
+
+    @st.cache_data(show_spinner=False, ttl=300)
+    def _cached_wyscout(path_str: str) -> pd.DataFrame:
+        return _load_wyscout_file(Path(path_str))
+
+    with st.spinner("Loading…"):
+        ws_df = _cached_wyscout(str(selected_path))
+
+    if ws_df.empty:
+        st.warning(f"Could not read data from **{selected_name}**. Check that the file is a valid Wyscout export.")
+        return
+
+    _mod_ts = selected_path.stat().st_mtime
+    from datetime import datetime as _dt
+    _file_date = _dt.fromtimestamp(_mod_ts).strftime("%-d %b %Y")
+
+    # KPI tiles
+    _ws_numeric_cols = ws_df.select_dtypes(include=[np.number]).columns.tolist()
+    _ws_text_cols = ws_df.select_dtypes(exclude=[np.number]).columns.tolist()
+    _player_col = next((c for c in ["Player", "PlayerName", "Name", "player", "name"] if c in ws_df.columns), None)
+    _team_col = next((c for c in ["Team", "TeamName", "Club", "team", "club"] if c in ws_df.columns), None)
+    _league_col = next((c for c in ["League", "Competition", "LeagueLabel", "league", "competition"] if c in ws_df.columns), None)
+    _pos_col = next((c for c in ["Position", "PositionGroup", "Pos", "position", "pos"] if c in ws_df.columns), None)
+    _age_col = next((c for c in ["Age", "AgeYears", "age"] if c in ws_df.columns), None)
+
+    st.markdown(
+        '<div class="scouting-cockpit"><div class="cockpit-grid">'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Rows</div>'
+        f'<div class="cockpit-value">{len(ws_df):,}</div>'
+        f'<div class="cockpit-note">{len(ws_df.columns)} columns · {_file_date}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Players</div>'
+        f'<div class="cockpit-value">{ws_df[_player_col].nunique() if _player_col else "?"}</div>'
+        f'<div class="cockpit-note">unique names</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Teams</div>'
+        f'<div class="cockpit-value">{ws_df[_team_col].nunique() if _team_col else "?"}</div>'
+        f'<div class="cockpit-note">in this file</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Leagues</div>'
+        f'<div class="cockpit-value">{ws_df[_league_col].nunique() if _league_col else "?"}</div>'
+        f'<div class="cockpit-note">competitions</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Numeric metrics</div>'
+        f'<div class="cockpit-value">{len(_ws_numeric_cols)}</div>'
+        f'<div class="cockpit-note">{len(_ws_text_cols)} text columns</div></div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Filters
+    filt_cols = st.columns([1, 1, 1, 1])
+    ws_filtered = ws_df.copy()
+
+    with filt_cols[0]:
+        if _pos_col:
+            pos_opts = sorted(ws_df[_pos_col].dropna().astype(str).unique())
+            sel_pos = st.multiselect("Position", pos_opts, default=pos_opts, key="ws_pos_filter")
+            ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
+    with filt_cols[1]:
+        if _team_col:
+            team_opts = sorted(ws_df[_team_col].dropna().astype(str).unique())
+            sel_teams = st.multiselect("Team", team_opts, default=team_opts, key="ws_team_filter")
+            ws_filtered = ws_filtered.loc[ws_filtered[_team_col].astype(str).isin(sel_teams)]
+    with filt_cols[2]:
+        if _league_col:
+            league_opts = sorted(ws_df[_league_col].dropna().astype(str).unique())
+            sel_leagues = st.multiselect("League", league_opts, default=league_opts, key="ws_league_filter")
+            ws_filtered = ws_filtered.loc[ws_filtered[_league_col].astype(str).isin(sel_leagues)]
+    with filt_cols[3]:
+        if _age_col and ws_df[_age_col].dtype in [np.float64, np.int64, float, int]:
+            _age_min = float(np.floor(ws_df[_age_col].min()))
+            _age_max = float(np.ceil(ws_df[_age_col].max()))
+            if _age_min < _age_max:
+                sel_age = st.slider("Age", _age_min, _age_max, (_age_min, _age_max), step=1.0, key="ws_age_filter")
+                ws_filtered = ws_filtered.loc[ws_filtered[_age_col].between(sel_age[0], sel_age[1])]
+
+    ws_search = st.text_input("Search player or team", key="ws_search", placeholder="Type name…")
+    if ws_search:
+        _hay_cols = [c for c in [_player_col, _team_col] if c]
+        if _hay_cols:
+            _haystack = ws_filtered[_hay_cols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
+            ws_filtered = ws_filtered.loc[_haystack.str.contains(ws_search.lower(), regex=False)]
+
+    st.markdown(
+        f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:4px 0 8px;">'
+        f'Showing <span style="color:var(--ink);">{len(ws_filtered):,}</span> of {len(ws_df):,} rows'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Sort control
+    sort_opts = [c for c in _ws_numeric_cols[:20] if c in ws_filtered.columns]
+    sort_tabs, data_tab = st.tabs(["📋 Data table", "📊 Column explorer"])
+
+    with sort_tabs:
+        if sort_opts:
+            sort_col_sel = st.selectbox("Sort by", sort_opts, key="ws_sort_col")
+            ws_display = ws_filtered.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
+        else:
+            ws_display = ws_filtered.reset_index(drop=True)
+        col_config = {}
+        for c in _ws_numeric_cols:
+            if c in ws_display.columns:
+                _cmin = float(ws_display[c].min()) if not ws_display[c].isna().all() else 0.0
+                _cmax = float(ws_display[c].max()) if not ws_display[c].isna().all() else 100.0
+                if _cmax > _cmin and _cmax <= 100 and _cmin >= 0:
+                    col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
+        st.dataframe(ws_display, use_container_width=True, hide_index=True, height=560, column_config=col_config)
+        st.download_button(
+            "⬇ Download filtered CSV",
+            data=ws_filtered.to_csv(index=False).encode("utf-8"),
+            file_name=f"wyscout_{selected_name.replace(' ', '_').lower()}_filtered.csv",
+            mime="text/csv",
+            width="stretch",
+        )
+
+    with data_tab:
+        if _ws_numeric_cols:
+            _explore_col = st.selectbox("Metric to explore", _ws_numeric_cols, key="ws_explore_col")
+            if _explore_col in ws_filtered.columns:
+                _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
+                _hist_df = pd.DataFrame({"value": _series})
+                _hist_chart = (
+                    alt.Chart(_hist_df)
+                    .mark_bar(color="#10d4aa", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                    .encode(
+                        x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
+                                axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                        y=alt.Y("count():Q", title="Players",
+                                axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
+                    )
+                    .properties(height=280, title=alt.TitleParams(f"Distribution of {_explore_col}", color="#8fa3b1", fontSize=12))
+                    .configure_view(fill="#0f1623", stroke=None)
+                    .configure(background="#080c14")
+                )
+                st.altair_chart(_hist_chart, use_container_width=True)
+                _stats = _series.describe().rename({
+                    "count": "Count", "mean": "Mean", "std": "Std dev",
+                    "min": "Min", "25%": "25th pctile", "50%": "Median",
+                    "75%": "75th pctile", "max": "Max",
+                })
+                st.dataframe(_stats.reset_index().rename(columns={"index": "Stat", 0: "Value"}).round(3),
+                             use_container_width=True, hide_index=True)
+                if _player_col and not ws_filtered.empty:
+                    top10 = ws_filtered[[_player_col] + ([_team_col] if _team_col else []) + [_explore_col]].dropna(subset=[_explore_col]).sort_values(_explore_col, ascending=False).head(10)
+                    st.markdown(f"<div class='workspace-label' style='font-size:.58rem;margin:10px 0 6px;'>Top 10 by {_explore_col}</div>", unsafe_allow_html=True)
+                    st.dataframe(top10.reset_index(drop=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("No numeric columns detected in this file.")
+
+    # File index when multiple files loaded
+    if len(wyscout_files) > 1:
+        with st.expander(f"All files in Wyscout DB ({len(wyscout_files)})", expanded=False):
+            _file_rows = []
+            for fp in wyscout_files:
+                _fts = _dt.fromtimestamp(fp.stat().st_mtime).strftime("%-d %b %Y")
+                _fsize = f"{fp.stat().st_size / 1024:.0f} KB"
+                _file_rows.append({"File": fp.name, "Size": _fsize, "Modified": _fts})
+            st.dataframe(pd.DataFrame(_file_rows), use_container_width=True, hide_index=True)
 
 
 def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
@@ -1487,7 +1695,7 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     st.markdown(
         """
         <div class="note-box">
-            Goalkeepers are kept out of the Scouting workspace and collected here so the board only compares GK profiles with other GK profiles.
+            Goalkeepers are kept separate so the board only compares GK profiles with other GK profiles.
         </div>
         """,
         unsafe_allow_html=True,
@@ -1549,191 +1757,88 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     )
 
 
-def render_recruitment_workspace(data: pd.DataFrame) -> None:
-    recruitment_df = add_scouting_fields(data, BALANCED_WEIGHTS)
-    recruitment_df = recruitment_df.loc[~recruitment_df["PositionGroup"].astype(str).eq("GK")].copy()
+def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
+    """Transfer value, resale upside, style-fit and cost-risk analysis tab."""
+    rd = filtered_df.copy()
+    value_score = safe_col(rd, "ValueRecruitmentScore")
+    resale_score = safe_col(rd, "AgeResaleScore")
+    style_score = safe_col(rd, "FCHKStyleScore", safe_col(rd, "SmartClubScore").median())
+    smart_club_score = safe_col(rd, "SmartClubScore", style_score.median())
+    success_score = safe_col(rd, "SuccessProbability")
+    readiness_score = safe_col(rd, "PerformanceReliabilityScore")
+    wage_risk = safe_col(rd, "WageRisk")
+    fee_risk = safe_col(rd, "FeeRisk")
 
-    st.markdown("<div class='workspace-label'>Recruitment workspace</div>", unsafe_allow_html=True)
-
-    if recruitment_df.empty:
-        st.info("No outfield recruitment rows were found in the loaded model outputs.")
-        return
-
-    value_score = safe_col(recruitment_df, "ValueRecruitmentScore")
-    resale_score = safe_col(recruitment_df, "AgeResaleScore")
-    style_score = safe_col(recruitment_df, "FCHKStyleScore", safe_col(recruitment_df, "SmartClubScore").median())
-    smart_club_score = safe_col(recruitment_df, "SmartClubScore", style_score.median())
-    success_score = safe_col(recruitment_df, "SuccessProbability")
-    readiness_score = safe_col(recruitment_df, "PerformanceReliabilityScore")
-    wage_risk = safe_col(recruitment_df, "WageRisk")
-    fee_risk = safe_col(recruitment_df, "FeeRisk")
-
-    recruitment_df["RecruitmentCaseScore"] = (
-        value_score * 0.24
-        + resale_score * 0.20
-        + style_score * 0.18
-        + smart_club_score * 0.14
-        + success_score * 0.14
-        + readiness_score * 0.10
-        - wage_risk * 0.04
-        - fee_risk * 0.04
+    rd["CaseScore"] = (
+        value_score * 0.24 + resale_score * 0.20 + style_score * 0.18
+        + smart_club_score * 0.14 + success_score * 0.14 + readiness_score * 0.10
+        - wage_risk * 0.04 - fee_risk * 0.04
     ).clip(0, 100)
-    recruitment_df["StyleFit"] = np.where(style_score.ge(70), "Strong", np.where(style_score.ge(55), "Useful", "Question"))
-    recruitment_df["ResaleProfile"] = np.where(resale_score.ge(70), "Upside", np.where(resale_score.ge(55), "Neutral", "Limited"))
-    recruitment_df["CostRisk"] = np.select(
+    rd["StyleFit"] = np.where(style_score.ge(70), "Strong", np.where(style_score.ge(55), "Useful", "Question"))
+    rd["CostRisk"] = np.select(
         [fee_risk.ge(70) | wage_risk.ge(70), fee_risk.ge(50) | wage_risk.ge(50)],
-        ["High", "Medium"],
-        default="Low",
+        ["High", "Medium"], default="Low",
     )
-    recruitment_df["RecruitmentNote"] = (
-        "Value "
-        + value_score.round(0).astype(int).astype(str)
-        + " · resale "
-        + resale_score.round(0).astype(int).astype(str)
-        + " · style "
-        + style_score.round(0).astype(int).astype(str)
-        + " · cost risk "
-        + recruitment_df["CostRisk"].astype(str)
-    )
+    rd = rd.sort_values(["CaseScore", "ValueRecruitmentScore"], ascending=False)
 
-    recruitment_df = recruitment_df.sort_values(["RecruitmentCaseScore", "ValueRecruitmentScore"], ascending=False)
-
-    metric_cols = st.columns(5)
-    with metric_cols[0]:
-        metric_card("Recruitment pool", f"{len(recruitment_df):,}", "outfield players")
-    with metric_cols[1]:
-        metric_card("Median value", f"{value_score.median():.1f}", "transfer value")
-    with metric_cols[2]:
-        metric_card("Median resale", f"{resale_score.median():.1f}", "age upside")
-    with metric_cols[3]:
-        metric_card("Strong style fit", f"{recruitment_df['StyleFit'].eq('Strong').sum():,}", "FCHK / smart-club")
-    with metric_cols[4]:
-        metric_card("Low cost risk", f"{recruitment_df['CostRisk'].eq('Low').sum():,}", "fee + wage")
+    _kpi_cols = st.columns(4)
+    with _kpi_cols[0]: metric_card("Median transfer value", f"{value_score.median():.1f}", "0–100 scale")
+    with _kpi_cols[1]: metric_card("Median resale upside", f"{resale_score.median():.1f}", "age × potential")
+    with _kpi_cols[2]: metric_card("Strong style fit", f"{rd['StyleFit'].eq('Strong').sum():,}", "FCHK + smart-club")
+    with _kpi_cols[3]: metric_card("Low cost risk", f"{rd['CostRisk'].eq('Low').sum():,}", "fee + wage combined")
 
     st.markdown(
-        """
-        <div class="note-box">
-            This view ranks recruitment cases: value, resale upside, FCHK style fit, smart-club fit, success probability, readiness, and cost risk.
-        </div>
-        """,
+        '<div class="note-box">Case score = value 24% + resale 20% + style fit 18% + smart-club 14% + success 14% + readiness 10% − cost risk 8%.</div>',
         unsafe_allow_html=True,
     )
 
-    filter_cols = st.columns([1, 1, 1])
-    with filter_cols[0]:
-        role_options = sorted(recruitment_df["PositionGroup"].dropna().astype(str).unique())
-        selected_roles = st.multiselect("Roles", role_options, default=role_options, key="recruitment_roles_filter")
-    with filter_cols[1]:
-        min_resale = st.slider("Minimum resale score", 0, 100, 45, key="recruitment_resale_floor")
-    with filter_cols[2]:
-        style_options = ["Strong", "Useful", "Question"]
-        selected_style_fits = st.multiselect("Style fit", style_options, default=style_options, key="recruitment_style_filter")
+    fc1, fc2, fc3 = st.columns([1, 1, 1])
+    with fc1:
+        role_opts = sorted(rd["PositionGroup"].dropna().astype(str).unique())
+        sel_roles = st.multiselect("Roles", role_opts, default=role_opts, key="ca_roles")
+    with fc2:
+        min_resale = st.slider("Min resale score", 0, 100, 40, key="ca_resale")
+    with fc3:
+        sel_style = st.multiselect("Style fit", ["Strong", "Useful", "Question"], default=["Strong", "Useful", "Question"], key="ca_style")
 
-    filtered_recruitment = recruitment_df.loc[
-        recruitment_df["PositionGroup"].astype(str).isin(selected_roles)
-        & recruitment_df["AgeResaleScore"].ge(min_resale)
-        & recruitment_df["StyleFit"].isin(selected_style_fits)
-    ].copy()
+    rd = rd.loc[rd["PositionGroup"].astype(str).isin(sel_roles) & rd["AgeResaleScore"].ge(min_resale) & rd["StyleFit"].isin(sel_style)].copy()
 
-    left, right = st.columns([1.2, 1])
+    left, right = st.columns([1.3, 1])
     with left:
-        st.subheader("Best recruitment cases")
-        board_cols = [
-            "PlayerName",
-            "TeamName",
-            "PositionGroup",
-            "BundleLabel",
-            "AgeYears",
-            "RecruitmentCaseScore",
-            "ValueRecruitmentScore",
-            "AgeResaleScore",
-            "FCHKStyleScore",
-            "SmartClubScore",
-            "SuccessProbability",
-            "ResaleProfile",
-            "StyleFit",
-            "CostRisk",
-            "PrimaryPlayerStyle",
-            "SmartClubTop3",
-            "RecruitmentNote",
-        ]
-        board = filtered_recruitment[[c for c in board_cols if c in filtered_recruitment.columns]].head(100).rename(
-            columns={
-                "PlayerName": "Player",
-                "TeamName": "Team",
-                "PositionGroup": "Role",
-                "BundleLabel": "League",
-                "AgeYears": "Age",
-                "RecruitmentCaseScore": "Case",
-                "ValueRecruitmentScore": "Value",
-                "AgeResaleScore": "Resale",
-                "FCHKStyleScore": "FCHK Style",
-                "SmartClubScore": "Smart Club",
-                "SuccessProbability": "Success",
-                "PrimaryPlayerStyle": "Playing Style",
-                "SmartClubTop3": "Style Clubs",
-                "RecruitmentNote": "Why",
-            }
-        )
+        st.markdown("<div class='workspace-label' style='font-size:.58rem;margin-bottom:6px;'>Best recruitment cases</div>", unsafe_allow_html=True)
+        _board_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","CaseScore","ValueRecruitmentScore","AgeResaleScore","SuccessProbability","StyleFit","CostRisk","PrimaryPlayerStyle","SmartClubTop3"] if c in rd.columns]
         st.dataframe(
-            board.round(2),
-            use_container_width=True,
-            hide_index=True,
+            rd[_board_cols].head(100).rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","CaseScore":"Case","ValueRecruitmentScore":"Value","AgeResaleScore":"Resale","SuccessProbability":"Success","PrimaryPlayerStyle":"Style","SmartClubTop3":"Style Clubs"}).round(2),
+            use_container_width=True, hide_index=True,
             column_config={
                 "Case": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
                 "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
                 "Resale": st.column_config.ProgressColumn("Resale", min_value=0, max_value=100, format="%.1f"),
-                "FCHK Style": st.column_config.ProgressColumn("FCHK Style", min_value=0, max_value=100, format="%.1f"),
-                "Smart Club": st.column_config.ProgressColumn("Smart Club", min_value=0, max_value=100, format="%.1f"),
                 "Success": st.column_config.ProgressColumn("Success", min_value=0, max_value=100, format="%.1f"),
+                "Age": st.column_config.NumberColumn("Age", format="%.1f"),
             },
         )
-
     with right:
-        st.subheader("Recruitment shape")
-        shape = (
-            filtered_recruitment.groupby(["PositionGroup", "StyleFit"])
-            .agg(Players=("PlayerName", "count"), MedianCase=("RecruitmentCaseScore", "median"), MedianResale=("AgeResaleScore", "median"))
-            .round(1)
-            .reset_index()
-            .sort_values("MedianCase", ascending=False)
-        )
-        st.dataframe(
-            shape,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "MedianCase": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
-                "MedianResale": st.column_config.ProgressColumn("Resale", min_value=0, max_value=100, format="%.1f"),
-            },
-        )
-
-        chart_df = filtered_recruitment[
-            ["PlayerName", "TeamName", "PositionGroup", "RecruitmentCaseScore", "AgeResaleScore", "FCHKStyleScore", "CostRisk"]
-        ].dropna()
+        chart_df = rd[["PlayerName","PositionGroup","CaseScore","AgeResaleScore","FCHKStyleScore","CostRisk"]].dropna() if "FCHKStyleScore" in rd.columns else pd.DataFrame()
         if not chart_df.empty:
             case_chart = (
                 alt.Chart(chart_df.head(300))
                 .mark_circle(size=72, opacity=0.78)
                 .encode(
-                    x=alt.X("AgeResaleScore:Q", title="Resale upside"),
-                    y=alt.Y("FCHKStyleScore:Q", title="Playing-style fit"),
-                    color=alt.Color("CostRisk:N", title="Cost risk", scale=alt.Scale(domain=["Low", "Medium", "High"], range=["#2a9d8f", "#f4a261", "#e76f51"])),
+                    x=alt.X("AgeResaleScore:Q", title="Resale upside", axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                    y=alt.Y("FCHKStyleScore:Q", title="Playing-style fit", axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                    color=alt.Color("CostRisk:N", title="Cost risk", scale=alt.Scale(domain=["Low","Medium","High"], range=["#2a9d8f","#f4a261","#e76f51"])),
                     shape=alt.Shape("PositionGroup:N", title="Role"),
-                    tooltip=[
-                        "PlayerName",
-                        "TeamName",
-                        "PositionGroup",
-                        alt.Tooltip("RecruitmentCaseScore:Q", format=".1f"),
-                        alt.Tooltip("AgeResaleScore:Q", format=".1f"),
-                        alt.Tooltip("FCHKStyleScore:Q", format=".1f"),
-                        "CostRisk",
-                    ],
+                    tooltip=["PlayerName","PositionGroup",alt.Tooltip("CaseScore:Q",format=".1f"),alt.Tooltip("AgeResaleScore:Q",format=".1f"),"CostRisk"],
                 )
-                .properties(height=340)
+                .properties(height=380, title=alt.TitleParams("Resale upside vs style fit", color="#8fa3b1", fontSize=12))
+                .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
                 .interactive()
             )
             st.altair_chart(case_chart, use_container_width=True)
+        else:
+            _shape = rd.groupby(["PositionGroup","StyleFit"]).agg(Players=("PlayerName","count"),MedianCase=("CaseScore","median")).round(1).reset_index().sort_values("MedianCase",ascending=False)
+            st.dataframe(_shape, use_container_width=True, hide_index=True)
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
@@ -2794,7 +2899,7 @@ if "shortlist_data" not in st.session_state:
 if "show_scouting_workspace" not in st.session_state:
     st.session_state["show_scouting_workspace"] = False
 if "active_workspace" not in st.session_state:
-    st.session_state["active_workspace"] = "Scouting"
+    st.session_state["active_workspace"] = "Recruitment"
 
 if not st.session_state["show_scouting_workspace"]:
     _ldata = load_default_data()
@@ -2864,16 +2969,16 @@ if not st.session_state["show_scouting_workspace"]:
 
     # ── Dashboard icon cards ──────────────────────────────────────────────────
     _workspace_meta = {
-        "Scouting":    ("📊", "Scouting Board",   "Quality rankings, player profiles, radar charts & comparisons"),
-        "Recruitment": ("💼", "Recruitment",       "Transfer value, resale upside, style-fit & cost-risk cases"),
-        "Goalkeepers": ("🧤", "Goalkeepers",       "GK-exclusive boards, shot-stopping metrics & reliability"),
-        "Team":        ("🏟️", "Team Intelligence", "Squad gaps, Czech market benchmarks & watchlist"),
-        "Model":       ("🔬", "Model & Data",      "Smart club closeness, data coverage & confidence bands"),
+        "Recruitment": ("📊", "Recruitment Board",  "Quality rankings, player profiles, radar charts, transfer value & signing cases"),
+        "Scouting":    ("🔍", "Scouting",           "Raw Wyscout data browser — search & filter imported scouting files"),
+        "Goalkeepers": ("🧤", "Goalkeepers",        "GK-exclusive boards, shot-stopping metrics & reliability"),
+        "Team":        ("🏟️", "Team Intelligence",  "Squad gaps, Czech market benchmarks & watchlist"),
+        "Model":       ("🔬", "Model & Data",       "Smart club closeness, data coverage & confidence bands"),
     }
     landing_cols = st.columns(len(WORKSPACES), gap="medium")
     for idx, section in enumerate(WORKSPACES):
         icon, title, desc = _workspace_meta.get(section, ("⚽", section, ""))
-        is_primary = section == "Scouting"
+        is_primary = section == "Recruitment"
         with landing_cols[idx]:
             _card_cls = "dash-card dash-card--primary" if is_primary else "dash-card"
             st.markdown(
@@ -2906,7 +3011,7 @@ if not st.session_state["show_scouting_workspace"]:
 
 render_workspace_nav("main")
 
-active_workspace = st.session_state.get("active_workspace", "Scouting")
+active_workspace = st.session_state.get("active_workspace", "Recruitment")
 data = load_default_data()
 model_metadata = load_model_metadata()
 _rec_file = _model_file("recruitment")
@@ -2922,11 +3027,11 @@ st.markdown(
     f'</div>',
     unsafe_allow_html=True,
 )
-if active_workspace != "Scouting":
-    if active_workspace == "Model":
+if active_workspace != "Recruitment":
+    if active_workspace == "Scouting":
+        render_scouting_workspace()
+    elif active_workspace == "Model":
         render_model_workspace(data, model_metadata)
-    elif active_workspace == "Recruitment":
-        render_recruitment_workspace(data)
     elif active_workspace == "Goalkeepers":
         render_goalkeepers_workspace(data)
     elif active_workspace == "Team":
@@ -2934,13 +3039,11 @@ if active_workspace != "Scouting":
     else:
         st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
         st.markdown(
-            f"""
-            <div class="section-card">
-                <div class="metric-label">Coming next</div>
-                <div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>
-                <div class="metric-caption">This workspace is ready in the navigation, but the detailed tools are still being shaped. Use the buttons above to switch back to Scouting or move between workspaces.</div>
-            </div>
-            """,
+            f'<div class="section-card">'
+            f'<div class="metric-label">Coming next</div>'
+            f'<div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>'
+            f'<div class="metric-caption">This workspace is being built. Use the navigation above to switch between workspaces.</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
     st.stop()
@@ -2966,13 +3069,13 @@ with st.sidebar:
     st.markdown(
         f"""
         <div class="sidebar-brand">
-            <div class="sidebar-brand-title">⚽ FCHK Scouting IQ</div>
+            <div class="sidebar-brand-title">⚽ FCHK Recruitment IQ</div>
             <div class="sidebar-brand-meta">{len(outfield_data):,} outfield · GK separate</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("<div class='menu-caption'>Pure player quality only — recruitment value, resale, wage and fee risk are in the Recruitment workspace.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='menu-caption'>Quality &amp; fit model — adjust lens weights to rank players for different recruitment profiles.</div>", unsafe_allow_html=True)
     model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
     defaults = preset_weights[model_preset]
     with st.expander("Lens weights", expanded=False):
@@ -3129,8 +3232,8 @@ _pos_focus = st.segmented_control("Position focus", _pos_options, default="All p
 if _pos_focus and _pos_focus != "All positions":
     filtered = filtered.loc[filtered["PositionGroup"].eq(_pos_focus)].copy()
 
-quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, export_tab = st.tabs(
-    ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "📥 Export"]
+quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, case_tab, export_tab = st.tabs(
+    ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "💼 Case Analysis", "📥 Export"]
 )
 
 with quality_tab:
@@ -3630,6 +3733,10 @@ with compare_tab:
             .configure(background="#080c14")
         )
         st.altair_chart(compare_chart, use_container_width=True)
+
+with case_tab:
+    st.markdown("<div class='workspace-label'>💼 Case Analysis — transfer value, resale &amp; style fit</div>", unsafe_allow_html=True)
+    render_case_analysis_tab(filtered)
 
 with export_tab:
     st.markdown("<div class='workspace-label'>📥 Export — board CSV, PDF report, shortlist</div>", unsafe_allow_html=True)
