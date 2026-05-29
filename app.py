@@ -1545,6 +1545,21 @@ def _load_wyscout_file(path: Path) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def _load_wyscout_tier(paths_and_labels: tuple[tuple[str, str], ...]) -> pd.DataFrame:
+    """Load and combine multiple Wyscout files into one DataFrame.
+    Adds a _League column so the result can be filtered by league."""
+    frames = []
+    for path_str, label in paths_and_labels:
+        df = _load_wyscout_file(Path(path_str))
+        if not df.empty:
+            df["_League"] = label
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 @st.cache_data(show_spinner=False)
 def load_leagues_overview() -> pd.DataFrame:
     path = APP_DIR / "data" / "Leagues Overview.xlsx"
@@ -1657,15 +1672,11 @@ def render_scouting_workspace() -> None:
     def _file_label(p: Path) -> str:
         m = file_meta.get(p.name)
         if m is not None and pd.notna(m.get("League Name")):
-            icon = _TIER_ICONS.get(str(m["Tier Label"]), "")
-            return f"{icon} {m['League Name']}"
-        return p.name
-
-    @st.cache_data(show_spinner=False, ttl=300)
-    def _cached_wyscout(path_str: str) -> pd.DataFrame:
-        return _load_wyscout_file(Path(path_str))
+            return str(m["League Name"])
+        return p.stem
 
     # Initialise filter state so all variables are defined before the sidebar block
+    sel_leagues: list[str] = []
     sel_pos: list[str] = []
     sel_teams: list[str] = []
     sel_age: tuple[float, float] | None = None
@@ -1675,8 +1686,8 @@ def render_scouting_workspace() -> None:
     _ws_text_cols: list[str] = []
     _player_col = _team_col = _pos_col = _age_col = None
     ws_df: pd.DataFrame = pd.DataFrame()
-    selected_name: str = ""
-    selected_path = None
+    sel_tier: str = "All"
+    visible_files: list = []
 
     with st.sidebar:
         st.markdown(
@@ -1687,26 +1698,21 @@ def render_scouting_workspace() -> None:
         )
 
         if wyscout_files:
-            st.markdown("<div class='sbar-hdr'>League</div>", unsafe_allow_html=True)
+            st.markdown("<div class='sbar-hdr'>Tier</div>", unsafe_allow_html=True)
             all_tiers = ["All", "Elite", "Top", "Strong", "Developing", "Lower", "Youth/Grassroots"]
             sel_tier = st.selectbox("Tier", all_tiers, key="ws_tier_filter", label_visibility="collapsed")
 
             visible_files = [p for p in wyscout_files if _tier_of(p.name) == sel_tier] if sel_tier != "All" else wyscout_files
 
             if visible_files:
-                file_labels = [_file_label(p) for p in visible_files]
-                _ws_key = "wyscout_selected_file"
-                if st.session_state.get(_ws_key) not in file_labels:
-                    st.session_state[_ws_key] = file_labels[0]
-
-                selected_label_ws = st.selectbox("League", file_labels, key=_ws_key, label_visibility="collapsed")
-                selected_path = visible_files[file_labels.index(selected_label_ws)]
-                selected_name = selected_path.name
-                ws_df = _cached_wyscout(str(selected_path))
+                # Build the combined dataset for this tier (cached by the set of files)
+                paths_and_labels = tuple((str(p), _file_label(p)) for p in visible_files)
+                with st.spinner(f"Loading {len(visible_files)} league file{'s' if len(visible_files) != 1 else ''}…"):
+                    ws_df = _load_wyscout_tier(paths_and_labels)
 
                 if not ws_df.empty:
-                    _ws_numeric_cols = ws_df.select_dtypes(include=[np.number]).columns.tolist()
-                    _ws_text_cols    = ws_df.select_dtypes(exclude=[np.number]).columns.tolist()
+                    _ws_numeric_cols = [c for c in ws_df.select_dtypes(include=[np.number]).columns if c != "_League"]
+                    _ws_text_cols    = [c for c in ws_df.select_dtypes(exclude=[np.number]).columns if c != "_League"]
                     _player_col = next((c for c in ["Player", "PlayerName", "Name", "player", "name"] if c in ws_df.columns), None)
                     _team_col   = next((c for c in ["Team", "TeamName", "Club", "team", "club"] if c in ws_df.columns), None)
                     _pos_col    = next((c for c in ["Position", "PositionGroup", "Pos", "position", "pos"] if c in ws_df.columns), None)
@@ -1715,8 +1721,12 @@ def render_scouting_workspace() -> None:
                     st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
                     ws_search = st.text_input("Search", key="ws_search", placeholder="Player or team…", label_visibility="collapsed")
 
+                    league_opts = sorted(ws_df["_League"].dropna().astype(str).unique())
+                    if len(league_opts) > 1:
+                        sel_leagues = st.multiselect("League", league_opts, default=[], placeholder="All leagues", key="ws_league_filter")
+
                     if _pos_col:
-                        pos_opts = sorted(ws_df[_pos_col].dropna().astype(str).unique())
+                        pos_opts = sorted(ws_df[_pos_col].replace("", pd.NA).dropna().astype(str).unique())
                         sel_pos = st.multiselect("Position", pos_opts, default=[], placeholder="All positions", key="ws_pos_filter")
 
                     if _team_col:
@@ -1757,12 +1767,13 @@ def render_scouting_workspace() -> None:
         return
 
     if ws_df.empty:
-        if selected_name:
-            st.warning(f"Could not read **{selected_name}**.")
+        st.info("No data loaded. Select a tier in the sidebar.")
         return
 
     # ── Apply filters ─────────────────────────────────────────────────────────
     ws_filtered = ws_df.copy()
+    if sel_leagues:
+        ws_filtered = ws_filtered.loc[ws_filtered["_League"].isin(sel_leagues)]
     if sel_pos and _pos_col:
         ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
     if sel_teams and _team_col:
@@ -1775,55 +1786,49 @@ def render_scouting_workspace() -> None:
             _hay = ws_filtered[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
             ws_filtered = ws_filtered.loc[_hay.str.contains(ws_search.lower(), regex=False)]
 
-    # ── League info strip ─────────────────────────────────────────────────────
-    league_info = file_meta.get(selected_name)
-    if league_info is not None:
-        _t_col = _TIER_COLORS_WS.get(str(league_info.get("Tier Label", "")), "#637d96")
-        _notes_str = f' · <em style="color:var(--faint);font-size:.68rem;">{escape(str(league_info["Notes"]))}</em>' if pd.notna(league_info.get("Notes")) else ""
-        st.markdown(
-            f'<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {_t_col};'
-            f'border-radius:6px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:16px;">'
-            f'<span style="color:{_t_col};font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;">'
-            f'{_TIER_ICONS.get(str(league_info["Tier Label"]),"")} {escape(str(league_info["Tier Label"]))} · Tier {int(league_info["Tier"])}</span>'
-            f'<span style="color:var(--muted);font-size:.72rem;">{escape(str(league_info["Country"]))} · Div {escape(str(league_info["Division"]))}</span>'
-            f'<span style="color:var(--faint);font-size:.68rem;">{int(league_info["Players in DB"]):,} players in DB{_notes_str}</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    # ── Status bar + download ─────────────────────────────────────────────────
+    # ── Status bar ────────────────────────────────────────────────────────────
+    _n_leagues = ws_filtered["_League"].nunique()
+    _league_summary = f"{_n_leagues} league{'s' if _n_leagues != 1 else ''}"
     row_meta_c, dl_c = st.columns([5, 1], gap="small")
     with row_meta_c:
         st.markdown(
             f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding-top:6px;">'
-            f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} rows'
-            f'&nbsp;·&nbsp;{len(ws_filtered.columns)} columns</div>',
+            f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} players'
+            f'&nbsp;·&nbsp;{_league_summary}&nbsp;·&nbsp;{sel_tier}</div>',
             unsafe_allow_html=True,
         )
     with dl_c:
         st.download_button(
             "⬇ CSV",
-            data=ws_filtered.to_csv(index=False).encode("utf-8"),
-            file_name=f"wyscout_{selected_name.replace(' ','_').lower()}_filtered.csv",
+            data=ws_filtered.drop(columns=["_League"], errors="ignore").to_csv(index=False).encode("utf-8"),
+            file_name=f"wyscout_{sel_tier.lower().replace(' ','_')}_filtered.csv",
             mime="text/csv",
             width="stretch",
         )
 
     # ── Main table ────────────────────────────────────────────────────────────
-    if sort_col_sel and sort_col_sel != "Default" and sort_col_sel in ws_filtered.columns:
-        ws_display = ws_filtered.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
+    display_cols = [c for c in ws_filtered.columns if c != "_League"]
+    # Put _League back as "League" at the front for context when viewing multi-league data
+    if ws_filtered["_League"].nunique() > 1:
+        display_cols = ["_League"] + [c for c in display_cols]
+        ws_display_df = ws_filtered[display_cols].rename(columns={"_League": "League"})
     else:
-        ws_display = ws_filtered.reset_index(drop=True)
+        ws_display_df = ws_filtered[display_cols]
+
+    if sort_col_sel and sort_col_sel != "Default" and sort_col_sel in ws_display_df.columns:
+        ws_display_df = ws_display_df.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
+    else:
+        ws_display_df = ws_display_df.reset_index(drop=True)
 
     col_config: dict = {}
     for c in _ws_numeric_cols:
-        if c in ws_display.columns:
-            _cmin = float(ws_display[c].min()) if not ws_display[c].isna().all() else 0.0
-            _cmax = float(ws_display[c].max()) if not ws_display[c].isna().all() else 100.0
+        if c in ws_display_df.columns:
+            _cmin = float(ws_display_df[c].min()) if not ws_display_df[c].isna().all() else 0.0
+            _cmax = float(ws_display_df[c].max()) if not ws_display_df[c].isna().all() else 100.0
             if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
                 col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
 
-    st.dataframe(ws_display, width="stretch", hide_index=True, height=780, column_config=col_config)
+    st.dataframe(ws_display_df, width="stretch", hide_index=True, height=780, column_config=col_config)
 
     # ── Column explorer ───────────────────────────────────────────────────────
     if _ws_numeric_cols:
