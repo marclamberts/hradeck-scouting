@@ -2369,6 +2369,10 @@ st.markdown(
     /* ── GLOBAL ──────────────────────────────────────────────── */
     .stApp { background: var(--bg) !important; color: var(--ink); }
 
+    /* Hide Streamlit header — it intercepts clicks on workspace nav */
+    header[data-testid="stHeader"] { display: none !important; }
+    div[data-testid="stToolbar"]   { display: none !important; }
+
     .block-container {
         padding-top: .5rem;
         padding-bottom: 2rem;
