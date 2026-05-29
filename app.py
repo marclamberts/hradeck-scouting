@@ -909,6 +909,14 @@ def _load_link_db() -> pd.DataFrame:
     return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, ttl=600)
+def _load_wyscout_index() -> pd.DataFrame:
+    p = APP_DIR / "data" / "Wyscout_Player_Index.csv"
+    if p.exists():
+        return pd.read_csv(p)
+    return pd.DataFrame()
+
+
 def _render_wyscout_bars(
     ws_row: pd.Series,
     pos_pool: pd.DataFrame,
@@ -2440,6 +2448,7 @@ def _norm_search(s: object) -> str:
 def render_search_workspace(data: pd.DataFrame) -> None:
     """Cross-database player search with IMPECT pizza + Wyscout percentile bar profile."""
     link_db = _load_link_db()
+    ws_idx  = _load_wyscout_index()
 
     with st.sidebar:
         st.markdown(
@@ -2448,14 +2457,13 @@ def render_search_workspace(data: pd.DataFrame) -> None:
             "<div class='sidebar-brand-meta'>IMPECT + Wyscout combined</div></div></div>",
             unsafe_allow_html=True,
         )
-        if not link_db.empty:
-            _hi = (link_db["MatchConfidence"] == "HIGH").sum()
-            st.markdown(
-                f"<div style='color:var(--faint);font-size:.68rem;padding:6px 0 0 4px;'>"
-                f"Link DB: <strong style='color:var(--ink);'>{len(link_db):,}</strong> entries · "
-                f"<strong style='color:var(--teal);'>{_hi:,}</strong> HIGH confidence</div>",
-                unsafe_allow_html=True,
-            )
+        _ws_idx_count = len(ws_idx) if not ws_idx.empty else 0
+        st.markdown(
+            f"<div style='color:var(--faint);font-size:.68rem;padding:6px 0 0 4px;'>"
+            f"IMPECT: <strong style='color:var(--ink);'>{len(data):,}</strong> players · "
+            f"Wyscout: <strong style='color:var(--ink);'>{_ws_idx_count:,}</strong> players</div>",
+            unsafe_allow_html=True,
+        )
 
     st.markdown(
         "<div class='page-header'>"
@@ -2477,25 +2485,23 @@ def render_search_workspace(data: pd.DataFrame) -> None:
     if len(q) < 2:
         st.markdown(
             "<div class='note-box'>Start typing a player name above. "
-            "Results come from <strong>IMPECT model data</strong> (~4 000 players across 16 leagues). "
-            "When a Wyscout link exists, the profile also shows raw per-90 metrics with percentile bars.</div>",
+            "Results come from <strong>IMPECT model data</strong> and the <strong>Wyscout database</strong> "
+            "(68 000+ players). Wyscout names use abbreviated format — search by last name for best results.</div>",
             unsafe_allow_html=True,
         )
         return
 
     q_norm = _norm_search(q)
-    mask = data["PlayerName"].astype(str).apply(_norm_search).str.contains(q_norm, regex=False)
-    hits = data.loc[mask].copy()
 
-    if hits.empty:
-        st.info(f"No players found matching '{q}'. Check spelling or try a shorter fragment.")
-        return
+    # ── IMPECT search ─────────────────────────────────────────────────────────
+    impect_mask = data["PlayerName"].astype(str).apply(_norm_search).str.contains(q_norm, regex=False)
+    impect_hits = data.loc[impect_mask].copy()
 
-    # Build display results with Wyscout link info
     results_rows: list[dict] = []
-    for idx, row in hits.iterrows():
+    covered_ws: set[tuple[str, str]] = set()  # (file, ws_player_name) already linked
+
+    for idx, row in impect_hits.iterrows():
         pname = str(row.get("PlayerName", ""))
-        # Find best Wyscout link: prefer HIGH, then MEDIUM
         ws_link: pd.Series | None = None
         if not link_db.empty:
             cands = link_db.loc[link_db["IMPECT_Name"].astype(str).apply(_norm_search).eq(_norm_search(pname))]
@@ -2504,21 +2510,64 @@ def render_search_workspace(data: pd.DataFrame) -> None:
                     sub = cands.loc[cands["MatchConfidence"] == conf]
                     if not sub.empty:
                         ws_link = sub.iloc[0]
+                        covered_ws.add((str(ws_link["Wyscout_File"]), str(ws_link["Wyscout_Name"])))
                         break
         results_rows.append({
-            "Player":    pname,
-            "Pos":       str(row.get("PositionGroup", "")),
-            "Team":      str(row.get("TeamName", "")),
-            "League":    str(row.get("BundleLabel", "")),
-            "Age":       round(float(row.get("AgeYears", 0) or 0), 1),
-            "Quality":   round(float(row.get("QualityScore", row.get("CompositeRecruitmentScore", 0)) or 0), 1),
-            "Wyscout":   ws_link["MatchConfidence"] if ws_link is not None else "—",
-            "_data_idx": idx,
-            "_ws_link":  ws_link,
+            "Player":      pname,
+            "Pos":         str(row.get("PositionGroup", "")),
+            "Team":        str(row.get("TeamName", "")),
+            "League":      str(row.get("BundleLabel", "")),
+            "Age":         round(float(row.get("AgeYears", 0) or 0), 1),
+            "Quality":     round(float(row.get("QualityScore", row.get("CompositeRecruitmentScore", 0)) or 0), 1),
+            "Source":      f"IMPECT+WS ({ws_link['MatchConfidence']})" if ws_link is not None else "IMPECT",
+            "_data_idx":   idx,
+            "_ws_link":    ws_link,
+            "_ws_idx_row": None,
         })
 
+    # ── Wyscout-only search ───────────────────────────────────────────────────
+    if not ws_idx.empty:
+        ws_norms = ws_idx["Player"].astype(str).apply(_norm_search)
+        ws_mask = ws_norms.str.contains(q_norm, regex=False)
+        # also match last word of query against Wyscout names (handles "Firstname Lastname" → "F. Lastname")
+        q_parts = q_norm.split()
+        if len(q_parts) > 1:
+            ws_mask = ws_mask | ws_norms.str.contains(q_parts[-1], regex=False)
+        ws_hits = ws_idx.loc[ws_mask].copy()
+
+        for _, ws_row in ws_hits.iterrows():
+            file_name = str(ws_row.get("File", ""))
+            ws_name   = str(ws_row.get("Player", ""))
+            if (file_name, ws_name) in covered_ws:
+                continue
+            country_raw, division = _parse_wyscout_filename(file_name)
+            div_label = (
+                "I" * division if isinstance(division, int)
+                else str(division)
+            )
+            league_label = f"{country_raw} {div_label}".strip() if div_label not in ("1", "I") else country_raw
+            raw_pos = str(ws_row.get("Position", "") or "")
+            ws_pg   = WYSCOUT_POSITION_MAP.get(raw_pos.strip(), "")
+            _age_raw = pd.to_numeric(ws_row.get("Age"), errors="coerce")
+            results_rows.append({
+                "Player":      ws_name,
+                "Pos":         ws_pg or raw_pos,
+                "Team":        str(ws_row.get("Team", "")),
+                "League":      league_label,
+                "Age":         float(_age_raw) if not pd.isna(_age_raw) else float("nan"),
+                "Quality":     float("nan"),
+                "Source":      "Wyscout",
+                "_data_idx":   None,
+                "_ws_link":    None,
+                "_ws_idx_row": ws_row,
+            })
+
+    if not results_rows:
+        st.info(f"No players found matching '{q}'. Try searching by last name.")
+        return
+
     results_df = pd.DataFrame(results_rows)
-    display_df = results_df[["Player", "Pos", "Team", "League", "Age", "Quality", "Wyscout"]]
+    display_df = results_df[["Player", "Pos", "Team", "League", "Age", "Quality", "Source"]]
 
     st.markdown(
         f"<div style='color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;"
@@ -2538,7 +2587,7 @@ def render_search_workspace(data: pd.DataFrame) -> None:
         height=min(len(results_df) * 36 + 50, 380),
         column_config={
             "Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
-            "Wyscout": st.column_config.TextColumn("Wyscout link"),
+            "Source":  st.column_config.TextColumn("Source"),
         },
     )
 
@@ -2551,23 +2600,44 @@ def render_search_workspace(data: pd.DataFrame) -> None:
 
     # ── Player profile ────────────────────────────────────────────────────────
     sel = results_df.iloc[event.selection.rows[0]]
-    impect_row = data.loc[sel["_data_idx"]]
-    pos_group = str(impect_row.get("PositionGroup", ""))
-    ws_link = sel["_ws_link"]
-    has_wyscout = ws_link is not None
+    is_wyscout_only = sel["_data_idx"] is None
 
-    # Pre-load Wyscout data so both charts and table can share it
+    # Resolve IMPECT row (None for Wyscout-only players)
+    impect_row: pd.Series | None = data.loc[sel["_data_idx"]] if not is_wyscout_only else None
+
+    # Resolve Wyscout source: link DB row (IMPECT-linked) OR index row (Wyscout-only)
+    ws_link     = sel["_ws_link"]
+    ws_idx_row  = sel["_ws_idx_row"]
+    has_wyscout = ws_link is not None or ws_idx_row is not None
+
+    if impect_row is not None:
+        pos_group = str(impect_row.get("PositionGroup", ""))
+    else:
+        raw_pos   = str(ws_idx_row.get("Position", "") or "")  # type: ignore[union-attr]
+        pos_group = WYSCOUT_POSITION_MAP.get(raw_pos.strip(), raw_pos)
+
+    # Pre-load Wyscout data so charts and table share it
     _ws_row_loaded: pd.Series | None = None
     _ws_pos_pool_loaded: pd.DataFrame = pd.DataFrame()
     _ws_file_loaded = ""
     _ws_name_loaded = ""
     _ws_team_loaded = ""
     _ws_conf_loaded = ""
-    if has_wyscout:
+
+    if ws_link is not None:
+        # IMPECT-linked player — use link DB metadata
         _ws_file_loaded = str(ws_link.get("Wyscout_File", ""))
         _ws_name_loaded = str(ws_link.get("Wyscout_Name", ""))
         _ws_team_loaded = str(ws_link.get("Wyscout_Team", ""))
         _ws_conf_loaded = str(ws_link.get("MatchConfidence", ""))
+    elif ws_idx_row is not None:
+        # Wyscout-only player — use index row metadata
+        _ws_file_loaded = str(ws_idx_row.get("File", ""))
+        _ws_name_loaded = str(ws_idx_row.get("Player", ""))
+        _ws_team_loaded = str(ws_idx_row.get("Team", ""))
+        _ws_conf_loaded = ""
+
+    if _ws_file_loaded:
         _ws_path_loaded = WYSCOUT_DB_DIR / _ws_file_loaded
         if _ws_path_loaded.exists():
             _ws_df_loaded = _load_wyscout_file(_ws_path_loaded)
@@ -2586,33 +2656,50 @@ def render_search_workspace(data: pd.DataFrame) -> None:
                 unsafe_allow_html=True)
 
     # Header card
-    _risk_cls = {"Low": "teal", "Moderate": "amber", "Elevated": "amber", "High": "red"}.get(
-        str(impect_row.get("RiskBand", "")), "")
-    _qs   = float(impect_row.get("QualityScore", impect_row.get("CompositeRecruitmentScore", 0)) or 0)
-    _tier = str(impect_row.get("QualityTier", impect_row.get("ScoreBand", "")) or "")
-    _arch = str(impect_row.get("Archetype", "") or "")
-    _risk = str(impect_row.get("RiskBand", "") or "")
-    _mins = int(impect_row.get("MinutesPlayed", 0) or 0)
-    _age  = float(impect_row.get("AgeYears", 0) or 0)
-    _ws_badge = (f'<span class="pill teal">Wyscout {_ws_conf_loaded}</span>' if has_wyscout else "")
-    st.markdown(
-        f'<div class="profile-card">'
-        f'<div class="profile-name">{escape(str(impect_row.get("PlayerName","")))}</div>'
-        f'<div class="profile-meta">{escape(str(impect_row.get("TeamName","")))} · '
-        f'{escape(str(impect_row.get("BundleLabel","")))} · {escape(pos_group)} · '
-        f'{_age:.1f} yrs · {_mins:,} min</div>'
-        f'<div class="pill-row">'
-        f'<span class="pill teal">Quality {_qs:.1f}</span>'
-        f'{f"""<span class="pill">{escape(_tier)}</span>""" if _tier else ""}'
-        f'{f"""<span class="pill">{escape(_arch)}</span>""" if _arch else ""}'
-        f'{f"""<span class="pill {_risk_cls}">{escape(_risk)} risk</span>""" if _risk else ""}'
-        f'{_ws_badge}'
-        f'</div></div>',
-        unsafe_allow_html=True,
-    )
+    if impect_row is not None:
+        _risk_cls = {"Low": "teal", "Moderate": "amber", "Elevated": "amber", "High": "red"}.get(
+            str(impect_row.get("RiskBand", "")), "")
+        _qs   = float(impect_row.get("QualityScore", impect_row.get("CompositeRecruitmentScore", 0)) or 0)
+        _tier = str(impect_row.get("QualityTier", impect_row.get("ScoreBand", "")) or "")
+        _arch = str(impect_row.get("Archetype", "") or "")
+        _risk = str(impect_row.get("RiskBand", "") or "")
+        _mins = int(impect_row.get("MinutesPlayed", 0) or 0)
+        _age  = float(impect_row.get("AgeYears", 0) or 0)
+        _ws_badge = (f'<span class="pill teal">Wyscout {_ws_conf_loaded}</span>' if has_wyscout else "")
+        st.markdown(
+            f'<div class="profile-card">'
+            f'<div class="profile-name">{escape(str(impect_row.get("PlayerName","")))}</div>'
+            f'<div class="profile-meta">{escape(str(impect_row.get("TeamName","")))} · '
+            f'{escape(str(impect_row.get("BundleLabel","")))} · {escape(pos_group)} · '
+            f'{_age:.1f} yrs · {_mins:,} min</div>'
+            f'<div class="pill-row">'
+            f'<span class="pill teal">Quality {_qs:.1f}</span>'
+            f'{f"""<span class="pill">{escape(_tier)}</span>""" if _tier else ""}'
+            f'{f"""<span class="pill">{escape(_arch)}</span>""" if _arch else ""}'
+            f'{f"""<span class="pill {_risk_cls}">{escape(_risk)} risk</span>""" if _risk else ""}'
+            f'{_ws_badge}'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        # Wyscout-only header
+        _ws_age_raw = ws_idx_row.get("Age", "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
+        _ws_age_str = f"{float(_ws_age_raw):.0f} yrs" if pd.notna(pd.to_numeric(_ws_age_raw, errors="coerce")) else ""
+        _ws_raw_pos = str(ws_idx_row.get("Position", "") or "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
+        country_raw2, _ = _parse_wyscout_filename(_ws_file_loaded)
+        st.markdown(
+            f'<div class="profile-card">'
+            f'<div class="profile-name">{escape(_ws_name_loaded)}</div>'
+            f'<div class="profile-meta">{escape(_ws_team_loaded)} · '
+            f'{escape(country_raw2)} · {escape(_ws_raw_pos)} ({escape(pos_group)}) · {escape(_ws_age_str)}</div>'
+            f'<div class="pill-row">'
+            f'<span class="pill">Wyscout</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Charts ────────────────────────────────────────────────────────────────
-    has_impect_model = bool(pos_group)
+    has_impect_model  = impect_row is not None and bool(pos_group)
     has_wyscout_loaded = _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty
 
     def _render_pizza_section(container=None):
@@ -2638,7 +2725,7 @@ def render_search_workspace(data: pd.DataFrame) -> None:
             unsafe_allow_html=True,
         )
         if has_wyscout_loaded:
-            if _ws_conf_loaded != "HIGH":
+            if _ws_conf_loaded and _ws_conf_loaded != "HIGH":
                 target.markdown(
                     f"<span style='color:var(--amber);font-size:.72rem;'>Link: {_ws_conf_loaded} — verify manually</span>",
                     unsafe_allow_html=True,
@@ -2662,50 +2749,60 @@ def render_search_workspace(data: pd.DataFrame) -> None:
             )
 
     if has_impect_model and has_wyscout_loaded:
-        # Both sources — side by side
         pizza_col, bars_col = st.columns(2, gap="large")
         _render_pizza_section(pizza_col)
         _render_bars_section(bars_col)
     elif has_wyscout_loaded:
-        # Wyscout only — bars full width
         _render_bars_section()
     else:
-        # IMPECT only — pizza full width (or no-Wyscout note inside bars section)
-        _render_pizza_section()
         if has_impect_model:
-            _render_bars_section()
+            _render_pizza_section()
+        _render_bars_section()
 
     # ── Stats tables ──────────────────────────────────────────────────────────
-    _exp_left, _exp_right = st.columns(2, gap="large")
+    _show_impect_tbl = impect_row is not None
+    _show_ws_tbl     = _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty
 
-    with _exp_left:
-        with st.expander("📊 IMPECT model scores", expanded=False):
-            _score_rows2: list[dict] = []
-            _pos_data = data.loc[data["PositionGroup"].astype(str).eq(pos_group)]
-            for label, col in PIZZA_METRICS.items():
-                if col not in impect_row.index:
-                    continue
-                _sv = float(impect_row.get(col, 0) or 0)
-                _pv = round(percentile_rank(_pos_data[col], _sv), 0) if col in _pos_data.columns else None
-                _score_rows2.append({"Metric": label, "Score": round(_sv, 1), "Pct": _pv})
-            if _score_rows2:
-                _score_df2 = pd.DataFrame(_score_rows2).sort_values("Score", ascending=False)
-                st.dataframe(
-                    _score_df2, hide_index=True, use_container_width=True,
-                    column_config={
-                        "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.1f"),
-                        "Pct":   st.column_config.NumberColumn("Pct %", format="%.0f"),
-                    },
-                )
+    if _show_impect_tbl and _show_ws_tbl:
+        _exp_left, _exp_right = st.columns(2, gap="large")
+        _impect_tbl_ctx = _exp_left
+        _ws_tbl_ctx     = _exp_right
+    elif _show_impect_tbl:
+        _impect_tbl_ctx = st
+        _ws_tbl_ctx     = None  # type: ignore[assignment]
+    else:
+        _impect_tbl_ctx = None  # type: ignore[assignment]
+        _ws_tbl_ctx     = st
 
-    with _exp_right:
-        if _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty:
+    if _show_impect_tbl:
+        with _impect_tbl_ctx:  # type: ignore[union-attr]
+            with st.expander("📊 IMPECT model scores", expanded=False):
+                _score_rows2: list[dict] = []
+                _pos_data = data.loc[data["PositionGroup"].astype(str).eq(pos_group)]
+                for label, col in PIZZA_METRICS.items():
+                    if col not in impect_row.index:  # type: ignore[union-attr]
+                        continue
+                    _sv = float(impect_row.get(col, 0) or 0)  # type: ignore[union-attr]
+                    _pv = round(percentile_rank(_pos_data[col], _sv), 0) if col in _pos_data.columns else None
+                    _score_rows2.append({"Metric": label, "Score": round(_sv, 1), "Pct": _pv})
+                if _score_rows2:
+                    _score_df2 = pd.DataFrame(_score_rows2).sort_values("Score", ascending=False)
+                    st.dataframe(
+                        _score_df2, hide_index=True, use_container_width=True,
+                        column_config={
+                            "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.1f"),
+                            "Pct":   st.column_config.NumberColumn("Pct %", format="%.0f"),
+                        },
+                    )
+
+    if _show_ws_tbl:
+        with _ws_tbl_ctx:  # type: ignore[union-attr]
             with st.expander("📋 Wyscout raw stats", expanded=False):
                 _ws_metrics_show = [m for m in WYSCOUT_POS_METRICS.get(pos_group, [])
-                                    if m in _ws_row_loaded.index]
+                                    if m in _ws_row_loaded.index]  # type: ignore[union-attr]
                 _ws_table_rows2: list[dict] = []
                 for m in _ws_metrics_show:
-                    _v = pd.to_numeric(_ws_row_loaded.get(m), errors="coerce")
+                    _v = pd.to_numeric(_ws_row_loaded.get(m), errors="coerce")  # type: ignore[union-attr]
                     if pd.isna(_v):
                         continue
                     _p2 = percentile_rank(pd.to_numeric(_ws_pos_pool_loaded[m], errors="coerce"), float(_v))
