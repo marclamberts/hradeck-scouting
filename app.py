@@ -2003,7 +2003,8 @@ def render_scouting_workspace() -> None:
                     _age_col    = next((c for c in ["Age", "AgeYears", "age"] if c in ws_df.columns), None)
                     # Add position group mapping column for profile search
                     if _pos_col and "_PosGroup" not in ws_df.columns:
-                        ws_df["_PosGroup"] = ws_df[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("")
+                        _pg = ws_df[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("").rename("_PosGroup")
+                        ws_df = pd.concat([ws_df, _pg], axis=1)
 
                     st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
                     ws_search = st.text_input("Search", key="ws_search", placeholder="Player or team…", label_visibility="collapsed")
@@ -2171,7 +2172,8 @@ def render_scouting_workspace() -> None:
         # those that map to a known profile group
         if _pos_col and not ws_df.empty:
             _ws_all_raw_pos = sorted(
-                ws_df[_pos_col].astype(str).str.strip().unique().tolist()
+                p for p in ws_df[_pos_col].astype(str).str.strip().unique().tolist()
+                if isinstance(p, str) and p and p != "nan"
             )
             _ws_mapped_pos = [p for p in _ws_all_raw_pos if WYSCOUT_POSITION_MAP.get(p)]
         else:
@@ -2204,7 +2206,8 @@ def render_scouting_workspace() -> None:
             # Calculate ProfileFit on full ws_df so z-scores use the complete position pool
             _ws_scored = ws_df.copy()
             if "_PosGroup" not in _ws_scored.columns and _pos_col:
-                _ws_scored["_PosGroup"] = _ws_scored[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("")
+                _pg2 = _ws_scored[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("").rename("_PosGroup")
+                _ws_scored = pd.concat([_ws_scored, _pg2], axis=1)
             _ws_scored["ProfileFit"] = calc_wyscout_profile_fit(_ws_scored, _ws_target_pos, _ws_target_profile)
 
             # Apply sidebar filters (except position — the position selector replaces that)
