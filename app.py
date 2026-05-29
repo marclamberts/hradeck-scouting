@@ -1469,7 +1469,7 @@ def enter_scouting_workspace() -> None:
 
 
 def render_workspace_nav(location: str = "top") -> None:
-    st.markdown("<div class='workspace-nav-spacer'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='workspace-nav-spacer' style='display:none'></div>", unsafe_allow_html=True)
     active = st.session_state.get("active_workspace", "Recruitment")
     nav_cols = st.columns(len(WORKSPACES), gap="small")
     for idx, section in enumerate(WORKSPACES):
@@ -2753,27 +2753,39 @@ st.markdown(
         letter-spacing: .04em;
     }
 
-    /* ── WORKSPACE NAV CARDS ────────────────────────────────── */
-    .wnav-wrap {
-        display: contents; /* transparent wrapper */
+    /* ── WORKSPACE NAV PILLS ─────────────────────────────────── */
+    /* Wrap the nav row in a thin pill-bar look */
+    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] {
+        background: var(--raised) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 10px !important;
+        padding: 3px 4px !important;
+        gap: 2px !important;
+        margin-bottom: 10px !important;
     }
-    /* Target the horizontal button row that follows workspace-nav-spacer */
     .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button {
-        min-height: 58px !important;
-        font-size: .74rem !important;
-        padding: 0 8px !important;
-        line-height: 1.4 !important;
-        border-radius: 8px !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        font-size: .65rem !important;
+        padding: 0 10px !important;
+        border-radius: 7px !important;
+        border: none !important;
+        background: transparent !important;
+        color: var(--faint) !important;
+        font-weight: 600 !important;
+        letter-spacing: .04em !important;
+        text-transform: none !important;
+        box-shadow: none !important;
     }
     .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
-        border-top: 3px solid var(--teal) !important;
-        font-weight: 800 !important;
-    }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button[kind="secondary"] {
-        border-top: 3px solid var(--border) !important;
+        background: #ffffff !important;
+        color: var(--teal) !important;
+        font-weight: 700 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,.08) !important;
     }
     .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button:hover {
-        border-top-color: var(--teal) !important;
+        background: rgba(13,158,125,.08) !important;
+        color: var(--teal) !important;
     }
 
     /* Buttons */
