@@ -1470,12 +1470,20 @@ def enter_scouting_workspace() -> None:
 
 def render_workspace_nav(location: str = "top") -> None:
     active = st.session_state.get("active_workspace", "Recruitment")
-    st.markdown("<div class='app-brand'>⚽ FCHK <span class='app-brand-sub'>Scouting</span></div>", unsafe_allow_html=True)
-    nav_cols = st.columns(len(WORKSPACES), gap="small")
+    brand_col, *nav_col_list = st.columns([3] + [1] * len(WORKSPACES), gap="small")
+    with brand_col:
+        st.markdown(
+            "<div class='app-nav-brand'>"
+            "<span class='app-nav-emoji'>⚽</span>"
+            "<div><div class='app-nav-name'>FCHK Scouting IQ</div>"
+            "<div class='app-nav-tagline'>Hradec Králové · Analytics</div></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     for idx, section in enumerate(WORKSPACES):
         icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
         is_active = active == section
-        with nav_cols[idx]:
+        with nav_col_list[idx]:
             st.button(
                 f"{icon}  {section}",
                 key=f"workspace_{location}_{section}",
@@ -1626,7 +1634,14 @@ def render_scouting_workspace() -> None:
         key=lambda p: p.name.lower(),
     )
 
-    st.markdown("<div class='page-title'>Scouting</div><div class='page-subtitle'>Raw Wyscout data browser — search and filter imported files</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='page-header'>"
+        "<div class='page-header-icon'>🔍</div>"
+        "<div><div class='page-header-title'>Scouting</div>"
+        "<div class='page-header-sub'>Raw Wyscout data browser — search and filter imported files</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     if not wyscout_files:
         st.markdown(
@@ -1897,11 +1912,18 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     )
 
     with st.sidebar:
-        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🔬 Model &amp; Data</div><div class='sidebar-brand-meta'>Smart club closeness</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-icon'>🔬</div><div><div class='sidebar-brand-title'>Model &amp; Data</div><div class='sidebar-brand-meta'>Smart Club Closeness</div></div></div>", unsafe_allow_html=True)
         st.markdown("<div class='sbar-hdr'>Club model</div>", unsafe_allow_html=True)
         selected_model = st.selectbox("Select model", summary[model_col].tolist(), key="model_selectbox")
 
-    st.markdown("<div class='page-title'>Model &amp; Data</div><div class='page-subtitle'>Smart club closeness and data coverage</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='page-header'>"
+        "<div class='page-header-icon'>🔬</div>"
+        "<div><div class='page-header-title'>Model &amp; Data</div>"
+        "<div class='page-header-sub'>Smart club closeness scores and league data coverage</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     metric_cols = st.columns(4)
     with metric_cols[0]:
@@ -2015,7 +2037,7 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     league_options = sorted(keeper_df["BundleLabel"].dropna().astype(str).unique())
 
     with st.sidebar:
-        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🧤 Goalkeepers</div><div class='sidebar-brand-meta'>GK-specific scoring</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-icon'>🧤</div><div><div class='sidebar-brand-title'>Goalkeepers</div><div class='sidebar-brand-meta'>GK-specific scoring</div></div></div>", unsafe_allow_html=True)
         st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
         selected_leagues = st.multiselect("Leagues", league_options, default=league_options, key="gk_bundles_filter")
         age_min = float(np.floor(keeper_df["AgeYears"].min()))
@@ -2026,6 +2048,15 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
         keeper_df["BundleLabel"].astype(str).isin(selected_leagues)
         & keeper_df["AgeYears"].between(age_range[0], age_range[1])
     ].copy()
+
+    st.markdown(
+        f"<div class='page-header'>"
+        f"<div class='page-header-icon'>🧤</div>"
+        f"<div><div class='page-header-title'>Goalkeepers</div>"
+        f"<div class='page-header-sub'>GK-specific scoring model · {len(gk_filtered):,} keepers</div></div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
     board_cols = [
         "PlayerName",
@@ -2163,8 +2194,17 @@ def render_team_workspace(data: pd.DataFrame) -> None:
     external_czech = czech_df.loc[~czech_df["TeamName"].isin(hradec_df["TeamName"].unique())].copy()
 
     with st.sidebar:
-        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🏟 Team Intelligence</div><div class='sidebar-brand-meta'>Squad gaps &amp; Czech market</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-icon'>🏟</div><div><div class='sidebar-brand-title'>Team Intelligence</div><div class='sidebar-brand-meta'>Squad &amp; Czech market</div></div></div>", unsafe_allow_html=True)
         st.markdown("<div class='note-box' style='font-size:.69rem;'>Compare Hradec&#39;s squad vs the Czech market to find recruitment priorities.</div>", unsafe_allow_html=True)
+
+    st.markdown(
+        f"<div class='page-header'>"
+        f"<div class='page-header-icon'>🏟</div>"
+        f"<div><div class='page-header-title'>Team Intelligence</div>"
+        f"<div class='page-header-sub'>Squad overview &amp; Czech market comparison · {len(hradec_df):,} Hradec players · {len(external_czech):,} Czech market</div></div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
     h_top = hradec_df.sort_values("ScoutFitScore", ascending=False).head(1)
     cz_top = external_czech.sort_values("ScoutFitScore", ascending=False).head(1)
@@ -2314,262 +2354,329 @@ st.markdown(
     """
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
     <style>
     /* ── TOKENS ──────────────────────────────────────────────── */
     :root {
         --teal:      #0d9e7d;
-        --teal-hi:   #10d4aa;
-        --teal-glow: rgba(13,158,125,.18);
+        --teal-hi:   #12c799;
+        --teal-dim:  rgba(13,158,125,.15);
+        --teal-glow: rgba(13,158,125,.25);
         --ink:       #e6edf3;
         --muted:     #8b949e;
         --faint:     #6e7681;
-        --border:    #30363d;
+        --border:    #21262d;
+        --border-hi: #30363d;
         --surface:   #161b22;
         --raised:    #1c2128;
         --bg:        #0d1117;
-        --amber:     #d29922;
+        --nav-bg:    #010409;
+        --amber:     #e3b341;
         --red:       #f85149;
         --green:     #3fb950;
-        --shadow:    0 2px 8px rgba(0,0,0,.4);
+        --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+        --shadow:    0 4px 12px rgba(0,0,0,.5);
+        --radius:    8px;
     }
 
-    /* ── GLOBAL ──────────────────────────────────────────────── */
+    /* ── RESET & GLOBAL ─────────────────────────────────────── */
     html, body, .stApp {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
         background: var(--bg) !important;
         color: var(--ink) !important;
+        -webkit-font-smoothing: antialiased !important;
     }
     header[data-testid="stHeader"],
     div[data-testid="stToolbar"] { display: none !important; }
 
     .block-container {
-        padding-top: .75rem !important;
-        padding-bottom: 3rem !important;
+        padding-top: 0 !important;
+        padding-bottom: 4rem !important;
         max-width: 100% !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
     }
 
     div[data-testid="stVerticalBlock"] { gap: 0 !important; }
-    div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .35rem !important; }
-    div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .5rem !important; }
+    div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .3rem !important; }
+    div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .45rem !important; }
     div[data-testid="stMetric"] { margin-bottom: 0 !important; }
     [data-testid="stDataFrame"] > div { width: 100% !important; }
 
     h1, h2, h3 { font-family: 'Inter', sans-serif !important; font-weight: 800; color: var(--ink) !important; }
-    h2 { font-size: .68rem !important; text-transform: uppercase; letter-spacing: .14em;
+    h2 { font-size: .62rem !important; text-transform: uppercase; letter-spacing: .16em;
          color: var(--faint) !important; border-bottom: 1px solid var(--border) !important;
-         padding-bottom: 5px; margin-bottom: 8px !important; }
-    h3 { font-size: .88rem !important; margin-bottom: 5px !important; }
+         padding-bottom: 6px; margin-bottom: 10px !important; }
+    h3 { font-size: .85rem !important; font-weight: 700 !important; margin-bottom: 6px !important; }
+
+    /* ── APP NAV BAR ─────────────────────────────────────────── */
+    /* Full-width nav bar — extend to viewport edges */
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
+        background: var(--nav-bg) !important;
+        border: none !important;
+        border-bottom: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        margin-left: -2rem !important;
+        margin-right: -2rem !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        padding: 0 2rem !important;
+        gap: 0 !important;
+        align-items: stretch !important;
+    }
+    /* Nav buttons — complete reset then rebuild */
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
+        all: unset !important;
+        box-sizing: border-box !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 52px !important;
+        padding: 0 6px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: .74rem !important;
+        font-weight: 600 !important;
+        color: var(--muted) !important;
+        border-bottom: 2px solid transparent !important;
+        white-space: nowrap !important;
+        letter-spacing: .01em !important;
+        transition: color .12s ease, border-color .12s ease, background .12s ease !important;
+        user-select: none !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
+        color: var(--teal-hi) !important;
+        font-weight: 700 !important;
+        border-bottom-color: var(--teal) !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
+        color: var(--teal-hi) !important;
+        background: rgba(13,158,125,.06) !important;
+    }
+    /* Brand area inside nav */
+    .app-nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        height: 52px;
+        padding: 0 4px;
+    }
+    .app-nav-emoji { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+    .app-nav-name {
+        font-size: .85rem; font-weight: 900; color: var(--ink);
+        letter-spacing: -.01em; line-height: 1.2;
+    }
+    .app-nav-tagline { font-size: .58rem; color: var(--faint); margin-top: 2px; letter-spacing: .03em; }
+
+    /* ── PAGE HEADER ─────────────────────────────────────────── */
+    .page-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 22px 0 18px 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 22px;
+    }
+    .page-header-icon {
+        font-size: 2rem; line-height: 1; flex-shrink: 0;
+        background: var(--surface); border: 1px solid var(--border-hi);
+        border-radius: var(--radius); width: 48px; height: 48px;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .page-header-title {
+        font-size: 1.3rem; font-weight: 900; color: var(--ink);
+        letter-spacing: -.02em; line-height: 1.1;
+    }
+    .page-header-sub { font-size: .72rem; color: var(--muted); margin-top: 4px; line-height: 1.4; }
 
     /* ── SIDEBAR ─────────────────────────────────────────────── */
     section[data-testid="stSidebar"] {
-        background: #0a0d13 !important;
+        background: var(--nav-bg) !important;
         border-right: 1px solid var(--border) !important;
     }
     section[data-testid="stSidebar"] .block-container {
         padding-top: 1.25rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
+        padding-left: 1.1rem !important;
+        padding-right: 1.1rem !important;
     }
-
-    /* ── SIDEBAR CUSTOM ──────────────────────────────────────── */
     .sidebar-brand {
-        border-left: 3px solid var(--teal);
-        padding: 10px 12px;
-        margin-bottom: 20px;
-        background: rgba(13,158,125,.08);
-        border-radius: 0 6px 6px 0;
+        display: flex; align-items: center; gap: 10px;
+        padding: 4px 0 18px 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 16px;
     }
-    .sidebar-brand-title { color: var(--teal-hi) !important; font-size: .88rem; font-weight: 800; letter-spacing: .02em; }
-    .sidebar-brand-meta  { color: var(--muted) !important; font-size: .65rem; margin-top: 3px; }
+    .sidebar-brand-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .sidebar-brand-title { color: var(--ink) !important; font-size: .84rem; font-weight: 800; letter-spacing: -.01em; }
+    .sidebar-brand-meta  { color: var(--teal-hi) !important; font-size: .58rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .08em; margin-top: 1px; }
     .sbar-hdr {
         color: var(--faint);
-        font-size: .56rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .18em;
-        margin: 18px 0 5px 0;
-        padding-bottom: 5px;
+        font-size: .55rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .2em;
+        margin: 20px 0 6px 0;
+        padding-bottom: 6px;
         border-bottom: 1px solid var(--border);
     }
     .sbar-active-bar {
-        background: rgba(13,158,125,.12);
-        border: 1px solid rgba(13,158,125,.3);
-        border-radius: 5px;
-        padding: 6px 10px;
-        font-size: .64rem;
-        font-weight: 700;
+        background: rgba(13,158,125,.1);
+        border: 1px solid rgba(13,158,125,.28);
+        border-radius: 6px;
+        padding: 7px 11px;
+        font-size: .64rem; font-weight: 700;
         color: var(--teal-hi);
-        margin: 8px 0;
+        margin: 10px 0;
+        display: flex; align-items: center; gap: 6px;
     }
 
-    /* ── APP BRAND ───────────────────────────────────────────── */
-    .app-brand {
-        font-family: 'Inter', sans-serif;
-        font-size: .8rem;
-        font-weight: 900;
-        color: var(--teal-hi);
-        letter-spacing: .06em;
-        text-transform: uppercase;
-        padding: 0 0 4px 0;
-    }
-    .app-brand-sub { color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: .01em; }
-
-    /* ── WORKSPACE NAV TABS ──────────────────────────────────── */
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
-        background: transparent !important;
-        border: none !important;
-        border-bottom: 1px solid var(--border) !important;
-        border-radius: 0 !important;
-        padding: 0 !important;
-        gap: 0 !important;
-        margin-bottom: 20px !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
-        min-height: 40px !important; height: 40px !important;
-        font-size: .74rem !important; font-weight: 600 !important;
-        padding: 0 20px !important; border-radius: 0 !important;
-        border: none !important; border-bottom: 2px solid transparent !important;
-        background: transparent !important; color: var(--muted) !important;
-        letter-spacing: .01em !important;
-        box-shadow: none !important; margin-bottom: -1px !important;
-        transition: color .15s, border-color .15s, background .15s !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
-        color: var(--teal-hi) !important; font-weight: 700 !important;
-        border-bottom: 2px solid var(--teal) !important;
-        background: transparent !important; box-shadow: none !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
-        color: var(--teal-hi) !important;
-        background: rgba(13,158,125,.07) !important;
-    }
-
-    /* ── BUTTONS ─────────────────────────────────────────────── */
+    /* ── BUTTONS (non-nav) ───────────────────────────────────── */
     .stButton > button, .stDownloadButton > button {
         font-family: 'Inter', sans-serif !important;
-        border-radius: 6px !important;
-        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        border: 1px solid var(--border-hi) !important;
         background: var(--surface) !important;
         color: var(--muted) !important;
         font-weight: 600 !important;
-        font-size: .74rem !important;
-        box-shadow: var(--shadow) !important;
-        transition: all .15s !important;
-        min-height: 32px !important;
+        font-size: .73rem !important;
+        box-shadow: var(--shadow-sm) !important;
+        transition: all .12s ease !important;
+        min-height: 34px !important;
+        letter-spacing: .01em !important;
     }
     .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
-        background: rgba(13,158,125,.15) !important;
-        border-color: var(--teal) !important;
+        background: rgba(13,158,125,.14) !important;
+        border-color: rgba(13,158,125,.5) !important;
         color: var(--teal-hi) !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
-        border-color: var(--teal) !important;
+        border-color: rgba(13,158,125,.6) !important;
         color: var(--teal-hi) !important;
-        background: rgba(13,158,125,.12) !important;
+        background: rgba(13,158,125,.1) !important;
     }
 
     /* ── CONTENT TABS ────────────────────────────────────────── */
-    div[data-testid="stTabs"] { border-bottom: 1px solid var(--border); }
+    div[data-testid="stTabs"] {
+        border-bottom: 1px solid var(--border) !important;
+        margin-bottom: 2px !important;
+    }
     div[data-testid="stTabs"] button {
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important; font-size: .72rem !important;
-        color: var(--muted) !important; padding: 8px 16px !important;
+        color: var(--muted) !important; padding: 9px 18px !important;
         border-radius: 0 !important; background: transparent !important;
+        transition: color .12s !important;
     }
     div[data-testid="stTabs"] button[aria-selected="true"] {
         color: var(--teal-hi) !important;
         border-bottom: 2px solid var(--teal) !important;
         font-weight: 700 !important;
     }
-    div[data-testid="stTabsContent"] { padding-top: 16px !important; }
-
-    /* ── INPUTS ──────────────────────────────────────────────── */
-    .stTextInput input {
-        border-color: var(--border) !important;
-        border-radius: 6px !important;
-        font-family: 'Inter', sans-serif !important;
-        font-size: .8rem !important;
-    }
-    .stTextInput input:focus { border-color: var(--teal) !important; box-shadow: 0 0 0 2px var(--teal-glow) !important; }
+    div[data-testid="stTabs"] button:hover { color: var(--teal-hi) !important; }
+    div[data-testid="stTabsContent"] { padding-top: 18px !important; }
 
     /* ── METRIC TILES ────────────────────────────────────────── */
     [data-testid="stMetric"] {
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
-        border-radius: 8px !important;
-        padding: 12px 14px !important;
+        border-top: 2px solid var(--border-hi) !important;
+        border-radius: var(--radius) !important;
+        padding: 14px 16px !important;
+        box-shadow: var(--shadow-sm) !important;
     }
-    [data-testid="stMetricLabel"] { font-size: .62rem !important; font-weight: 700 !important;
-        text-transform: uppercase !important; letter-spacing: .1em !important; }
-    [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 900 !important;
-        color: var(--ink) !important; }
-    [data-testid="stMetricDelta"] { font-size: .7rem !important; }
+    [data-testid="stMetricLabel"] {
+        font-family: 'Inter', sans-serif !important;
+        font-size: .6rem !important; font-weight: 700 !important;
+        text-transform: uppercase !important; letter-spacing: .12em !important;
+        color: var(--faint) !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'Inter', sans-serif !important;
+        font-size: 1.5rem !important; font-weight: 900 !important;
+        color: var(--ink) !important; line-height: 1.15 !important;
+    }
 
-    /* ── CUSTOM HTML ─────────────────────────────────────────── */
+    /* ── INPUTS ──────────────────────────────────────────────── */
+    .stTextInput input {
+        border-radius: var(--radius) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: .79rem !important;
+    }
+    .stTextInput input:focus-within { outline: none !important; box-shadow: 0 0 0 2px var(--teal-glow) !important; }
+
+    /* ── DATA TABLE ──────────────────────────────────────────── */
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        overflow: hidden !important;
+    }
+
+    /* ── CUSTOM HTML COMPONENTS ─────────────────────────────── */
     .metric-card {
         background: var(--surface);
         border: 1px solid var(--border);
         border-top: 2px solid var(--teal);
-        border-radius: 8px;
-        padding: 12px 14px;
-        box-shadow: var(--shadow);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        box-shadow: var(--shadow-sm);
     }
-    .metric-label  { color: var(--faint); font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
-    .metric-value  { color: var(--ink); font-size: 1.3rem; font-weight: 900; line-height: 1.1; margin: 3px 0 2px; }
-    .metric-caption{ color: var(--muted); font-size: .68rem; }
+    .metric-label  { color: var(--faint); font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
+    .metric-value  { color: var(--ink); font-size: 1.35rem; font-weight: 900; line-height: 1.1; margin: 4px 0 2px; }
+    .metric-caption{ color: var(--muted); font-size: .67rem; }
 
     .note-box {
         background: var(--surface);
         border: 1px solid var(--border);
         border-left: 3px solid var(--teal);
-        border-radius: 0 6px 6px 0;
-        padding: 10px 14px;
-        font-size: .78rem; color: var(--muted); line-height: 1.6;
+        border-radius: 0 var(--radius) var(--radius) 0;
+        padding: 11px 15px;
+        font-size: .77rem; color: var(--muted); line-height: 1.65;
         margin: 6px 0;
     }
     .section-card {
         background: var(--surface); border: 1px solid var(--border);
-        border-radius: 8px; padding: 16px 18px; box-shadow: var(--shadow);
+        border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow-sm);
     }
     .profile-card {
         background: var(--surface); border: 1px solid var(--border);
-        border-left: 3px solid var(--teal); border-radius: 0 8px 8px 0;
-        padding: 14px 18px; margin-bottom: 12px;
+        border-left: 3px solid var(--teal);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        padding: 16px 20px; margin-bottom: 14px;
     }
-    .profile-name { color: var(--ink); font-size: 1.15rem; font-weight: 900; }
-    .profile-meta { color: var(--muted); font-size: .73rem; margin-top: 3px; margin-bottom: 10px; }
+    .profile-name { color: var(--ink); font-size: 1.2rem; font-weight: 900; letter-spacing: -.01em; }
+    .profile-meta { color: var(--muted); font-size: .73rem; margin-top: 4px; margin-bottom: 10px; }
 
-    .pill-row { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
     .pill {
-        background: var(--raised); border: 1px solid var(--border);
-        color: var(--muted); border-radius: 20px; padding: 2px 10px;
-        font-size: .64rem; font-weight: 600;
+        background: var(--raised); border: 1px solid var(--border-hi);
+        color: var(--muted); border-radius: 99px; padding: 3px 11px;
+        font-size: .63rem; font-weight: 600; letter-spacing: .01em;
     }
-    .pill.teal  { background: rgba(13,158,125,.12); border-color: rgba(13,158,125,.35); color: var(--teal-hi); }
-    .pill.amber { background: rgba(210,153,34,.12);  border-color: rgba(210,153,34,.35);  color: var(--amber); }
-    .pill.red   { background: rgba(248,81,73,.12);   border-color: rgba(248,81,73,.35);   color: var(--red); }
+    .pill.teal  { background: rgba(13,158,125,.12); border-color: rgba(18,199,153,.3); color: var(--teal-hi); }
+    .pill.amber { background: rgba(227,179,65,.1);  border-color: rgba(227,179,65,.3); color: var(--amber); }
+    .pill.red   { background: rgba(248,81,73,.1);   border-color: rgba(248,81,73,.3);  color: var(--red); }
 
     .intel-strip {
         border: 1px solid var(--border); border-left: 3px solid var(--teal);
-        background: var(--surface); border-radius: 6px; padding: 10px 14px;
+        background: var(--surface); border-radius: var(--radius); padding: 10px 16px;
         margin: 0 0 10px 0; display: flex; align-items: center;
-        justify-content: space-between; gap: 12px;
+        justify-content: space-between; gap: 14px;
     }
     .intel-strip-title { color: var(--ink); font-size: .82rem; font-weight: 700; }
-    .intel-strip-meta  { color: var(--faint); font-size: .62rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+    .intel-strip-meta  { color: var(--faint); font-size: .61rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
 
     .workspace-label {
-        color: var(--teal-hi); font-size: .58rem; font-weight: 800;
-        letter-spacing: .16em; text-transform: uppercase;
-        margin: 2px 0 10px 0; padding: 4px 0 4px 10px;
-        border-left: 2px solid var(--teal); background: rgba(13,158,125,.07);
-        border-radius: 0 4px 4px 0;
+        color: var(--teal-hi); font-size: .57rem; font-weight: 700;
+        letter-spacing: .18em; text-transform: uppercase;
+        margin: 4px 0 10px 0; padding: 5px 0 5px 11px;
+        border-left: 2px solid var(--teal); background: rgba(13,158,125,.06);
+        border-radius: 0 5px 5px 0;
     }
-    .page-title    { font-size: 1.15rem; font-weight: 800; color: var(--ink); letter-spacing: -.01em; margin: 0 0 2px 0; }
-    .page-subtitle { font-size: .72rem; color: var(--faint); margin-bottom: 16px; }
+    .page-title    { font-size: 1.2rem; font-weight: 900; color: var(--ink); letter-spacing: -.02em; margin: 0 0 2px 0; }
+    .page-subtitle { font-size: .71rem; color: var(--faint); margin-bottom: 18px; line-height: 1.5; }
+
+    /* spacer utility */
+    .gap-sm { margin-top: 10px; }
+    .gap-md { margin-top: 20px; }
 </style>
     """,
     unsafe_allow_html=True,
@@ -2620,9 +2727,16 @@ if "quick_mode" not in st.session_state:
 if "shortlist_players" not in st.session_state:
     st.session_state["shortlist_players"] = []
 
-st.markdown("<div class='page-title'>Recruitment Board</div><div class='page-subtitle'>Player quality rankings, profiles and signing cases</div>", unsafe_allow_html=True)
-
 outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
+
+st.markdown(
+    f"<div class='page-header'>"
+    f"<div class='page-header-icon'>🎯</div>"
+    f"<div><div class='page-header-title'>Recruitment Board</div>"
+    f"<div class='page-header-sub'>Player quality rankings, profiles and signing cases · {len(outfield_data):,} outfield players</div></div>"
+    f"</div>",
+    unsafe_allow_html=True,
+)
 quick_modes = ["Full board", "U23 quality", "Elite quality", "Reliable quality"]
 if st.session_state["quick_mode"] not in quick_modes:
     st.session_state["quick_mode"] = "Full board"
@@ -2636,12 +2750,13 @@ preset_weights = {
 
 with st.sidebar:
     st.markdown(
-        f"""
-        <div class="sidebar-brand">
-            <div class="sidebar-brand-title">⚽ FCHK Recruitment IQ</div>
-            <div class="sidebar-brand-meta">{len(outfield_data):,} outfield · GK separate</div>
-        </div>
-        """,
+        f"""<div class="sidebar-brand">
+            <div class="sidebar-brand-icon">⚽</div>
+            <div>
+                <div class="sidebar-brand-title">Recruitment IQ</div>
+                <div class="sidebar-brand-meta">{len(outfield_data):,} outfield players</div>
+            </div>
+        </div>""",
         unsafe_allow_html=True,
     )
     model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
