@@ -150,6 +150,198 @@ PROFILE_WEIGHTS: dict[str, dict[str, dict[str, float]]] = {
     },
 }
 
+# Maps raw Wyscout position codes → PROFILE_WEIGHTS position group keys
+WYSCOUT_POSITION_MAP: dict[str, str] = {
+    "CF": "ST", "SS": "ST",
+    "LW": "W",  "RW": "W", "LWF": "W", "RWF": "W", "WF": "W",
+    "AMF": "AM", "LAMF": "AM", "RAMF": "AM",
+    "CMF": "CM", "LCM": "CM", "RCM": "CM",
+    "DMF": "DM", "LDM": "DM", "RDM": "DM",
+    "LB": "FB",  "RB": "FB", "LWB": "FB", "RWB": "FB",
+    "CB": "CB",  "LCB": "CB", "RCB": "CB",
+    "GK": "GK",
+}
+
+# Profile weights using actual Wyscout column names
+WYSCOUT_PROFILE_WEIGHTS: dict[str, dict[str, dict[str, float]]] = {
+    "ST": {
+        "Goalscoring striker": {
+            "Non-penalty goals per 90": 2.0,
+            "xG per 90": 1.5,
+            "Shots on target, %": 1.0,
+        },
+        "Target striker": {
+            "Aerial duels won, %": 2.0,
+            "Duels won, %": 1.0,
+            "Non-penalty goals per 90": 1.0,
+        },
+        "Dynamic striker": {
+            "Progressive runs per 90": 2.0,
+            "Successful dribbles, %": 1.5,
+            "Dribbles per 90": 1.0,
+        },
+        "Second striker": {
+            "Key passes per 90": 2.0,
+            "xA per 90": 2.0,
+            "Touches in box per 90": 1.0,
+        },
+    },
+    "W": {
+        "Inside forward": {
+            "Non-penalty goals per 90": 2.0,
+            "xG per 90": 1.5,
+            "Touches in box per 90": 1.0,
+        },
+        "Wide winger": {
+            "Crosses per 90": 1.5,
+            "Accurate crosses, %": 1.0,
+            "Progressive runs per 90": 1.5,
+            "Dribbles per 90": 1.0,
+        },
+        "Pressing winger": {
+            "Successful defensive actions per 90": 2.0,
+            "Defensive duels per 90": 1.0,
+            "Dribbles per 90": 0.5,
+        },
+        "Creative winger": {
+            "Key passes per 90": 2.0,
+            "xA per 90": 2.0,
+            "Smart passes per 90": 1.0,
+        },
+    },
+    "AM": {
+        "Classic playmaker": {
+            "Key passes per 90": 2.0,
+            "Accurate smart passes, %": 1.5,
+            "Smart passes per 90": 1.5,
+        },
+        "Shadow striker": {
+            "Non-penalty goals per 90": 2.0,
+            "xG per 90": 1.5,
+            "Touches in box per 90": 1.0,
+        },
+        "Deep creator": {
+            "Accurate passes, %": 2.0,
+            "Key passes per 90": 1.5,
+            "Progressive passes per 90": 1.0,
+        },
+        "Press orchestrator": {
+            "Successful defensive actions per 90": 2.0,
+            "Dribbles per 90": 1.0,
+            "Key passes per 90": 1.0,
+        },
+    },
+    "CM": {
+        "Box-to-box": {
+            "Successful defensive actions per 90": 1.0,
+            "Progressive runs per 90": 1.0,
+            "xA per 90": 0.5,
+            "Passes per 90": 0.5,
+        },
+        "Progressive carrier": {
+            "Progressive runs per 90": 2.0,
+            "Accurate forward passes, %": 1.0,
+            "Dribbles per 90": 1.0,
+        },
+        "Press-resistant pivot": {
+            "Accurate passes, %": 2.0,
+            "Accurate short / medium passes, %": 1.5,
+            "Passes per 90": 1.0,
+        },
+        "Defensive CM": {
+            "Successful defensive actions per 90": 2.0,
+            "Defensive duels won, %": 1.5,
+            "Interceptions per 90": 1.0,
+        },
+    },
+    "DM": {
+        "Defensive shield": {
+            "Successful defensive actions per 90": 2.0,
+            "Defensive duels won, %": 1.5,
+            "Interceptions per 90": 1.0,
+        },
+        "Regista": {
+            "Progressive passes per 90": 2.0,
+            "Accurate passes, %": 1.5,
+            "Key passes per 90": 1.0,
+        },
+        "Press trigger": {
+            "Successful defensive actions per 90": 2.0,
+            "Defensive duels per 90": 1.5,
+            "Interceptions per 90": 1.0,
+        },
+        "Holding pivot": {
+            "Accurate passes, %": 2.0,
+            "Defensive duels won, %": 1.5,
+            "Passes per 90": 1.0,
+        },
+    },
+    "FB": {
+        "Attacking fullback": {
+            "Crosses per 90": 2.0,
+            "xA per 90": 1.5,
+            "Progressive runs per 90": 1.0,
+        },
+        "Defensive fullback": {
+            "Successful defensive actions per 90": 2.0,
+            "Defensive duels won, %": 1.5,
+            "Aerial duels won, %": 1.0,
+        },
+        "Inverted fullback": {
+            "Accurate passes, %": 1.5,
+            "Progressive passes per 90": 1.5,
+            "Key passes per 90": 1.0,
+        },
+        "Wing-back": {
+            "Crosses per 90": 1.5,
+            "Successful defensive actions per 90": 1.5,
+            "Progressive runs per 90": 1.0,
+        },
+    },
+    "CB": {
+        "Ball-playing CB": {
+            "Accurate forward passes, %": 2.0,
+            "Progressive passes per 90": 1.5,
+            "Accurate passes, %": 1.0,
+        },
+        "Aggressive stopper": {
+            "Successful defensive actions per 90": 2.0,
+            "Defensive duels won, %": 1.5,
+            "Aerial duels won, %": 1.0,
+        },
+        "Libero / sweeper": {
+            "Accurate passes, %": 1.5,
+            "Successful defensive actions per 90": 1.5,
+            "Interceptions per 90": 1.0,
+        },
+        "Aerial specialist": {
+            "Aerial duels won, %": 3.0,
+            "Aerial duels per 90": 1.0,
+        },
+    },
+    "GK": {
+        "Sweeper keeper": {
+            "Exits per 90": 2.0,
+            "Save rate, %": 1.0,
+            "Accurate passes, %": 1.0,
+        },
+        "Shot-stopper": {
+            "Save rate, %": 2.0,
+            "Prevented goals per 90": 2.0,
+        },
+        "Commanding GK": {
+            "Aerial duels per 90.1": 2.0,
+            "Save rate, %": 1.0,
+            "Exits per 90": 1.0,
+        },
+        "Ball-playing GK": {
+            "Accurate long passes, %": 2.0,
+            "Passes per 90": 1.0,
+            "Save rate, %": 1.0,
+        },
+    },
+}
+
 TIER_COLORS = {
     "Must scout": "#e76f51",
     "Priority": "#f4a261",
@@ -623,6 +815,23 @@ def calc_profile_fit(df: pd.DataFrame, position: str, profile: str) -> pd.Series
     if len(pos_raw) < 2 or pos_raw.std() < 1e-6:
         return pd.Series(50.0, index=df.index)
 
+    mean, std = pos_raw.mean(), pos_raw.std()
+    z = (raw - mean) / std
+    return (z * 15 + 50).clip(0, 100).round(1)
+
+
+def calc_wyscout_profile_fit(df: pd.DataFrame, pos_group: str, profile: str) -> pd.Series:
+    """Z-score profile fit using raw Wyscout column names. 50 = avg, 65 = top 16%, 80 = top 2%."""
+    weights = WYSCOUT_PROFILE_WEIGHTS.get(pos_group, {}).get(profile, {})
+    if not weights:
+        return pd.Series(50.0, index=df.index)
+    raw = pd.Series(0.0, index=df.index)
+    for col, w in weights.items():
+        raw = raw + safe_col(df, col) * w
+    pos_mask = df.get("_PosGroup", pd.Series("", index=df.index)).astype(str).eq(pos_group)
+    pos_raw = raw.loc[pos_mask]
+    if len(pos_raw) < 2 or pos_raw.std() < 1e-6:
+        return pd.Series(50.0, index=df.index)
     mean, std = pos_raw.mean(), pos_raw.std()
     z = (raw - mean) / std
     return (z * 15 + 50).clip(0, 100).round(1)
@@ -1792,6 +2001,9 @@ def render_scouting_workspace() -> None:
                     _team_col   = next((c for c in ["Team", "TeamName", "Club", "team", "club"] if c in ws_df.columns), None)
                     _pos_col    = next((c for c in ["Position", "PositionGroup", "Pos", "position", "pos"] if c in ws_df.columns), None)
                     _age_col    = next((c for c in ["Age", "AgeYears", "age"] if c in ws_df.columns), None)
+                    # Add position group mapping column for profile search
+                    if _pos_col and "_PosGroup" not in ws_df.columns:
+                        ws_df["_PosGroup"] = ws_df[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("")
 
                     st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
                     ws_search = st.text_input("Search", key="ws_search", placeholder="Player or team…", label_visibility="collapsed")
@@ -1845,7 +2057,7 @@ def render_scouting_workspace() -> None:
         st.info("No data loaded. Select a tier in the sidebar.")
         return
 
-    # ── Apply filters ─────────────────────────────────────────────────────────
+    # ── Apply sidebar filters (shared across both tabs) ───────────────────────
     ws_filtered = ws_df.copy()
     if sel_leagues:
         ws_filtered = ws_filtered.loc[ws_filtered["_League"].isin(sel_leagues)]
@@ -1861,95 +2073,204 @@ def render_scouting_workspace() -> None:
             _hay = ws_filtered[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
             ws_filtered = ws_filtered.loc[_hay.str.contains(ws_search.lower(), regex=False)]
 
-    # ── Status bar ────────────────────────────────────────────────────────────
-    _n_leagues = ws_filtered["_League"].nunique()
-    _league_summary = f"{_n_leagues} league{'s' if _n_leagues != 1 else ''}"
-    row_meta_c, dl_c = st.columns([5, 1], gap="small")
-    with row_meta_c:
-        st.markdown(
-            f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding-top:6px;">'
-            f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} players'
-            f'&nbsp;·&nbsp;{_league_summary}&nbsp;·&nbsp;{sel_tier}</div>',
-            unsafe_allow_html=True,
-        )
-    with dl_c:
-        st.download_button(
-            "⬇ CSV",
-            data=ws_filtered.drop(columns=["_League"], errors="ignore").to_csv(index=False).encode("utf-8"),
-            file_name=f"wyscout_{sel_tier.lower().replace(' ','_')}_filtered.csv",
-            mime="text/csv",
-            width="stretch",
-        )
+    ws_browse_tab, ws_profile_tab = st.tabs(["🔍 Browse", "🎭 Profile Search"])
 
-    # ── Main table ────────────────────────────────────────────────────────────
-    display_cols = [c for c in ws_filtered.columns if c != "_League"]
-    # Put _League back as "League" at the front for context when viewing multi-league data
-    if ws_filtered["_League"].nunique() > 1:
-        display_cols = ["_League"] + [c for c in display_cols]
-        ws_display_df = ws_filtered[display_cols].rename(columns={"_League": "League"})
-    else:
-        ws_display_df = ws_filtered[display_cols]
-
-    if sort_col_sel and sort_col_sel != "Default" and sort_col_sel in ws_display_df.columns:
-        ws_display_df = ws_display_df.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
-    else:
-        ws_display_df = ws_display_df.reset_index(drop=True)
-
-    col_config: dict = {}
-    for c in _ws_numeric_cols:
-        if c in ws_display_df.columns:
-            _cmin = float(ws_display_df[c].min()) if not ws_display_df[c].isna().all() else 0.0
-            _cmax = float(ws_display_df[c].max()) if not ws_display_df[c].isna().all() else 100.0
-            if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
-                col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
-
-    st.dataframe(ws_display_df, width="stretch", hide_index=True, height=780, column_config=col_config)
-
-    # ── Column explorer ───────────────────────────────────────────────────────
-    if _ws_numeric_cols:
-        with st.expander("📊 Column explorer", expanded=False):
-            _explore_col = st.selectbox("Metric", _ws_numeric_cols, key="ws_explore_col")
-            if _explore_col in ws_filtered.columns:
-                _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
-                if not _series.empty:
-                    exp_left, exp_right = st.columns([2, 1])
-                    with exp_left:
-                        _hist_chart = (
-                            alt.Chart(pd.DataFrame({"value": _series}))
-                            .mark_bar(color="#12c799", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
-                            .encode(
-                                x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
-                                        axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e", gridColor="#21262d")),
-                                y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8b949e", gridColor="#21262d")),
-                            )
-                            .properties(height=220)
-                            .configure_view(fill="#161b22", stroke=None).configure(background="#0d1117")
-                        )
-                        st.altair_chart(_hist_chart, width="stretch")
-                    with exp_right:
-                        _stats = _series.describe()
-                        _stats.index = ["Count", "Mean", "Std", "Min", "P25", "Median", "P75", "Max"]
-                        st.dataframe(_stats.reset_index().rename(columns={"index": "Stat", 0: "Value"}).round(2),
-                                     width="stretch", hide_index=True)
-
-    # ── League index ──────────────────────────────────────────────────────────
-    if not leagues_df.empty:
-        with st.expander("🌍 League index", expanded=False):
-            present_names: set[str] = set()
-            for p in wyscout_files:
-                m = file_meta.get(p.name)
-                if m is not None:
-                    present_names.add(str(m.get("League Name", "")))
-            lo_view = leagues_df.copy()
-            lo_view["✓"] = lo_view["League Name"].isin(present_names).map({True: "✓", False: ""})
-            lo_view["Division"] = lo_view["Division"].astype(str)
-            li_tier = st.selectbox("Tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
-            if li_tier != "All":
-                lo_view = lo_view.loc[lo_view["Tier Label"].eq(li_tier)]
-            st.dataframe(
-                lo_view[["League Name", "Country", "Tier Label", "Division", "✓"]],
-                width="stretch", hide_index=True, height=420,
+    with ws_browse_tab:
+        # ── Status bar ────────────────────────────────────────────────────────
+        _n_leagues = ws_filtered["_League"].nunique()
+        _league_summary = f"{_n_leagues} league{'s' if _n_leagues != 1 else ''}"
+        row_meta_c, dl_c = st.columns([5, 1], gap="small")
+        with row_meta_c:
+            st.markdown(
+                f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding-top:6px;">'
+                f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} players'
+                f'&nbsp;·&nbsp;{_league_summary}&nbsp;·&nbsp;{sel_tier}</div>',
+                unsafe_allow_html=True,
             )
+        with dl_c:
+            st.download_button(
+                "⬇ CSV",
+                data=ws_filtered.drop(columns=["_League", "_PosGroup"], errors="ignore").to_csv(index=False).encode("utf-8"),
+                file_name=f"wyscout_{sel_tier.lower().replace(' ','_')}_filtered.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+
+        # ── Main table ────────────────────────────────────────────────────────
+        display_cols = [c for c in ws_filtered.columns if c not in ("_League", "_PosGroup")]
+        if ws_filtered["_League"].nunique() > 1:
+            display_cols = ["_League"] + display_cols
+            ws_display_df = ws_filtered[display_cols].rename(columns={"_League": "League"})
+        else:
+            ws_display_df = ws_filtered[display_cols]
+
+        if sort_col_sel and sort_col_sel != "Default" and sort_col_sel in ws_display_df.columns:
+            ws_display_df = ws_display_df.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
+        else:
+            ws_display_df = ws_display_df.reset_index(drop=True)
+
+        col_config: dict = {}
+        for c in _ws_numeric_cols:
+            if c in ws_display_df.columns:
+                _cmin = float(ws_display_df[c].min()) if not ws_display_df[c].isna().all() else 0.0
+                _cmax = float(ws_display_df[c].max()) if not ws_display_df[c].isna().all() else 100.0
+                if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
+                    col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
+
+        st.dataframe(ws_display_df, width="stretch", hide_index=True, height=780, column_config=col_config)
+
+        # ── Column explorer ───────────────────────────────────────────────────
+        if _ws_numeric_cols:
+            with st.expander("📊 Column explorer", expanded=False):
+                _explore_col = st.selectbox("Metric", _ws_numeric_cols, key="ws_explore_col")
+                if _explore_col in ws_filtered.columns:
+                    _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
+                    if not _series.empty:
+                        exp_left, exp_right = st.columns([2, 1])
+                        with exp_left:
+                            _hist_chart = (
+                                alt.Chart(pd.DataFrame({"value": _series}))
+                                .mark_bar(color="#12c799", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                                .encode(
+                                    x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
+                                            axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e", gridColor="#21262d")),
+                                    y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8b949e", gridColor="#21262d")),
+                                )
+                                .properties(height=220)
+                                .configure_view(fill="#161b22", stroke=None).configure(background="#0d1117")
+                            )
+                            st.altair_chart(_hist_chart, width="stretch")
+                        with exp_right:
+                            _stats = _series.describe()
+                            _stats.index = ["Count", "Mean", "Std", "Min", "P25", "Median", "P75", "Max"]
+                            st.dataframe(_stats.reset_index().rename(columns={"index": "Stat", 0: "Value"}).round(2),
+                                         width="stretch", hide_index=True)
+
+        # ── League index ──────────────────────────────────────────────────────
+        if not leagues_df.empty:
+            with st.expander("🌍 League index", expanded=False):
+                present_names: set[str] = set()
+                for p in wyscout_files:
+                    m = file_meta.get(p.name)
+                    if m is not None:
+                        present_names.add(str(m.get("League Name", "")))
+                lo_view = leagues_df.copy()
+                lo_view["✓"] = lo_view["League Name"].isin(present_names).map({True: "✓", False: ""})
+                lo_view["Division"] = lo_view["Division"].astype(str)
+                li_tier = st.selectbox("Tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
+                if li_tier != "All":
+                    lo_view = lo_view.loc[lo_view["Tier Label"].eq(li_tier)]
+                st.dataframe(
+                    lo_view[["League Name", "Country", "Tier Label", "Division", "✓"]],
+                    width="stretch", hide_index=True, height=420,
+                )
+
+    with ws_profile_tab:
+        # ── Profile target selectors ─────────────────────────────────────────
+        _ws_pos_groups = sorted(WYSCOUT_PROFILE_WEIGHTS.keys())
+        _wppos_col, _wppro_col = st.columns([1, 2], gap="small")
+        with _wppos_col:
+            _ws_target_pos = st.selectbox(
+                "Position group", ["—"] + _ws_pos_groups,
+                key="ws_profile_pos", label_visibility="visible",
+            )
+        with _wppro_col:
+            _ws_prof_options = list(WYSCOUT_PROFILE_WEIGHTS.get(_ws_target_pos, {}).keys()) if _ws_target_pos != "—" else []
+            _ws_target_profile = st.selectbox(
+                "Profile", ["—"] + _ws_prof_options,
+                key="ws_profile_name", disabled=_ws_target_pos == "—", label_visibility="visible",
+            )
+
+        if _ws_target_pos == "—" or _ws_target_profile == "—":
+            st.markdown(
+                "<div class='note-box'>Select a <strong>position group</strong> and a <strong>profile</strong> above "
+                "to rank every player in that position by how well they fit the profile, "
+                "using z-scores calculated from Wyscout metrics within the position pool.</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            # Calculate ProfileFit on full ws_df so z-scores use the complete position pool
+            _ws_scored = ws_df.copy()
+            if "_PosGroup" not in _ws_scored.columns and _pos_col:
+                _ws_scored["_PosGroup"] = _ws_scored[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("")
+            _ws_scored["ProfileFit"] = calc_wyscout_profile_fit(_ws_scored, _ws_target_pos, _ws_target_profile)
+
+            # Apply sidebar filters (except position — profile group replaces that)
+            if sel_leagues:
+                _ws_scored = _ws_scored.loc[_ws_scored["_League"].isin(sel_leagues)]
+            if sel_teams and _team_col:
+                _ws_scored = _ws_scored.loc[_ws_scored[_team_col].astype(str).isin(sel_teams)]
+            if sel_age and _age_col:
+                _ws_scored = _ws_scored.loc[pd.to_numeric(_ws_scored[_age_col], errors="coerce").between(sel_age[0], sel_age[1])]
+            if ws_search:
+                _hcols = [c for c in [_player_col, _team_col] if c]
+                if _hcols:
+                    _hay = _ws_scored[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
+                    _ws_scored = _ws_scored.loc[_hay.str.contains(ws_search.lower(), regex=False)]
+
+            # Filter to players in this position group
+            _ws_pos_pool = _ws_scored.loc[_ws_scored["_PosGroup"].eq(_ws_target_pos)].copy()
+
+            if _ws_pos_pool.empty:
+                st.info(
+                    f"No {_ws_target_pos} players found. Check that the Wyscout position codes are mapped — "
+                    f"expected codes: {', '.join(k for k, v in WYSCOUT_POSITION_MAP.items() if v == _ws_target_pos)}."
+                )
+            else:
+                _ws_pos_pool = _ws_pos_pool.sort_values("ProfileFit", ascending=False)
+
+                # Profile driver strip
+                _ws_pw = WYSCOUT_PROFILE_WEIGHTS[_ws_target_pos][_ws_target_profile]
+                _ws_drivers = " · ".join(f"{k} ×{v}" for k, v in _ws_pw.items())
+                _ws_avail_drivers = [k for k in _ws_pw if k in _ws_pos_pool.columns]
+                _ws_missing = [k for k in _ws_pw if k not in _ws_pos_pool.columns]
+                _ws_note = (
+                    f'<br><span style="color:var(--amber);font-size:.65rem;">Missing columns (scored as 0): '
+                    f'{", ".join(_ws_missing)}</span>' if _ws_missing else ""
+                )
+                st.markdown(
+                    f"<div class='note-box'>"
+                    f"<strong style='color:var(--teal-hi);'>{_ws_target_profile}</strong> "
+                    f"<span style='color:var(--muted);'>({_ws_target_pos})</span>"
+                    f"<br><span style='color:var(--faint);font-size:.7rem;'>Drivers: {_ws_drivers}</span>"
+                    f"{_ws_note}"
+                    f"<br><span style='color:var(--faint);font-size:.7rem;'>"
+                    f"Z-score scaled: 50 = position average · 65 = top 16% · 80 = top 2%"
+                    f"</span></div>",
+                    unsafe_allow_html=True,
+                )
+
+                # Build display: id cols + league + age + raw position + ProfileFit + driver cols
+                _ws_id_cols = [c for c in [_player_col, _team_col] if c]
+                _ws_show = _ws_id_cols[:]
+                if "_League" in _ws_pos_pool.columns and _ws_pos_pool["_League"].nunique() > 1:
+                    _ws_show.append("_League")
+                if _age_col and _age_col in _ws_pos_pool.columns:
+                    _ws_show.append(_age_col)
+                if _pos_col and _pos_col in _ws_pos_pool.columns:
+                    _ws_show.append(_pos_col)
+                _ws_show.append("ProfileFit")
+                for _wsc in _ws_avail_drivers:
+                    if _wsc not in _ws_show:
+                        _ws_show.append(_wsc)
+
+                _ws_prof_board = (
+                    _ws_pos_pool[[c for c in _ws_show if c in _ws_pos_pool.columns]]
+                    .rename(columns={"_League": "League"})
+                    .reset_index(drop=True)
+                )
+
+                _ws_prof_cfg: dict = {
+                    "ProfileFit": st.column_config.ProgressColumn("Profile Fit ▼", min_value=0, max_value=100, format="%.1f"),
+                }
+                for _wsc in _ws_avail_drivers:
+                    _display_name = _wsc  # Wyscout names are already human-readable
+                    _cmin = float(_ws_prof_board[_wsc].min()) if _wsc in _ws_prof_board.columns and not _ws_prof_board[_wsc].isna().all() else 0.0
+                    _cmax = float(_ws_prof_board[_wsc].max()) if _wsc in _ws_prof_board.columns and not _ws_prof_board[_wsc].isna().all() else 1.0
+                    if _cmax > _cmin:
+                        _ws_prof_cfg[_wsc] = st.column_config.ProgressColumn(_display_name, min_value=_cmin, max_value=_cmax, format="%.2f")
+
+                st.dataframe(_ws_prof_board.round(2), width="stretch", hide_index=True, height=780, column_config=_ws_prof_cfg)
 
 
 
