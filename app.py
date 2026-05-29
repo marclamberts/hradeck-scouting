@@ -1349,7 +1349,376 @@ def _load_wyscout_file(path: Path) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False)
+def load_leagues_overview() -> pd.DataFrame:
+    path = APP_DIR / "data" / "Leagues Overview.xlsx"
+    if not path.exists():
+        return pd.DataFrame()
+    df = pd.read_excel(path)
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+_COUNTRY_ALIASES: dict[str, str] = {
+    "Czech": "Czech Republic",
+    "Moldovia": "Moldova",
+    "Moldovia": "Moldova",
+    "Turkiye": "Türkiye",
+    "Saudi": "Saudi Arabia",
+    "Korea": "South Korea",
+    "Bosnia": "Bosnia",
+    "USA": "USA",
+    "Japan II III": "Japan",
+}
+
+_TIER_COLORS_WS: dict[str, str] = {
+    "Elite":          "#e76f51",
+    "Top":            "#f4a261",
+    "Strong":         "#2a9d8f",
+    "Developing":     "#457b9d",
+    "Lower":          "#637d96",
+    "Youth/Grassroots": "#4a5568",
+}
+
+_TIER_ICONS: dict[str, str] = {
+    "Elite": "🏆",
+    "Top": "⭐",
+    "Strong": "💪",
+    "Developing": "📈",
+    "Lower": "🔍",
+    "Youth/Grassroots": "🌱",
+}
+
+
+def _parse_wyscout_filename(filename: str) -> tuple[str, int | str]:
+    """Return (country, division) from a Wyscout DB filename."""
+    name = filename
+    for ext in (".xlsx", ".xls", ".csv"):
+        name = name.replace(ext, "")
+    # Japan II III is a combined file
+    if name == "Japan II III":
+        return "Japan", 2
+    # Numbered parts: "Germany 4 - Part I" → Germany, div 4
+    import re as _re
+    m = _re.match(r"^(.+?)\s+(\d)\s+-\s+Part\s+", name)
+    if m:
+        return m.group(1).strip(), int(m.group(2))
+    # Roman-suffix parts: "Australia II - Part I" → Australia, div 2
+    m2 = _re.match(r"^(.+?)\s+(IV|III|II)\s+-\s+Part\s+", name)
+    if m2:
+        return m2.group(1).strip(), {"II": 2, "III": 3, "IV": 4}[m2.group(2)]
+    # Youth suffixes
+    for tag, div in (("U19", "U19"), ("U17", "U17")):
+        if name.endswith(tag):
+            return name[: -len(tag)].strip(), div
+        if f" {tag}" in name:
+            return name.split(f" {tag}")[0].strip(), div
+    # Standard roman suffixes
+    for suffix, num in ((" IV", 4), (" III", 3), (" II", 2)):
+        if name.endswith(suffix):
+            return name[: -len(suffix)].strip(), num
+    return name.strip(), 1
+
+
+def _match_league(filename: str, leagues_df: pd.DataFrame) -> pd.Series | None:
+    if leagues_df.empty:
+        return None
+    country_raw, division = _parse_wyscout_filename(filename)
+    country = _COUNTRY_ALIASES.get(country_raw, country_raw)
+    div_str = str(division)
+    mask = (
+        leagues_df["Country"].fillna("").str.lower().str.contains(country.lower(), regex=False)
+        & leagues_df["Division"].astype(str).str.strip().eq(div_str)
+    )
+    match = leagues_df.loc[mask]
+    if not match.empty:
+        return match.iloc[0]
+    # Fuzzy: just match country, take lowest division number for that country
+    mask2 = leagues_df["Country"].fillna("").str.lower().str.contains(country.lower(), regex=False)
+    match2 = leagues_df.loc[mask2]
+    if not match2.empty:
+        num_divs = pd.to_numeric(match2["Division"], errors="coerce")
+        best = match2.loc[num_divs.eq(num_divs.min())]
+        return best.iloc[0]
+    return None
+
+
 def render_scouting_workspace() -> None:
+    st.markdown("<div class='workspace-label'>🔍 Scouting — Wyscout database browser</div>", unsafe_allow_html=True)
+
+    leagues_df = load_leagues_overview()
+    wyscout_files = sorted(
+        [p for p in WYSCOUT_DB_DIR.glob("*") if p.suffix.lower() in (".xlsx", ".xls", ".csv") and not p.name.startswith("~")],
+        key=lambda p: p.name.lower(),
+    )
+
+    if not wyscout_files:
+        st.markdown(
+            '<div class="note-box" style="border-left-color:var(--amber);">'
+            '<strong style="color:var(--amber);">No Wyscout files found.</strong><br>'
+            f'Upload your exported Wyscout Excel or CSV files to '
+            f'<code style="color:var(--teal);background:rgba(16,212,170,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # ── Build file→league index ──────────────────────────────────────────────
+    file_meta: dict[str, pd.Series | None] = {p.name: _match_league(p.name, leagues_df) for p in wyscout_files}
+
+    def _tier_of(fname: str) -> str:
+        m = file_meta.get(fname)
+        return str(m["Tier Label"]) if m is not None and pd.notna(m.get("Tier Label")) else "Unknown"
+
+    def _tier_num_of(fname: str) -> int:
+        m = file_meta.get(fname)
+        return int(m["Tier"]) if m is not None and pd.notna(m.get("Tier")) else 99
+
+    # ── Tier filter ──────────────────────────────────────────────────────────
+    all_tiers = ["All", "Elite", "Top", "Strong", "Developing", "Lower", "Youth/Grassroots"]
+    sel_tier = st.segmented_control("League tier", all_tiers, default="All", key="ws_tier_filter", width="stretch")
+    if sel_tier and sel_tier != "All":
+        visible_files = [p for p in wyscout_files if _tier_of(p.name) == sel_tier]
+    else:
+        visible_files = wyscout_files
+
+    if not visible_files:
+        st.info(f"No files found for tier: {sel_tier}")
+        return
+
+    # ── Tier overview strip ──────────────────────────────────────────────────
+    tier_counts: dict[str, int] = {}
+    for p in wyscout_files:
+        t = _tier_of(p.name)
+        tier_counts[t] = tier_counts.get(t, 0) + 1
+
+    _tc_html = '<div class="role-rail" style="margin-bottom:10px;">'
+    for tier in ["Elite", "Top", "Strong", "Developing", "Lower", "Youth/Grassroots"]:
+        cnt = tier_counts.get(tier, 0)
+        if cnt == 0:
+            continue
+        _tc = _TIER_COLORS_WS.get(tier, "#637d96")
+        _ti = _TIER_ICONS.get(tier, "")
+        _tc_html += (
+            f'<div class="role-cell" style="border-top:2px solid {_tc};">'
+            f'<div class="role-cell-role">{_ti} {tier}</div>'
+            f'<div class="role-cell-score" style="color:{_tc};">{cnt}</div>'
+            f'<div class="role-cell-count">leagues</div>'
+            f'</div>'
+        )
+    _tc_html += '</div>'
+    st.markdown(_tc_html, unsafe_allow_html=True)
+
+    # ── File selector with tier label ────────────────────────────────────────
+    def _file_label(p: Path) -> str:
+        m = file_meta.get(p.name)
+        if m is not None and pd.notna(m.get("League Name")):
+            tier_icon = _TIER_ICONS.get(str(m["Tier Label"]), "")
+            return f"{tier_icon} {m['League Name']}  ({p.name})"
+        return p.name
+
+    file_labels = [_file_label(p) for p in visible_files]
+    _ws_key = "wyscout_selected_file"
+    # Reset selection index if it's out of range after tier filter
+    if st.session_state.get(_ws_key) not in file_labels:
+        st.session_state[_ws_key] = file_labels[0] if file_labels else None
+
+    selected_label_ws = st.selectbox("League / file", file_labels, key=_ws_key)
+    selected_path = visible_files[file_labels.index(selected_label_ws)]
+    selected_name = selected_path.name
+
+    # ── League info banner ───────────────────────────────────────────────────
+    league_info = file_meta.get(selected_name)
+    if league_info is not None:
+        _t_col = _TIER_COLORS_WS.get(str(league_info.get("Tier Label", "")), "#637d96")
+        _t_icon = _TIER_ICONS.get(str(league_info.get("Tier Label", "")), "")
+        _notes_str = f' &nbsp;·&nbsp; <em>{escape(str(league_info["Notes"]))}</em>' if pd.notna(league_info.get("Notes")) else ""
+        st.markdown(
+            f'<div class="note-box" style="border-left-color:{_t_col};padding:8px 14px;margin-bottom:10px;">'
+            f'<strong style="color:{_t_col};">{_t_icon} {escape(str(league_info["Tier Label"]))} — Tier {int(league_info["Tier"])}</strong>'
+            f' &nbsp;·&nbsp; {escape(str(league_info["League Name"]))}'
+            f' &nbsp;·&nbsp; {escape(str(league_info["Country"]))}'
+            f' &nbsp;·&nbsp; Div {escape(str(league_info["Division"]))}'
+            f' &nbsp;·&nbsp; ~{int(league_info["Players in DB"]):,} players in DB'
+            f'{_notes_str}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Load file ────────────────────────────────────────────────────────────
+    @st.cache_data(show_spinner=False, ttl=300)
+    def _cached_wyscout(path_str: str) -> pd.DataFrame:
+        return _load_wyscout_file(Path(path_str))
+
+    with st.spinner("Loading…"):
+        ws_df = _cached_wyscout(str(selected_path))
+
+    if ws_df.empty:
+        st.warning(f"Could not read data from **{selected_name}**.")
+        return
+
+    from datetime import datetime as _dt
+    _file_date = _dt.fromtimestamp(selected_path.stat().st_mtime).strftime("%-d %b %Y")
+    _ws_numeric_cols = ws_df.select_dtypes(include=[np.number]).columns.tolist()
+    _ws_text_cols = ws_df.select_dtypes(exclude=[np.number]).columns.tolist()
+    _player_col = next((c for c in ["Player", "PlayerName", "Name", "player", "name"] if c in ws_df.columns), None)
+    _team_col   = next((c for c in ["Team", "TeamName", "Club", "team", "club"] if c in ws_df.columns), None)
+    _league_col = next((c for c in ["League", "Competition", "LeagueLabel", "league", "competition"] if c in ws_df.columns), None)
+    _pos_col    = next((c for c in ["Position", "PositionGroup", "Pos", "position", "pos"] if c in ws_df.columns), None)
+    _age_col    = next((c for c in ["Age", "AgeYears", "age"] if c in ws_df.columns), None)
+
+    # ── KPI cockpit ──────────────────────────────────────────────────────────
+    _tier_label_ws = str(league_info["Tier Label"]) if league_info is not None else "—"
+    _tier_num_ws   = f"Tier {int(league_info['Tier'])}" if league_info is not None else "—"
+    st.markdown(
+        '<div class="scouting-cockpit"><div class="cockpit-grid">'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Rows loaded</div>'
+        f'<div class="cockpit-value">{len(ws_df):,}</div>'
+        f'<div class="cockpit-note">{len(ws_df.columns)} columns · {_file_date}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Players</div>'
+        f'<div class="cockpit-value">{ws_df[_player_col].nunique() if _player_col else "?"}</div>'
+        f'<div class="cockpit-note">unique</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Teams</div>'
+        f'<div class="cockpit-value">{ws_df[_team_col].nunique() if _team_col else "?"}</div>'
+        f'<div class="cockpit-note">in file</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">League tier</div>'
+        f'<div class="cockpit-value" style="font-size:.9rem;">{_tier_label_ws}</div>'
+        f'<div class="cockpit-note">{_tier_num_ws}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Metrics</div>'
+        f'<div class="cockpit-value">{len(_ws_numeric_cols)}</div>'
+        f'<div class="cockpit-note">{len(_ws_text_cols)} text cols</div></div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Filters ──────────────────────────────────────────────────────────────
+    filt_cols = st.columns([1, 1, 1, 1])
+    ws_filtered = ws_df.copy()
+    with filt_cols[0]:
+        if _pos_col:
+            pos_opts = sorted(ws_df[_pos_col].dropna().astype(str).unique())
+            sel_pos = st.multiselect("Position", pos_opts, default=pos_opts, key="ws_pos_filter")
+            ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
+    with filt_cols[1]:
+        if _team_col:
+            team_opts = sorted(ws_df[_team_col].dropna().astype(str).unique())
+            sel_teams = st.multiselect("Team", team_opts, default=team_opts, key="ws_team_filter")
+            ws_filtered = ws_filtered.loc[ws_filtered[_team_col].astype(str).isin(sel_teams)]
+    with filt_cols[2]:
+        if _league_col:
+            league_opts = sorted(ws_df[_league_col].dropna().astype(str).unique())
+            sel_leagues = st.multiselect("Competition", league_opts, default=league_opts, key="ws_league_filter")
+            ws_filtered = ws_filtered.loc[ws_filtered[_league_col].astype(str).isin(sel_leagues)]
+    with filt_cols[3]:
+        if _age_col:
+            _age_series = pd.to_numeric(ws_df[_age_col], errors="coerce").dropna()
+            if not _age_series.empty:
+                _age_min, _age_max = float(np.floor(_age_series.min())), float(np.ceil(_age_series.max()))
+                if _age_min < _age_max:
+                    sel_age = st.slider("Age", _age_min, _age_max, (_age_min, _age_max), step=1.0, key="ws_age_filter")
+                    ws_filtered = ws_filtered.loc[pd.to_numeric(ws_filtered[_age_col], errors="coerce").between(sel_age[0], sel_age[1])]
+
+    ws_search = st.text_input("Search player or team", key="ws_search", placeholder="Type name…")
+    if ws_search:
+        _hay_cols = [c for c in [_player_col, _team_col] if c]
+        if _hay_cols:
+            _haystack = ws_filtered[_hay_cols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
+            ws_filtered = ws_filtered.loc[_haystack.str.contains(ws_search.lower(), regex=False)]
+
+    st.markdown(
+        f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:4px 0 8px;">'
+        f'Showing <span style="color:var(--ink);">{len(ws_filtered):,}</span> of {len(ws_df):,} rows'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Tabs ─────────────────────────────────────────────────────────────────
+    data_table_tab, explore_tab, leagues_tab = st.tabs(["📋 Data table", "📊 Column explorer", "🌍 League index"])
+
+    with data_table_tab:
+        sort_opts = [c for c in _ws_numeric_cols if c in ws_filtered.columns]
+        if sort_opts:
+            sort_col_sel = st.selectbox("Sort by", sort_opts, key="ws_sort_col")
+            ws_display = ws_filtered.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
+        else:
+            ws_display = ws_filtered.reset_index(drop=True)
+        col_config = {}
+        for c in _ws_numeric_cols:
+            if c in ws_display.columns:
+                _cmin = float(ws_display[c].min()) if not ws_display[c].isna().all() else 0.0
+                _cmax = float(ws_display[c].max()) if not ws_display[c].isna().all() else 100.0
+                if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
+                    col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
+        st.dataframe(ws_display, use_container_width=True, hide_index=True, height=560, column_config=col_config)
+        st.download_button(
+            "⬇ Download filtered CSV",
+            data=ws_filtered.to_csv(index=False).encode("utf-8"),
+            file_name=f"wyscout_{selected_name.replace(' ', '_').lower()}_filtered.csv",
+            mime="text/csv",
+            width="stretch",
+        )
+
+    with explore_tab:
+        if _ws_numeric_cols:
+            _explore_col = st.selectbox("Metric to explore", _ws_numeric_cols, key="ws_explore_col")
+            if _explore_col in ws_filtered.columns:
+                _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
+                if not _series.empty:
+                    _hist_chart = (
+                        alt.Chart(pd.DataFrame({"value": _series}))
+                        .mark_bar(color="#10d4aa", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                        .encode(
+                            x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
+                                    axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                            y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
+                        )
+                        .properties(height=260, title=alt.TitleParams(f"Distribution — {_explore_col}", color="#8fa3b1", fontSize=12))
+                        .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
+                    )
+                    st.altair_chart(_hist_chart, use_container_width=True)
+                    _stats = _series.describe()
+                    _stats.index = ["Count","Mean","Std dev","Min","25th pctile","Median","75th pctile","Max"]
+                    st.dataframe(_stats.reset_index().rename(columns={"index":"Stat",0:"Value"}).round(3),
+                                 use_container_width=True, hide_index=True)
+                    if _player_col and not ws_filtered.empty:
+                        top10 = (ws_filtered[[_player_col] + ([_team_col] if _team_col else []) + [_explore_col]]
+                                 .dropna(subset=[_explore_col]).sort_values(_explore_col, ascending=False).head(10))
+                        st.markdown(f"<div class='workspace-label' style='font-size:.58rem;margin:10px 0 6px;'>Top 10 — {_explore_col}</div>", unsafe_allow_html=True)
+                        st.dataframe(top10.reset_index(drop=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("No numeric columns detected in this file.")
+
+    with leagues_tab:
+        if not leagues_df.empty:
+            st.markdown("<div class='workspace-label' style='font-size:.58rem;margin-bottom:8px;'>All leagues in Wyscout DB</div>", unsafe_allow_html=True)
+            # Enrich with file presence flag
+            present_countries: set[str] = set()
+            for p in wyscout_files:
+                m = file_meta.get(p.name)
+                if m is not None:
+                    present_countries.add(str(m.get("League Name", "")))
+            lo_view = leagues_df.copy()
+            lo_view["In DB"] = lo_view["League Name"].isin(present_countries).map({True: "✓", False: "—"})
+            tier_filter_li = st.selectbox("Filter tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
+            if tier_filter_li != "All":
+                lo_view = lo_view.loc[lo_view["Tier Label"].eq(tier_filter_li)]
+            # Color-code Tier column
+            st.dataframe(
+                lo_view[["League Name","Country","Division","Tier","Tier Label","Players in DB","In DB","Notes"]],
+                use_container_width=True,
+                hide_index=True,
+                height=500,
+                column_config={
+                    "Tier": st.column_config.NumberColumn("Tier", format="%d"),
+                    "Players in DB": st.column_config.NumberColumn("Players", format="%d"),
+                    "In DB": st.column_config.TextColumn("In DB", width="small"),
+                },
+            )
+        else:
+            st.info("Leagues Overview.xlsx not found in data/.")
+
+
+def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
     st.markdown("<div class='workspace-label'>🔍 Scouting — Wyscout database browser</div>", unsafe_allow_html=True)
 
     wyscout_files = sorted([
