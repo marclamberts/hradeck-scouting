@@ -1305,7 +1305,7 @@ def render_workspace_nav(location: str = "top") -> None:
                 section,
                 key=f"workspace_{location}_{section}",
                 type="primary" if active == section else "secondary",
-                use_container_width=True,
+                width="stretch",
                 on_click=set_workspace,
                 args=(section,),
             )
@@ -2884,7 +2884,7 @@ if not st.session_state["show_scouting_workspace"]:
                 f"{'→  ' if is_primary else ''}Open {title}",
                 key=f"landing_{section}",
                 type="primary" if is_primary else "secondary",
-                use_container_width=True,
+                width="stretch",
                 on_click=set_workspace,
                 args=(section,),
             )
@@ -2973,7 +2973,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("<div class='menu-caption'>Pure player quality only — recruitment value, resale, wage and fee risk are in the Recruitment workspace.</div>", unsafe_allow_html=True)
-    model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", use_container_width=True)
+    model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
     defaults = preset_weights[model_preset]
     with st.expander("Lens weights", expanded=False):
         weights = {
@@ -3065,13 +3065,13 @@ st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick filte
 qm_cols = st.columns([1, 1, 1, 1, 2])
 _qm = st.session_state.get("quick_mode", "Full board")
 with qm_cols[0]:
-    st.button("⚡ Full board",  type="primary" if _qm == "Full board"      else "secondary", use_container_width=True, on_click=set_quick_mode, args=("Full board",))
+    st.button("⚡ Full board",  type="primary" if _qm == "Full board"      else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
 with qm_cols[1]:
-    st.button("🌱 U23 quality", type="primary" if _qm == "U23 quality"     else "secondary", use_container_width=True, on_click=set_quick_mode, args=("U23 quality",))
+    st.button("🌱 U23 quality", type="primary" if _qm == "U23 quality"     else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
 with qm_cols[2]:
-    st.button("🏆 Elite only",  type="primary" if _qm == "Elite quality"   else "secondary", use_container_width=True, on_click=set_quick_mode, args=("Elite quality",))
+    st.button("🏆 Elite only",  type="primary" if _qm == "Elite quality"   else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
 with qm_cols[3]:
-    st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", use_container_width=True, on_click=set_quick_mode, args=("Reliable quality",))
+    st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
 with qm_cols[4]:
     _shortlist_count = len(st.session_state.get("shortlist_players", []))
     st.markdown(
@@ -3271,7 +3271,7 @@ with player_tab:
         _sl_priority = st.selectbox("Priority", ["Watch", "Hot", "Observed"], key=f"sl_pri_{selected_label[:20]}")
     with _sl_add_cols[1]:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-        if st.button("➕ Add to shortlist", type="primary", use_container_width=True):
+        if st.button("➕ Add to shortlist", type="primary", width="stretch"):
             _sl_notes_val = st.session_state.get(f"sl_notes_{selected_label[:20]}", "")
             add_to_shortlist(player["PlayerName"], priority=_sl_priority, notes=_sl_notes_val)
             st.success(f"Added {player['PlayerName']} to shortlist as {_sl_priority}")
@@ -3283,7 +3283,7 @@ with player_tab:
         data=build_player_card_pdf(player, df.loc[df["PositionGroup"].eq(player["PositionGroup"])], scout_notes=_card_notes),
         file_name=f"fchk_player_{player['PlayerName'].replace(' ', '_').lower()}.pdf",
         mime="application/pdf",
-        use_container_width=True,
+        width="stretch",
     )
     lab_left, lab_right = st.columns([1, 1])
     with lab_left:
@@ -3638,9 +3638,9 @@ with export_tab:
     shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("QualityScore", ascending=False)
     export_left, export_right = st.columns([1, 1])
     with export_left:
-        st.download_button("Download board CSV", data=export_df.to_csv(index=False).encode("utf-8"), file_name="fchk_quality_board.csv", mime="text/csv", use_container_width=True)
+        st.download_button("Download board CSV", data=export_df.to_csv(index=False).encode("utf-8"), file_name="fchk_quality_board.csv", mime="text/csv", width="stretch")
     with export_right:
-        st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", use_container_width=True)
+        st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", width="stretch")
     _sl_data = st.session_state.get("shortlist_data", {})
     _sl_names = list(_sl_data.keys())
     shortlist_df = df.loc[df["PlayerName"].isin(_sl_names)].sort_values("QualityScore", ascending=False)
@@ -3675,8 +3675,8 @@ with export_tab:
         sl_exp_left, sl_exp_right = st.columns(2)
         _sl_csv_cols = [c for c in export_cols if c in shortlist_enriched.columns]
         with sl_exp_left:
-            st.download_button("Download shortlist CSV", data=shortlist_enriched[_sl_csv_cols + [c for c in ["Priority","Notes","Added"] if c in shortlist_enriched.columns]].to_csv(index=False).encode("utf-8"), file_name="fchk_shortlist.csv", mime="text/csv", use_container_width=True)
+            st.download_button("Download shortlist CSV", data=shortlist_enriched[_sl_csv_cols + [c for c in ["Priority","Notes","Added"] if c in shortlist_enriched.columns]].to_csv(index=False).encode("utf-8"), file_name="fchk_shortlist.csv", mime="text/csv", width="stretch")
         with sl_exp_right:
-            if st.button("Clear shortlist", use_container_width=True):
+            if st.button("Clear shortlist", width="stretch"):
                 clear_shortlist()
                 st.rerun()
