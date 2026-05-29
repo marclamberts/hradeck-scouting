@@ -1469,21 +1469,24 @@ def enter_scouting_workspace() -> None:
 
 
 def render_workspace_nav(location: str = "top") -> None:
-    st.markdown("<div class='workspace-nav-spacer'></div>", unsafe_allow_html=True)
     active = st.session_state.get("active_workspace", "Recruitment")
-    nav_cols = st.columns(len(WORKSPACES), gap="small")
-    for idx, section in enumerate(WORKSPACES):
-        icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
-        is_active = active == section
-        with nav_cols[idx]:
-            st.button(
-                f"{icon}  {section}\n{desc}",
-                key=f"workspace_{location}_{section}",
-                type="primary" if is_active else "secondary",
-                width="stretch",
-                on_click=set_workspace,
-                args=(section,),
-            )
+    _brand_col, _nav_col = st.columns([1, 4], gap="small", vertical_alignment="center")
+    with _brand_col:
+        st.markdown("<div class='app-brand'>⚽ FCHK<span class='app-brand-sub'> Scouting</span></div>", unsafe_allow_html=True)
+    with _nav_col:
+        nav_cols = st.columns(len(WORKSPACES), gap="small")
+        for idx, section in enumerate(WORKSPACES):
+            icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
+            is_active = active == section
+            with nav_cols[idx]:
+                st.button(
+                    f"{icon}  {section}",
+                    key=f"workspace_{location}_{section}",
+                    type="primary" if is_active else "secondary",
+                    width="stretch",
+                    on_click=set_workspace,
+                    args=(section,),
+                )
 
 
 BALANCED_WEIGHTS = {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1}
@@ -1530,6 +1533,8 @@ def load_leagues_overview() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_excel(path)
     df.columns = [str(c).strip() for c in df.columns]
+    if "Division" in df.columns:
+        df["Division"] = df["Division"].astype(str)
     return df
 
 
@@ -1644,404 +1649,221 @@ def render_scouting_workspace() -> None:
         m = file_meta.get(fname)
         return str(m["Tier Label"]) if m is not None and pd.notna(m.get("Tier Label")) else "Unknown"
 
-    # ── Split layout: left nav | right table ─────────────────────────────────
-    nav_col, main_col = st.columns([1, 3], gap="medium")
+    # ── Top controls: tier | league | search | sort ───────────────────────────
+    ctrl_a, ctrl_b, ctrl_c, ctrl_d = st.columns([1, 2, 2, 1], gap="small")
 
-    with nav_col:
-        # Tier filter
+    with ctrl_a:
         all_tiers = ["All", "Elite", "Top", "Strong", "Developing", "Lower", "Youth/Grassroots"]
-        sel_tier = st.selectbox("League tier", all_tiers, key="ws_tier_filter")
-        if sel_tier and sel_tier != "All":
-            visible_files = [p for p in wyscout_files if _tier_of(p.name) == sel_tier]
-        else:
-            visible_files = wyscout_files
+        sel_tier = st.selectbox("Tier", all_tiers, key="ws_tier_filter")
 
-        if not visible_files:
-            st.info(f"No files for tier: {sel_tier}")
-            return
+    if sel_tier and sel_tier != "All":
+        visible_files = [p for p in wyscout_files if _tier_of(p.name) == sel_tier]
+    else:
+        visible_files = wyscout_files
 
-        # File selector — show league name when available
-        def _file_label(p: Path) -> str:
-            m = file_meta.get(p.name)
-            if m is not None and pd.notna(m.get("League Name")):
-                icon = _TIER_ICONS.get(str(m["Tier Label"]), "")
-                return f"{icon} {m['League Name']}"
-            return p.name
+    if not visible_files:
+        st.info(f"No files for tier: {sel_tier}")
+        return
 
-        file_labels = [_file_label(p) for p in visible_files]
-        _ws_key = "wyscout_selected_file"
-        if st.session_state.get(_ws_key) not in file_labels:
-            st.session_state[_ws_key] = file_labels[0]
+    def _file_label(p: Path) -> str:
+        m = file_meta.get(p.name)
+        if m is not None and pd.notna(m.get("League Name")):
+            icon = _TIER_ICONS.get(str(m["Tier Label"]), "")
+            return f"{icon} {m['League Name']}"
+        return p.name
 
+    file_labels = [_file_label(p) for p in visible_files]
+    _ws_key = "wyscout_selected_file"
+    if st.session_state.get(_ws_key) not in file_labels:
+        st.session_state[_ws_key] = file_labels[0]
+
+    with ctrl_b:
         selected_label_ws = st.selectbox("League", file_labels, key=_ws_key)
-        selected_path = visible_files[file_labels.index(selected_label_ws)]
-        selected_name = selected_path.name
 
-        # League info mini-card
-        league_info = file_meta.get(selected_name)
-        if league_info is not None:
-            _t_col = _TIER_COLORS_WS.get(str(league_info.get("Tier Label", "")), "#637d96")
-            _notes_str = f'<br><span style="color:var(--faint);font-size:.68rem;font-style:italic;">{escape(str(league_info["Notes"]))}</span>' if pd.notna(league_info.get("Notes")) else ""
-            st.markdown(
-                f'<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {_t_col};'
-                f'border-radius:6px;padding:9px 12px;margin:4px 0 10px;">'
-                f'<div style="color:{_t_col};font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;">'
-                f'{_TIER_ICONS.get(str(league_info["Tier Label"]),"")} {escape(str(league_info["Tier Label"]))} · Tier {int(league_info["Tier"])}</div>'
-                f'<div style="color:var(--muted);font-size:.72rem;margin-top:3px;">{escape(str(league_info["Country"]))} · Div {escape(str(league_info["Division"]))}</div>'
-                f'<div style="color:var(--faint);font-size:.68rem;">{int(league_info["Players in DB"]):,} players in DB</div>'
-                f'{_notes_str}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            league_info = None
+    selected_path = visible_files[file_labels.index(selected_label_ws)]
+    selected_name = selected_path.name
 
-        # Load data here so filters below can use it
-        @st.cache_data(show_spinner=False, ttl=300)
-        def _cached_wyscout(path_str: str) -> pd.DataFrame:
-            return _load_wyscout_file(Path(path_str))
+    # ── Load data ─────────────────────────────────────────────────────────────
+    @st.cache_data(show_spinner=False, ttl=300)
+    def _cached_wyscout(path_str: str) -> pd.DataFrame:
+        return _load_wyscout_file(Path(path_str))
 
-        ws_df = _cached_wyscout(str(selected_path))
-        if ws_df.empty:
-            st.warning(f"Could not read **{selected_name}**.")
-            return
+    ws_df = _cached_wyscout(str(selected_path))
+    if ws_df.empty:
+        st.warning(f"Could not read **{selected_name}**.")
+        return
 
-        _ws_numeric_cols = ws_df.select_dtypes(include=[np.number]).columns.tolist()
-        _ws_text_cols    = ws_df.select_dtypes(exclude=[np.number]).columns.tolist()
-        _player_col = next((c for c in ["Player","PlayerName","Name","player","name"] if c in ws_df.columns), None)
-        _team_col   = next((c for c in ["Team","TeamName","Club","team","club"] if c in ws_df.columns), None)
-        _league_col = next((c for c in ["League","Competition","LeagueLabel","league","competition"] if c in ws_df.columns), None)
-        _pos_col    = next((c for c in ["Position","PositionGroup","Pos","position","pos"] if c in ws_df.columns), None)
-        _age_col    = next((c for c in ["Age","AgeYears","age"] if c in ws_df.columns), None)
+    _ws_numeric_cols = ws_df.select_dtypes(include=[np.number]).columns.tolist()
+    _ws_text_cols    = ws_df.select_dtypes(exclude=[np.number]).columns.tolist()
+    _player_col = next((c for c in ["Player","PlayerName","Name","player","name"] if c in ws_df.columns), None)
+    _team_col   = next((c for c in ["Team","TeamName","Club","team","club"] if c in ws_df.columns), None)
+    _league_col = next((c for c in ["League","Competition","LeagueLabel","league","competition"] if c in ws_df.columns), None)
+    _pos_col    = next((c for c in ["Position","PositionGroup","Pos","position","pos"] if c in ws_df.columns), None)
+    _age_col    = next((c for c in ["Age","AgeYears","age"] if c in ws_df.columns), None)
 
-        st.markdown("<div style='border-top:1px solid var(--border);margin:6px 0 10px;'></div>", unsafe_allow_html=True)
-
-        # Filters — all stacked vertically
-        ws_filtered = ws_df.copy()
-
+    with ctrl_c:
         ws_search = st.text_input("Search player / team", key="ws_search", placeholder="Name…")
-        if ws_search:
-            _hcols = [c for c in [_player_col, _team_col] if c]
-            if _hcols:
-                _hay = ws_filtered[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
-                ws_filtered = ws_filtered.loc[_hay.str.contains(ws_search.lower(), regex=False)]
 
-        if _pos_col:
-            pos_opts = sorted(ws_df[_pos_col].dropna().astype(str).unique())
-            sel_pos = st.multiselect("Position", pos_opts, default=pos_opts, key="ws_pos_filter")
-            ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
+    with ctrl_d:
+        sort_col_sel = st.selectbox("Sort by", _ws_numeric_cols, key="ws_sort_col") if _ws_numeric_cols else None
 
-        if _team_col:
-            team_opts = sorted(ws_df[_team_col].dropna().astype(str).unique())
-            sel_teams = st.multiselect("Team", team_opts, default=team_opts, key="ws_team_filter")
-            ws_filtered = ws_filtered.loc[ws_filtered[_team_col].astype(str).isin(sel_teams)]
+    # ── Filters expander ──────────────────────────────────────────────────────
+    ws_filtered = ws_df.copy()
 
-        if _league_col:
-            league_opts = sorted(ws_df[_league_col].dropna().astype(str).unique())
-            sel_leagues = st.multiselect("Competition", league_opts, default=league_opts, key="ws_league_filter")
-            ws_filtered = ws_filtered.loc[ws_filtered[_league_col].astype(str).isin(sel_leagues)]
+    with st.expander("⚙ Filters", expanded=False):
+        fc1, fc2, fc3, fc4 = st.columns(4, gap="small")
+        with fc1:
+            if _pos_col:
+                pos_opts = sorted(ws_df[_pos_col].dropna().astype(str).unique())
+                sel_pos = st.multiselect("Position", pos_opts, default=pos_opts, key="ws_pos_filter")
+                ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
+        with fc2:
+            if _team_col:
+                team_opts = sorted(ws_df[_team_col].dropna().astype(str).unique())
+                sel_teams = st.multiselect("Team", team_opts, default=team_opts, key="ws_team_filter")
+                ws_filtered = ws_filtered.loc[ws_filtered[_team_col].astype(str).isin(sel_teams)]
+        with fc3:
+            if _league_col:
+                league_opts = sorted(ws_df[_league_col].dropna().astype(str).unique())
+                sel_leagues = st.multiselect("Competition", league_opts, default=league_opts, key="ws_league_filter")
+                ws_filtered = ws_filtered.loc[ws_filtered[_league_col].astype(str).isin(sel_leagues)]
+        with fc4:
+            if _age_col:
+                _age_s = pd.to_numeric(ws_df[_age_col], errors="coerce").dropna()
+                if not _age_s.empty:
+                    _amin, _amax = float(np.floor(_age_s.min())), float(np.ceil(_age_s.max()))
+                    if _amin < _amax:
+                        sel_age = st.slider("Age", _amin, _amax, (_amin, _amax), step=1.0, key="ws_age_filter")
+                        ws_filtered = ws_filtered.loc[pd.to_numeric(ws_filtered[_age_col], errors="coerce").between(sel_age[0], sel_age[1])]
 
-        if _age_col:
-            _age_s = pd.to_numeric(ws_df[_age_col], errors="coerce").dropna()
-            if not _age_s.empty:
-                _amin, _amax = float(np.floor(_age_s.min())), float(np.ceil(_age_s.max()))
-                if _amin < _amax:
-                    sel_age = st.slider("Age", _amin, _amax, (_amin, _amax), step=1.0, key="ws_age_filter")
-                    ws_filtered = ws_filtered.loc[pd.to_numeric(ws_filtered[_age_col], errors="coerce").between(sel_age[0], sel_age[1])]
+    if ws_search:
+        _hcols = [c for c in [_player_col, _team_col] if c]
+        if _hcols:
+            _hay = ws_filtered[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
+            ws_filtered = ws_filtered.loc[_hay.str.contains(ws_search.lower(), regex=False)]
 
-        if _ws_numeric_cols:
-            sort_col_sel = st.selectbox("Sort by", _ws_numeric_cols, key="ws_sort_col")
-        else:
-            sort_col_sel = None
-
-        st.markdown("<div style='border-top:1px solid var(--border);margin:6px 0 10px;'></div>", unsafe_allow_html=True)
-
+    # ── League info strip ─────────────────────────────────────────────────────
+    league_info = file_meta.get(selected_name)
+    if league_info is not None:
+        _t_col = _TIER_COLORS_WS.get(str(league_info.get("Tier Label", "")), "#637d96")
+        _notes_str = f' · <em style="color:var(--faint);font-size:.68rem;">{escape(str(league_info["Notes"]))}</em>' if pd.notna(league_info.get("Notes")) else ""
         st.markdown(
-            f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">'
-            f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} rows</div>',
+            f'<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {_t_col};'
+            f'border-radius:6px;padding:7px 14px;margin:6px 0 8px;display:flex;align-items:center;gap:16px;">'
+            f'<span style="color:{_t_col};font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;">'
+            f'{_TIER_ICONS.get(str(league_info["Tier Label"]),"")} {escape(str(league_info["Tier Label"]))} · Tier {int(league_info["Tier"])}</span>'
+            f'<span style="color:var(--muted);font-size:.72rem;">{escape(str(league_info["Country"]))} · Div {escape(str(league_info["Division"]))}</span>'
+            f'<span style="color:var(--faint);font-size:.68rem;">{int(league_info["Players in DB"]):,} players in DB{_notes_str}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
+    # ── KPI cockpit (full width) ──────────────────────────────────────────────
+    from datetime import datetime as _dt
+    _file_date = _dt.fromtimestamp(selected_path.stat().st_mtime).strftime("%-d %b %Y")
+    _tier_label_ws = str(league_info["Tier Label"]) if league_info is not None else "—"
+    _tier_num_ws   = f"Tier {int(league_info['Tier'])}" if league_info is not None else "—"
+
+    st.markdown(
+        '<div class="scouting-cockpit"><div class="cockpit-grid">'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Rows loaded</div>'
+        f'<div class="cockpit-value">{len(ws_df):,}</div>'
+        f'<div class="cockpit-note">{len(ws_df.columns)} cols · {_file_date}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Showing</div>'
+        f'<div class="cockpit-value">{len(ws_filtered):,}</div>'
+        f'<div class="cockpit-note">after filters</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Players</div>'
+        f'<div class="cockpit-value">{ws_df[_player_col].nunique() if _player_col else "?"}</div>'
+        f'<div class="cockpit-note">unique</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">League tier</div>'
+        f'<div class="cockpit-value" style="font-size:.9rem;">{_tier_label_ws}</div>'
+        f'<div class="cockpit-note">{_tier_num_ws}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Metrics</div>'
+        f'<div class="cockpit-value">{len(_ws_numeric_cols)}</div>'
+        f'<div class="cockpit-note">{len(_ws_text_cols)} text cols</div></div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Row count + download ──────────────────────────────────────────────────
+    row_meta_c, dl_c = st.columns([5, 1], gap="small")
+    with row_meta_c:
+        st.markdown(
+            f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding-top:6px;">'
+            f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} rows</div>',
+            unsafe_allow_html=True,
+        )
+    with dl_c:
         st.download_button(
-            "⬇ Download CSV",
+            "⬇ CSV",
             data=ws_filtered.to_csv(index=False).encode("utf-8"),
             file_name=f"wyscout_{selected_name.replace(' ','_').lower()}_filtered.csv",
             mime="text/csv",
             width="stretch",
         )
 
-        # League index expander
-        if not leagues_df.empty:
-            with st.expander("🌍 League index", expanded=False):
-                present_names: set[str] = set()
-                for p in wyscout_files:
-                    m = file_meta.get(p.name)
-                    if m is not None:
-                        present_names.add(str(m.get("League Name", "")))
-                lo_view = leagues_df.copy()
-                lo_view["✓"] = lo_view["League Name"].isin(present_names).map({True: "✓", False: ""})
-                li_tier = st.selectbox("Tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
-                if li_tier != "All":
-                    lo_view = lo_view.loc[lo_view["Tier Label"].eq(li_tier)]
-                st.dataframe(
-                    lo_view[["League Name","Country","Tier Label","Division","✓"]],
-                    use_container_width=True, hide_index=True, height=420,
-                )
+    # ── Main table (full width) ───────────────────────────────────────────────
+    if sort_col_sel and sort_col_sel in ws_filtered.columns:
+        ws_display = ws_filtered.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
+    else:
+        ws_display = ws_filtered.reset_index(drop=True)
 
-    # ── Right column: KPI tiles + table ──────────────────────────────────────
-    with main_col:
-        from datetime import datetime as _dt
-        _file_date = _dt.fromtimestamp(selected_path.stat().st_mtime).strftime("%-d %b %Y")
-        _tier_label_ws = str(league_info["Tier Label"]) if league_info is not None else "—"
-        _tier_num_ws   = f"Tier {int(league_info['Tier'])}" if league_info is not None else "—"
+    col_config = {}
+    for c in _ws_numeric_cols:
+        if c in ws_display.columns:
+            _cmin = float(ws_display[c].min()) if not ws_display[c].isna().all() else 0.0
+            _cmax = float(ws_display[c].max()) if not ws_display[c].isna().all() else 100.0
+            if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
+                col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
 
-        st.markdown(
-            '<div class="scouting-cockpit"><div class="cockpit-grid">'
-            f'<div class="cockpit-tile"><div class="cockpit-label">Rows loaded</div>'
-            f'<div class="cockpit-value">{len(ws_df):,}</div>'
-            f'<div class="cockpit-note">{len(ws_df.columns)} cols · {_file_date}</div></div>'
-            f'<div class="cockpit-tile"><div class="cockpit-label">Showing</div>'
-            f'<div class="cockpit-value">{len(ws_filtered):,}</div>'
-            f'<div class="cockpit-note">after filters</div></div>'
-            f'<div class="cockpit-tile"><div class="cockpit-label">Players</div>'
-            f'<div class="cockpit-value">{ws_df[_player_col].nunique() if _player_col else "?"}</div>'
-            f'<div class="cockpit-note">unique</div></div>'
-            f'<div class="cockpit-tile"><div class="cockpit-label">League tier</div>'
-            f'<div class="cockpit-value" style="font-size:.9rem;">{_tier_label_ws}</div>'
-            f'<div class="cockpit-note">{_tier_num_ws}</div></div>'
-            f'<div class="cockpit-tile"><div class="cockpit-label">Metrics</div>'
-            f'<div class="cockpit-value">{len(_ws_numeric_cols)}</div>'
-            f'<div class="cockpit-note">{len(_ws_text_cols)} text cols</div></div>'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
+    st.dataframe(ws_display, width="stretch", hide_index=True, height=720, column_config=col_config)
 
-        # Main table
-        if sort_col_sel and sort_col_sel in ws_filtered.columns:
-            ws_display = ws_filtered.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
-        else:
-            ws_display = ws_filtered.reset_index(drop=True)
-
-        col_config = {}
-        for c in _ws_numeric_cols:
-            if c in ws_display.columns:
-                _cmin = float(ws_display[c].min()) if not ws_display[c].isna().all() else 0.0
-                _cmax = float(ws_display[c].max()) if not ws_display[c].isna().all() else 100.0
-                if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
-                    col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
-
-        st.dataframe(ws_display, use_container_width=True, hide_index=True, height=680, column_config=col_config)
-
-        # Column explorer — below table as expander
-        if _ws_numeric_cols:
-            with st.expander("📊 Column explorer", expanded=False):
-                _explore_col = st.selectbox("Metric", _ws_numeric_cols, key="ws_explore_col")
-                if _explore_col in ws_filtered.columns:
-                    _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
-                    if not _series.empty:
-                        exp_left, exp_right = st.columns([2, 1])
-                        with exp_left:
-                            _hist_chart = (
-                                alt.Chart(pd.DataFrame({"value": _series}))
-                                .mark_bar(color="#10d4aa", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
-                                .encode(
-                                    x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
-                                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                                    y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
-                                )
-                                .properties(height=220)
-                                .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
-                            )
-                            st.altair_chart(_hist_chart, use_container_width=True)
-                        with exp_right:
-                            _stats = _series.describe()
-                            _stats.index = ["Count","Mean","Std","Min","P25","Median","P75","Max"]
-                            st.dataframe(_stats.reset_index().rename(columns={"index":"Stat",0:"Value"}).round(2),
-                                         use_container_width=True, hide_index=True)
-
-
-def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
-    st.markdown("<div class='workspace-label'>🔍 Scouting — Wyscout database browser</div>", unsafe_allow_html=True)
-
-    wyscout_files = sorted([
-        p for p in WYSCOUT_DB_DIR.glob("*")
-        if p.suffix.lower() in (".xlsx", ".xls", ".csv") and not p.name.startswith("~")
-    ], key=lambda p: p.name.lower())
-
-    if not wyscout_files:
-        st.markdown(
-            '<div class="note-box" style="border-left-color:var(--amber);">'
-            '<strong style="color:var(--amber);">No Wyscout files found.</strong><br>'
-            'Upload your exported Wyscout Excel or CSV files to:<br>'
-            '<code style="color:var(--teal);background:rgba(13,158,125,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code><br><br>'
-            'Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong>. '
-            'Any Wyscout export works — player lists, match data, league exports.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        return
-
-    # File selector
-    file_names = [p.name for p in wyscout_files]
-    _ws_key = "wyscout_selected_file"
-    selected_name = st.selectbox("Data file", file_names, key=_ws_key)
-    selected_path = WYSCOUT_DB_DIR / selected_name
-
-    @st.cache_data(show_spinner=False, ttl=300)
-    def _cached_wyscout(path_str: str) -> pd.DataFrame:
-        return _load_wyscout_file(Path(path_str))
-
-    with st.spinner("Loading…"):
-        ws_df = _cached_wyscout(str(selected_path))
-
-    if ws_df.empty:
-        st.warning(f"Could not read data from **{selected_name}**. Check that the file is a valid Wyscout export.")
-        return
-
-    _mod_ts = selected_path.stat().st_mtime
-    from datetime import datetime as _dt
-    _file_date = _dt.fromtimestamp(_mod_ts).strftime("%-d %b %Y")
-
-    # KPI tiles
-    _ws_numeric_cols = ws_df.select_dtypes(include=[np.number]).columns.tolist()
-    _ws_text_cols = ws_df.select_dtypes(exclude=[np.number]).columns.tolist()
-    _player_col = next((c for c in ["Player", "PlayerName", "Name", "player", "name"] if c in ws_df.columns), None)
-    _team_col = next((c for c in ["Team", "TeamName", "Club", "team", "club"] if c in ws_df.columns), None)
-    _league_col = next((c for c in ["League", "Competition", "LeagueLabel", "league", "competition"] if c in ws_df.columns), None)
-    _pos_col = next((c for c in ["Position", "PositionGroup", "Pos", "position", "pos"] if c in ws_df.columns), None)
-    _age_col = next((c for c in ["Age", "AgeYears", "age"] if c in ws_df.columns), None)
-
-    st.markdown(
-        '<div class="scouting-cockpit"><div class="cockpit-grid">'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Rows</div>'
-        f'<div class="cockpit-value">{len(ws_df):,}</div>'
-        f'<div class="cockpit-note">{len(ws_df.columns)} columns · {_file_date}</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Players</div>'
-        f'<div class="cockpit-value">{ws_df[_player_col].nunique() if _player_col else "?"}</div>'
-        f'<div class="cockpit-note">unique names</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Teams</div>'
-        f'<div class="cockpit-value">{ws_df[_team_col].nunique() if _team_col else "?"}</div>'
-        f'<div class="cockpit-note">in this file</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Leagues</div>'
-        f'<div class="cockpit-value">{ws_df[_league_col].nunique() if _league_col else "?"}</div>'
-        f'<div class="cockpit-note">competitions</div></div>'
-        f'<div class="cockpit-tile"><div class="cockpit-label">Numeric metrics</div>'
-        f'<div class="cockpit-value">{len(_ws_numeric_cols)}</div>'
-        f'<div class="cockpit-note">{len(_ws_text_cols)} text columns</div></div>'
-        '</div></div>',
-        unsafe_allow_html=True,
-    )
-
-    # Filters
-    filt_cols = st.columns([1, 1, 1, 1])
-    ws_filtered = ws_df.copy()
-
-    with filt_cols[0]:
-        if _pos_col:
-            pos_opts = sorted(ws_df[_pos_col].dropna().astype(str).unique())
-            sel_pos = st.multiselect("Position", pos_opts, default=pos_opts, key="ws_pos_filter")
-            ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
-    with filt_cols[1]:
-        if _team_col:
-            team_opts = sorted(ws_df[_team_col].dropna().astype(str).unique())
-            sel_teams = st.multiselect("Team", team_opts, default=team_opts, key="ws_team_filter")
-            ws_filtered = ws_filtered.loc[ws_filtered[_team_col].astype(str).isin(sel_teams)]
-    with filt_cols[2]:
-        if _league_col:
-            league_opts = sorted(ws_df[_league_col].dropna().astype(str).unique())
-            sel_leagues = st.multiselect("League", league_opts, default=league_opts, key="ws_league_filter")
-            ws_filtered = ws_filtered.loc[ws_filtered[_league_col].astype(str).isin(sel_leagues)]
-    with filt_cols[3]:
-        if _age_col and ws_df[_age_col].dtype in [np.float64, np.int64, float, int]:
-            _age_min = float(np.floor(ws_df[_age_col].min()))
-            _age_max = float(np.ceil(ws_df[_age_col].max()))
-            if _age_min < _age_max:
-                sel_age = st.slider("Age", _age_min, _age_max, (_age_min, _age_max), step=1.0, key="ws_age_filter")
-                ws_filtered = ws_filtered.loc[ws_filtered[_age_col].between(sel_age[0], sel_age[1])]
-
-    ws_search = st.text_input("Search player or team", key="ws_search", placeholder="Type name…")
-    if ws_search:
-        _hay_cols = [c for c in [_player_col, _team_col] if c]
-        if _hay_cols:
-            _haystack = ws_filtered[_hay_cols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
-            ws_filtered = ws_filtered.loc[_haystack.str.contains(ws_search.lower(), regex=False)]
-
-    st.markdown(
-        f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:4px 0 8px;">'
-        f'Showing <span style="color:var(--ink);">{len(ws_filtered):,}</span> of {len(ws_df):,} rows'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Sort control
-    sort_opts = [c for c in _ws_numeric_cols[:20] if c in ws_filtered.columns]
-    sort_tabs, data_tab = st.tabs(["📋 Data table", "📊 Column explorer"])
-
-    with sort_tabs:
-        if sort_opts:
-            sort_col_sel = st.selectbox("Sort by", sort_opts, key="ws_sort_col")
-            ws_display = ws_filtered.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
-        else:
-            ws_display = ws_filtered.reset_index(drop=True)
-        col_config = {}
-        for c in _ws_numeric_cols:
-            if c in ws_display.columns:
-                _cmin = float(ws_display[c].min()) if not ws_display[c].isna().all() else 0.0
-                _cmax = float(ws_display[c].max()) if not ws_display[c].isna().all() else 100.0
-                if _cmax > _cmin and _cmax <= 100 and _cmin >= 0:
-                    col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
-        st.dataframe(ws_display, use_container_width=True, hide_index=True, height=560, column_config=col_config)
-        st.download_button(
-            "⬇ Download filtered CSV",
-            data=ws_filtered.to_csv(index=False).encode("utf-8"),
-            file_name=f"wyscout_{selected_name.replace(' ', '_').lower()}_filtered.csv",
-            mime="text/csv",
-            width="stretch",
-        )
-
-    with data_tab:
-        if _ws_numeric_cols:
-            _explore_col = st.selectbox("Metric to explore", _ws_numeric_cols, key="ws_explore_col")
+    # ── Column explorer expander ──────────────────────────────────────────────
+    if _ws_numeric_cols:
+        with st.expander("📊 Column explorer", expanded=False):
+            _explore_col = st.selectbox("Metric", _ws_numeric_cols, key="ws_explore_col")
             if _explore_col in ws_filtered.columns:
                 _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
-                _hist_df = pd.DataFrame({"value": _series})
-                _hist_chart = (
-                    alt.Chart(_hist_df)
-                    .mark_bar(color="#10d4aa", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
-                    .encode(
-                        x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
-                                axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                        y=alt.Y("count():Q", title="Players",
-                                axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
-                    )
-                    .properties(height=280, title=alt.TitleParams(f"Distribution of {_explore_col}", color="#8fa3b1", fontSize=12))
-                    .configure_view(fill="#0f1623", stroke=None)
-                    .configure(background="#080c14")
-                )
-                st.altair_chart(_hist_chart, use_container_width=True)
-                _stats = _series.describe().rename({
-                    "count": "Count", "mean": "Mean", "std": "Std dev",
-                    "min": "Min", "25%": "25th pctile", "50%": "Median",
-                    "75%": "75th pctile", "max": "Max",
-                })
-                st.dataframe(_stats.reset_index().rename(columns={"index": "Stat", 0: "Value"}).round(3),
-                             use_container_width=True, hide_index=True)
-                if _player_col and not ws_filtered.empty:
-                    top10 = ws_filtered[[_player_col] + ([_team_col] if _team_col else []) + [_explore_col]].dropna(subset=[_explore_col]).sort_values(_explore_col, ascending=False).head(10)
-                    st.markdown(f"<div class='workspace-label' style='font-size:.58rem;margin:10px 0 6px;'>Top 10 by {_explore_col}</div>", unsafe_allow_html=True)
-                    st.dataframe(top10.reset_index(drop=True), use_container_width=True, hide_index=True)
-        else:
-            st.info("No numeric columns detected in this file.")
+                if not _series.empty:
+                    exp_left, exp_right = st.columns([2, 1])
+                    with exp_left:
+                        _hist_chart = (
+                            alt.Chart(pd.DataFrame({"value": _series}))
+                            .mark_bar(color="#10d4aa", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                            .encode(
+                                x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
+                                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                                y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
+                            )
+                            .properties(height=220)
+                            .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
+                        )
+                        st.altair_chart(_hist_chart, width="stretch")
+                    with exp_right:
+                        _stats = _series.describe()
+                        _stats.index = ["Count","Mean","Std","Min","P25","Median","P75","Max"]
+                        st.dataframe(_stats.reset_index().rename(columns={"index":"Stat",0:"Value"}).round(2),
+                                     width="stretch", hide_index=True)
 
-    # File index when multiple files loaded
-    if len(wyscout_files) > 1:
-        with st.expander(f"All files in Wyscout DB ({len(wyscout_files)})", expanded=False):
-            _file_rows = []
-            for fp in wyscout_files:
-                _fts = _dt.fromtimestamp(fp.stat().st_mtime).strftime("%-d %b %Y")
-                _fsize = f"{fp.stat().st_size / 1024:.0f} KB"
-                _file_rows.append({"File": fp.name, "Size": _fsize, "Modified": _fts})
-            st.dataframe(pd.DataFrame(_file_rows), use_container_width=True, hide_index=True)
+    # ── League index expander ─────────────────────────────────────────────────
+    if not leagues_df.empty:
+        with st.expander("🌍 League index", expanded=False):
+            present_names: set[str] = set()
+            for p in wyscout_files:
+                m = file_meta.get(p.name)
+                if m is not None:
+                    present_names.add(str(m.get("League Name", "")))
+            lo_view = leagues_df.copy()
+            lo_view["✓"] = lo_view["League Name"].isin(present_names).map({True: "✓", False: ""})
+            lo_view["Division"] = lo_view["Division"].astype(str)
+            li_tier = st.selectbox("Tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
+            if li_tier != "All":
+                lo_view = lo_view.loc[lo_view["Tier Label"].eq(li_tier)]
+            st.dataframe(
+                lo_view[["League Name","Country","Tier Label","Division","✓"]],
+                width="stretch", hide_index=True, height=420,
+            )
+
 
 
 def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
@@ -2058,7 +1880,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     required_cols = {model_col, score_col}
     if not required_cols.issubset(smart_df.columns):
         st.info("Smart Club Closeness workbook is loaded, but the expected model and closeness columns were not found.")
-        st.dataframe(smart_df.head(50), use_container_width=True, hide_index=True)
+        st.dataframe(smart_df.head(50), width="stretch", hide_index=True)
         return
 
     smart_df[score_col] = pd.to_numeric(smart_df[score_col], errors="coerce")
@@ -2095,7 +1917,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
         st.subheader("Club model ranking")
         st.dataframe(
             summary,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
@@ -2117,7 +1939,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
             )
             st.dataframe(
                 position_summary,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
@@ -2145,7 +1967,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     top_matches = selected.sort_values(sort_cols, ascending=[False] + ([True] if len(sort_cols) > 1 else [])).head(100)
     st.dataframe(
         top_matches[top_cols],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "SmartClubClosenessScore": st.column_config.ProgressColumn("Closeness", min_value=0, max_value=100, format="%.1f"),
@@ -2176,7 +1998,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
                 ]
                 if col in related_styles.columns
             ]
-            st.dataframe(related_styles[style_cols].head(50), use_container_width=True, hide_index=True)
+            st.dataframe(related_styles[style_cols].head(50), width="stretch", hide_index=True)
 
 
 def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
@@ -2257,7 +2079,7 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     )
     st.dataframe(
         board.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
@@ -2320,7 +2142,7 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
         _board_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","CaseScore","ValueRecruitmentScore","AgeResaleScore","SuccessProbability","StyleFit","CostRisk","PrimaryPlayerStyle","SmartClubTop3"] if c in rd.columns]
         st.dataframe(
             rd[_board_cols].head(100).rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","CaseScore":"Case","ValueRecruitmentScore":"Value","AgeResaleScore":"Resale","SuccessProbability":"Success","PrimaryPlayerStyle":"Style","SmartClubTop3":"Style Clubs"}).round(2),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "Case": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
                 "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
@@ -2346,10 +2168,10 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
                 .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
                 .interactive()
             )
-            st.altair_chart(case_chart, use_container_width=True)
+            st.altair_chart(case_chart, width="stretch")
         else:
             _shape = rd.groupby(["PositionGroup","StyleFit"]).agg(Players=("PlayerName","count"),MedianCase=("CaseScore","median")).round(1).reset_index().sort_values("MedianCase",ascending=False)
-            st.dataframe(_shape, use_container_width=True, hide_index=True)
+            st.dataframe(_shape, width="stretch", hide_index=True)
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
@@ -2417,7 +2239,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
     st.subheader("Squad read")
     st.dataframe(
         squad_view.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
@@ -2454,7 +2276,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         st.subheader("Role gaps")
         st.dataframe(
             role_summary.rename(columns={"PositionGroup": "Role"}).round(1),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "CzechMedianFit": st.column_config.ProgressColumn("Czech fit", min_value=0, max_value=100, format="%.1f"),
@@ -2502,7 +2324,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         )
         st.dataframe(
             watch_view.round(2),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={"Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f")},
         )
@@ -2521,7 +2343,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
             .reset_index()
             .sort_values(["LeagueLabel", "MedianFit"], ascending=[True, False])
         )
-        st.dataframe(league_summary, use_container_width=True, hide_index=True)
+        st.dataframe(league_summary, width="stretch", hide_index=True)
 
 
 st.markdown(
@@ -2553,8 +2375,12 @@ st.markdown(
     /* ── GLOBAL ──────────────────────────────────────────────── */
     .stApp { background: var(--bg) !important; color: var(--ink); }
 
+    /* Hide Streamlit header — it intercepts clicks on workspace nav */
+    header[data-testid="stHeader"] { display: none !important; }
+    div[data-testid="stToolbar"]   { display: none !important; }
+
     .block-container {
-        padding-top: .5rem;
+        padding-top: 1rem;
         padding-bottom: 2rem;
         max-width: 100% !important;
         padding-left: 1.2rem !important;
@@ -2624,17 +2450,6 @@ st.markdown(
     }
     .sidebar-brand-title { color: var(--teal) !important; font-size: 1rem; font-weight: 900; letter-spacing: .04em; }
     .sidebar-brand-meta  { color: var(--faint) !important; font-size: .68rem; margin-top: 3px; }
-
-    .menu-caption {
-        color: var(--faint) !important;
-        font-size: .72rem;
-        line-height: 1.5;
-        background: rgba(255,255,255,.03);
-        border-left: 2px solid var(--border2);
-        padding: 7px 10px;
-        margin-bottom: 14px;
-        border-radius: 0 4px 4px 0;
-    }
 
     /* ── QUICK CHIPS ─────────────────────────────────────────── */
     .quick-chips {
@@ -2912,13 +2727,13 @@ st.markdown(
 
     /* ── SIDEBAR SECTIONS ───────────────────────────────────── */
     .sbar-hdr {
-        color: var(--faint);
-        font-size: .56rem;
+        color: var(--muted);
+        font-size: .62rem;
         font-weight: 800;
-        letter-spacing: .2em;
         text-transform: uppercase;
-        margin: 14px 0 3px 0;
-        padding-bottom: 5px;
+        letter-spacing: .12em;
+        margin: 14px 0 4px 0;
+        padding-bottom: 4px;
         border-bottom: 1px solid var(--border);
     }
     .sbar-active-bar {
@@ -2933,27 +2748,57 @@ st.markdown(
         letter-spacing: .04em;
     }
 
-    /* ── WORKSPACE NAV CARDS ────────────────────────────────── */
-    .wnav-wrap {
-        display: contents; /* transparent wrapper */
+    /* ── APP BRAND ──────────────────────────────────────────── */
+    .app-brand {
+        font-size: .92rem;
+        font-weight: 900;
+        color: var(--teal);
+        letter-spacing: .02em;
+        padding: 0 4px;
+        white-space: nowrap;
     }
-    /* Target the horizontal button row that follows workspace-nav-spacer */
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button {
-        min-height: 58px !important;
-        font-size: .74rem !important;
-        padding: 0 8px !important;
-        line-height: 1.4 !important;
-        border-radius: 8px !important;
+    .app-brand-sub { color: var(--muted); font-weight: 600; }
+
+    /* ── WORKSPACE NAV TABS ─────────────────────────────────── */
+    /* The nav col is a stHorizontalBlock that contains st-key-workspace_main_* buttons.
+       We must NOT style the outer 2-col header row — so use the inner nav block only.
+       The inner stHorizontalBlock is the one whose direct-child columns each contain exactly one nav button. */
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 2px solid var(--border) !important;
+        border-radius: 0 !important;
+        padding: 0 0 1px 0 !important;
+        gap: 0 !important;
+        margin-bottom: 14px !important;
     }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
-        border-top: 3px solid var(--teal) !important;
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
+        min-height: 36px !important;
+        height: 36px !important;
+        font-size: .72rem !important;
+        padding: 0 14px !important;
+        border-radius: 0 !important;
+        border: none !important;
+        border-bottom: 2px solid transparent !important;
+        background: transparent !important;
+        color: var(--faint) !important;
+        font-weight: 600 !important;
+        letter-spacing: .04em !important;
+        text-transform: none !important;
+        box-shadow: none !important;
+        margin-bottom: -2px !important;
+        transition: color .15s, border-color .15s !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
+        background: transparent !important;
+        color: var(--teal) !important;
         font-weight: 800 !important;
+        border-bottom: 2px solid var(--teal) !important;
+        box-shadow: none !important;
     }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button[kind="secondary"] {
-        border-top: 3px solid var(--border) !important;
-    }
-    .element-container:has(.workspace-nav-spacer) + [data-testid="stHorizontalBlock"] .stButton > button:hover {
-        border-top-color: var(--teal) !important;
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
+        background: rgba(13,158,125,.06) !important;
+        color: var(--teal) !important;
     }
 
     /* Buttons */
@@ -2965,7 +2810,7 @@ st.markdown(
         font-weight: 700 !important;
         font-size: .72rem;
         letter-spacing: .05em;
-        text-transform: uppercase;
+        text-transform: none;
         box-shadow: none !important;
         transition: all .18s !important;
         padding: 0 12px !important;
@@ -3454,7 +3299,7 @@ if "shortlist_data" not in st.session_state:
     st.session_state["shortlist_players"] = list(st.session_state["shortlist_data"].keys())
 
 if "show_scouting_workspace" not in st.session_state:
-    st.session_state["show_scouting_workspace"] = False
+    st.session_state["show_scouting_workspace"] = True
 if "active_workspace" not in st.session_state:
     st.session_state["active_workspace"] = "Recruitment"
 
@@ -3576,14 +3421,6 @@ _data_updated = "unknown"
 if _rec_file.exists():
     from datetime import datetime as _dt
     _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
-st.markdown(
-    f'<div class="intel-strip">'
-    f'<div class="intel-strip-title">{escape(active_workspace)} intelligence</div>'
-    f'<div class="intel-strip-meta">{len(data):,} players · {data["BundleLabel"].nunique()} leagues · model v3'
-    f' · <span style="color:var(--teal);">data {_data_updated}</span></div>'
-    f'</div>',
-    unsafe_allow_html=True,
-)
 if active_workspace != "Recruitment":
     if active_workspace == "Scouting":
         render_scouting_workspace()
@@ -3632,7 +3469,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("<div class='menu-caption'>Quality &amp; fit model — adjust lens weights to rank players for different recruitment profiles.</div>", unsafe_allow_html=True)
     model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
     defaults = preset_weights[model_preset]
     with st.expander("Lens weights", expanded=False):
@@ -3652,7 +3488,7 @@ archetype_groups = sorted(df["Archetype"].dropna().astype(str).unique())
 
 with st.sidebar:
     # ── Search ──────────────────────────────────────────────────
-    search = st.text_input("", key="search_filter", placeholder="🔍  Search player or club…")
+    search = st.text_input("Search", key="search_filter", placeholder="🔍  Search player or club…", label_visibility="collapsed")
 
     # ── Positions ───────────────────────────────────────────────
     st.markdown("<div class='sbar-hdr'>Positions</div>", unsafe_allow_html=True)
@@ -3790,80 +3626,83 @@ if filtered.empty:
 # "cannot modify key after widget is rendered" StreamlitAPIException).
 _shortlist_count = len(st.session_state.get("shortlist_players", []))
 _qm = st.session_state.get("quick_mode", "Full board")
-_qm_row, _stat_row = st.columns([3, 1])
-with _qm_row:
-    st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick view:</span></div>", unsafe_allow_html=True)
-    qm_cols = st.columns(4)
-    with qm_cols[0]:
-        st.button("⚡ Full board",  type="primary" if _qm == "Full board"       else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
-    with qm_cols[1]:
-        st.button("🌱 U23",         type="primary" if _qm == "U23 quality"      else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
-    with qm_cols[2]:
-        st.button("🏆 Elite",       type="primary" if _qm == "Elite quality"    else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
-    with qm_cols[3]:
-        st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
-with _stat_row:
+_qm_a, _qm_b, _qm_c, _qm_d, _stat = st.columns([1, 1, 1, 1, 1])
+with _qm_a:
+    st.button("Full board",  key="qm_full",     type="primary" if _qm == "Full board"       else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
+with _qm_b:
+    st.button("U23",         key="qm_u23",      type="primary" if _qm == "U23 quality"      else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
+with _qm_c:
+    st.button("Elite",       key="qm_elite",    type="primary" if _qm == "Elite quality"    else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
+with _qm_d:
+    st.button("Reliable",    key="qm_reliable", type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
+with _stat:
     st.markdown(
-        f"<div style='padding:8px 0 0;text-align:right;'>"
-        f"<div style='color:var(--ink);font-size:1.1rem;font-weight:900;line-height:1;'>{len(filtered):,}</div>"
-        f"<div style='color:var(--faint);font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:2px;'>of {len(df):,} players</div>"
-        f"<div style='color:var(--teal);font-size:.58rem;font-weight:700;margin-top:1px;'>★ {_shortlist_count} shortlisted</div>"
+        f"<div style='text-align:right;padding:6px 0;'>"
+        f"<span style='color:var(--ink);font-size:1rem;font-weight:900;'>{len(filtered):,}</span>"
+        f"<span style='color:var(--faint);font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-left:5px;'>of {len(df):,}</span>"
+        f"<br><span style='color:var(--teal);font-size:.62rem;font-weight:700;'>★ {_shortlist_count} shortlisted</span>"
         f"</div>",
         unsafe_allow_html=True,
     )
-
-# ── KPI Cockpit ────────────────────────────────────────────────────────────────
-_role_stats = (
-    filtered.groupby("PositionGroup")
-    .agg(Count=("PlayerName", "count"), MedQ=("QualityScore", "median"))
-    .round(1).reset_index().sort_values("MedQ", ascending=False)
-)
-_cockpit_pct = f"{len(filtered)*100//max(len(df),1)}%"
-_hq_pct = f"{high_quality_count*100//max(len(filtered),1)}%"
-st.markdown(
-    '<div class="scouting-cockpit"><div class="cockpit-grid">'
-    f'<div class="cockpit-tile"><div class="cockpit-label">Filtered players</div>'
-    f'<div class="cockpit-value">{len(filtered):,}</div>'
-    f'<div class="cockpit-note">{_cockpit_pct} of {len(df):,} in model</div></div>'
-    f'<div class="cockpit-tile"><div class="cockpit-label">Elite / High quality</div>'
-    f'<div class="cockpit-value">{high_quality_count}</div>'
-    f'<div class="cockpit-note">{_hq_pct} of filtered set</div></div>'
-    f'<div class="cockpit-tile"><div class="cockpit-label">Median quality</div>'
-    f'<div class="cockpit-value">{median_quality}</div>'
-    f'<div class="cockpit-note">Median impact: {median_impact}</div></div>'
-    f'<div class="cockpit-tile"><div class="cockpit-label">No. 1 ranked</div>'
-    f'<div class="cockpit-value" style="font-size:.95rem;line-height:1.25;">{escape(leader_name)}</div>'
-    f'<div class="cockpit-note">Quality {leader_score}</div></div>'
-    f'<div class="cockpit-tile"><div class="cockpit-label">Strongest role</div>'
-    f'<div class="cockpit-value">{escape(str(best_role))}</div>'
-    f'<div class="cockpit-note">Highest median quality</div></div>'
-    '</div></div>',
-    unsafe_allow_html=True,
-)
-# Role rail — one tile per position showing median quality + player count
-_rr_html = '<div class="role-rail">'
-for _, _rr in _role_stats.iterrows():
-    _rr_html += (
-        f'<div class="role-cell">'
-        f'<div class="role-cell-role">{escape(str(_rr["PositionGroup"]))}</div>'
-        f'<div class="role-cell-score">{_rr["MedQ"]:.0f}</div>'
-        f'<div class="role-cell-count">{int(_rr["Count"])} players</div>'
-        f'</div>'
-    )
-_rr_html += '</div>'
-st.markdown(_rr_html, unsafe_allow_html=True)
-
-# Clickable position focus — filters entire board to one role
-_pos_options = ["All positions"] + sorted(filtered["PositionGroup"].dropna().astype(str).unique().tolist())
-_pos_focus = st.segmented_control("Position focus", _pos_options, default="All positions", key="pos_focus_rail")
-if _pos_focus and _pos_focus != "All positions":
-    filtered = filtered.loc[filtered["PositionGroup"].eq(_pos_focus)].copy()
 
 quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, case_tab, export_tab = st.tabs(
     ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "💼 Case Analysis", "📥 Export"]
 )
 
 with quality_tab:
+    # Position focus — filters board to one role (quality_tab only)
+    _pos_options = ["All positions"] + sorted(filtered["PositionGroup"].dropna().astype(str).unique().tolist())
+    _pos_focus = st.segmented_control("Position", _pos_options, default="All positions", key="pos_focus_rail")
+    _tab_filtered = filtered.loc[filtered["PositionGroup"].eq(_pos_focus)].copy() if _pos_focus and _pos_focus != "All positions" else filtered
+
+    # ── KPI Cockpit ────────────────────────────────────────────────────────
+    _role_stats = (
+        _tab_filtered.groupby("PositionGroup")
+        .agg(Count=("PlayerName", "count"), MedQ=("QualityScore", "median"))
+        .round(1).reset_index().sort_values("MedQ", ascending=False)
+    )
+    _tab_high_quality_count = 0 if _tab_filtered.empty else int(_tab_filtered["QualityTier"].isin(["High quality", "Elite"]).sum())
+    _tab_median_quality = "n/a" if _tab_filtered.empty else f"{_tab_filtered['QualityScore'].median():.1f}"
+    _tab_median_impact = "n/a" if _tab_filtered.empty else f"{_tab_filtered['ProfileScore'].median():.1f}"
+    _tab_leader = _tab_filtered.head(1)
+    _tab_leader_name = "No player" if _tab_leader.empty else str(_tab_leader.iloc[0]["PlayerName"])
+    _tab_leader_score = "n/a" if _tab_leader.empty else f"{_tab_leader.iloc[0]['QualityScore']:.1f}"
+    _tab_best_role = "n/a" if _tab_filtered.empty else _tab_filtered.groupby("PositionGroup")["QualityScore"].median().sort_values(ascending=False).index[0]
+    _cockpit_pct = f"{len(_tab_filtered)*100//max(len(df),1)}%"
+    _hq_pct = f"{_tab_high_quality_count*100//max(len(_tab_filtered),1)}%"
+    st.markdown(
+        '<div class="scouting-cockpit"><div class="cockpit-grid">'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Filtered players</div>'
+        f'<div class="cockpit-value">{len(_tab_filtered):,}</div>'
+        f'<div class="cockpit-note">{_cockpit_pct} of {len(df):,} in model</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Elite / High quality</div>'
+        f'<div class="cockpit-value">{_tab_high_quality_count}</div>'
+        f'<div class="cockpit-note">{_hq_pct} of filtered set</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Median quality</div>'
+        f'<div class="cockpit-value">{_tab_median_quality}</div>'
+        f'<div class="cockpit-note">Median impact: {_tab_median_impact}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">No. 1 ranked</div>'
+        f'<div class="cockpit-value" style="font-size:.95rem;line-height:1.25;">{escape(_tab_leader_name)}</div>'
+        f'<div class="cockpit-note">Quality {_tab_leader_score}</div></div>'
+        f'<div class="cockpit-tile"><div class="cockpit-label">Strongest role</div>'
+        f'<div class="cockpit-value">{escape(str(_tab_best_role))}</div>'
+        f'<div class="cockpit-note">Highest median quality</div></div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+    # Role rail — one tile per position showing median quality + player count
+    _rr_html = '<div class="role-rail">'
+    for _, _rr in _role_stats.iterrows():
+        _rr_html += (
+            f'<div class="role-cell">'
+            f'<div class="role-cell-role">{escape(str(_rr["PositionGroup"]))}</div>'
+            f'<div class="role-cell-score">{_rr["MedQ"]:.0f}</div>'
+            f'<div class="role-cell-count">{int(_rr["Count"])} players</div>'
+            f'</div>'
+        )
+    _rr_html += '</div>'
+    st.markdown(_rr_html, unsafe_allow_html=True)
+
     quality_cols = [
         "PlayerName",
         "TeamName",
@@ -3882,7 +3721,7 @@ with quality_tab:
         "Archetype",
         "QualityDrivers",
     ]
-    quality_board = filtered[[c for c in quality_cols if c in filtered.columns]].rename(
+    quality_board = _tab_filtered[[c for c in quality_cols if c in _tab_filtered.columns]].rename(
         columns={
             "PlayerName": "Player",
             "TeamName": "Team",
@@ -3903,7 +3742,7 @@ with quality_tab:
     # Tier distribution pills
     _tier_order = ["Elite", "High quality", "Standard", "Developing"]
     _tier_cls   = {"Elite": "teal", "High quality": "teal", "Standard": "", "Developing": ""}
-    _tcounts    = filtered["QualityTier"].value_counts().to_dict() if "QualityTier" in filtered.columns else {}
+    _tcounts    = _tab_filtered["QualityTier"].value_counts().to_dict() if "QualityTier" in _tab_filtered.columns else {}
     _empty_str  = ""
     _tier_pills = "".join(
         f'<span class="pill {_tier_cls.get(t, _empty_str)}">{t}: {_tcounts.get(t,0)}</span>'
@@ -3918,7 +3757,7 @@ with quality_tab:
     )
     st.dataframe(
         quality_board.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=600,
         column_config={
@@ -4037,7 +3876,7 @@ with player_tab:
         )
         st.dataframe(
             per90,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Value": st.column_config.NumberColumn("Value", format="%.2f"),
@@ -4098,14 +3937,14 @@ with player_tab:
             .configure_view(fill="#0f1623", stroke=None)
             .configure(background="#080c14")
         )
-        st.altair_chart(_age_chart, use_container_width=True)
+        st.altair_chart(_age_chart, width="stretch")
 
     comparable = similar_players(df, player, same_position=True, n=12)
     st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:14px 0 8px;'>Closest quality profiles</div>", unsafe_allow_html=True)
     similar_cols = ["PlayerName", "TeamName", "PositionGroup", "AgeYears", "MinutesPlayed", "SimilarityScore", "QualityScore", "RoleFitScore", "ProfileScore", "Archetype"]
     st.dataframe(
         comparable[[c for c in similar_cols if c in comparable.columns]].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","MinutesPlayed":"Minutes","SimilarityScore":"Similarity","QualityScore":"Quality","RoleFitScore":"Role Fit","ProfileScore":"Impact"}).round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Quality":   st.column_config.ProgressColumn("Quality",   min_value=0, max_value=100, format="%.1f"),
@@ -4163,7 +4002,7 @@ with hradec_tab:
                 "PerformanceReliabilityScore": "Reliability", "RiskBand": "Risk",
                 "WhyThisClubStyle": "Why Hradec",
             }).round(1),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Hradec Fit ▼": st.column_config.ProgressColumn("Hradec Fit ▼", min_value=0, max_value=130, format="%.1f"),
@@ -4206,7 +4045,7 @@ with hradec_tab:
                 .configure_view(fill="#0f1623", stroke=None)
                 .configure(background="#080c14")
             )
-            st.altair_chart(_need_chart, use_container_width=True)
+            st.altair_chart(_need_chart, width="stretch")
 
         # Best XI
         xi_order = ["CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
@@ -4225,7 +4064,7 @@ with hradec_tab:
             })
         if xi_rows:
             st.subheader("Suggested Best XI from targets")
-            st.dataframe(pd.DataFrame(xi_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(xi_rows), width="stretch", hide_index=True)
 
 with intel_tab:
     st.markdown("<div class='workspace-label'>🌍 League & market intelligence</div>", unsafe_allow_html=True)
@@ -4237,7 +4076,7 @@ with intel_tab:
         map_col, map_info_col = st.columns([2.2, 1])
         with map_col:
             try:
-                st.altair_chart(render_european_map(market_df), use_container_width=True)
+                st.altair_chart(render_european_map(market_df), width="stretch")
             except Exception as e:
                 st.warning(f"Map could not render: {e}")
         with map_info_col:
@@ -4245,7 +4084,7 @@ with intel_tab:
             top_markets = market_df.head(8)[["Country", "Players", "MedianScore", "GoScore", "Recommendation"]].rename(
                 columns={"MedianScore": "Median Q", "GoScore": "Priority"}
             )
-            st.dataframe(top_markets.round(1), use_container_width=True, hide_index=True)
+            st.dataframe(top_markets.round(1), width="stretch", hide_index=True)
 
     # ── League quality bar chart ────────────────────────────────
     st.subheader("Quality by league")
@@ -4287,7 +4126,7 @@ with intel_tab:
             .configure_view(fill="#0f1623", stroke=None)
             .configure(background="#080c14")
         )
-        st.altair_chart(bar_chart, use_container_width=True)
+        st.altair_chart(bar_chart, width="stretch")
 
     # ── Full league table ───────────────────────────────────────
     with st.expander("Full league table", expanded=False):
@@ -4295,7 +4134,7 @@ with intel_tab:
             league_summary.rename(columns={"BundleLabel": "League", "MedianQuality": "Median Q",
                                             "MedianRoleFit": "Median Fit", "EliteCount": "Elite",
                                             "ElitePct": "Elite %", "MedianAge": "Median Age"}).round(1),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "Median Q":   st.column_config.ProgressColumn("Median Q",   min_value=0, max_value=100, format="%.1f"),
                 "Median Fit": st.column_config.ProgressColumn("Median Fit", min_value=0, max_value=100, format="%.1f"),
@@ -4309,14 +4148,14 @@ with intel_tab:
         dist_metric = st.selectbox("Metric", ["QualityScore", "RoleFitScore", "ProfileScore",
                                                "DecisionScore", "PerformanceReliabilityScore",
                                                "CompositeRecruitmentScore"], key="dist_metric_intel")
-        st.pyplot(render_score_distribution(filtered, dist_metric), clear_figure=True, use_container_width=True)
+        st.pyplot(render_score_distribution(filtered, dist_metric), clear_figure=True, width="stretch")
     with dist_col2:
-        st.pyplot(render_position_boxplot(filtered, dist_metric), clear_figure=True, use_container_width=True)
+        st.pyplot(render_position_boxplot(filtered, dist_metric), clear_figure=True, width="stretch")
 
     # ── League heatmap ──────────────────────────────────────────
     with st.expander("League depth heatmap", expanded=False):
         hm_metric = st.selectbox("Heatmap metric", ["QualityScore", "RoleFitScore", "CompositeRecruitmentScore"], key="hm_metric")
-        st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, use_container_width=True)
+        st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, width="stretch")
 
 with compare_tab:
     st.markdown("<div class='workspace-label'>⚖️ Side-by-side comparison</div>", unsafe_allow_html=True)
@@ -4368,7 +4207,7 @@ with compare_tab:
             .configure_view(fill="#0f1623", stroke=None)
             .configure(background="#080c14")
         )
-        st.altair_chart(compare_chart, use_container_width=True)
+        st.altair_chart(compare_chart, width="stretch")
 
 with case_tab:
     st.markdown("<div class='workspace-label'>💼 Case Analysis — transfer value, resale &amp; style fit</div>", unsafe_allow_html=True)
@@ -4406,7 +4245,7 @@ with export_tab:
         shortlist_enriched = shortlist_enriched.sort_values(["_pri_ord", "QualityScore"], ascending=[True, False])
         st.dataframe(
             shortlist_enriched[sl_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","QualityScore":"Quality","QualityTier":"Tier","RoleFitScore":"Role Fit","RiskBand":"Risk"}).round(2),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "Quality":  st.column_config.ProgressColumn("Quality",  min_value=0, max_value=100, format="%.1f"),
                 "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
