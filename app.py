@@ -567,7 +567,141 @@ def weighted_role_score(row: pd.Series) -> float:
     return float(np.clip(raw / max(positive_total + sum(abs(v) for v in weights.values() if v < 0), 1), 0, 100))
 
 
-def fit_drivers(row: pd.Series, limit: int = 3) -> str:
+def _role_score_vec(df: pd.DataFrame) -> pd.Series:
+    pos = df.get("PositionGroup", pd.Series("CM", index=df.index)).fillna("CM").astype(str)
+    result = pd.Series(50.0, index=df.index)
+    for pos_code, weights in {**ROLE_SCORE_WEIGHTS, "_default": ROLE_SCORE_WEIGHTS["CM"]}.items():
+        mask = pos.eq(pos_code) if pos_code != "_default" else ~pos.isin(ROLE_SCORE_WEIGHTS)
+        if not mask.any():
+            continue
+        sub = df.loc[mask]
+        pos_total = sum(v for v in weights.values() if v > 0)
+        neg_total = sum(abs(v) for v in weights.values() if v < 0)
+        denom = max(pos_total + neg_total, 1)
+        raw = pd.Series(0.0, index=sub.index)
+        for col, weight in weights.items():
+            vals = pd.to_numeric(sub.get(col, pd.Series(0, index=sub.index)), errors="coerce").fillna(0)
+            if weight < 0:
+                raw += np.maximum(0.0, 100 - vals * 6) * abs(weight)
+            else:
+                raw += vals * weight
+        result.loc[mask] = np.clip(raw / denom, 0, 100)
+    return result
+
+
+def _drivers_vec(df: pd.DataFrame, col_map: dict[str, str], limit: int = 3) -> pd.Series:
+    labels = list(col_map.keys())
+    mat = np.column_stack([
+        pd.to_numeric(df.get(col, pd.Series(0, index=df.index)), errors="coerce").fillna(0).values
+        for col in col_map.values()
+    ])
+    top_idx    = np.argsort(-mat, axis=1)[:, :limit]
+    top_scores = mat[np.arange(len(mat))[:, None], top_idx]
+    top_labels = np.array(labels)[top_idx]
+    return pd.Series(
+        [", ".join(f"{lbl} {sc:.0f}" for lbl, sc in zip(rl, rs)) for rl, rs in zip(top_labels, top_scores)],
+        index=df.index,
+    )
+
+
+def _risk_flags_vec(df: pd.DataFrame) -> pd.Series:
+    names  = ["low minutes", "low reliability", "high security risk", "own-half losses", "danger losses", "high-possession context"]
+    bools  = np.column_stack([
+        safe_col(df, "MinutesPlayed").fillna(0).lt(900).values,
+        safe_col(df, "PerformanceReliabilityScore").fillna(100).lt(55).values,
+        safe_col(df, "SecurityRisk_per90").fillna(0).gt(13).values,
+        safe_col(df, "OwnHalfLosses_per90").fillna(0).gt(3).values,
+        safe_col(df, "DangerOwnHalfLosses_per90").fillna(0).gt(0.5).values,
+        df.get("TeamPossProxy", pd.Series(0.0, index=df.index)).fillna(0).gt(1.25).values,
+    ])
+    result = []
+    for row in bools:
+        active = [names[i] for i in np.where(row)[0]]
+        result.append(", ".join(active) if active else "clean profile")
+    return pd.Series(result, index=df.index)
+
+
+@st.cache_data(show_spinner=False)
+def _add_static_fields(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["Archetype"]    = assign_archetypes(out)
+    out["RoleFitScore"] = _role_score_vec(out)
+    out["AgeYears"]     = safe_col(out, "AgeYears").round(1)
+    out["RiskBand"] = pd.cut(
+        safe_col(out, "SecurityRisk_per90"),
+        bins=[-np.inf, 5, 9, 13, np.inf],
+        labels=["Low", "Moderate", "Elevated", "High"],
+    ).astype(str)
+    out["Readiness"] = pd.cut(
+        safe_col(out, "PerformanceReliabilityScore"),
+        bins=[-np.inf, 55, 70, 85, np.inf],
+        labels=["Monitor", "Develop", "Ready", "High confidence"],
+    ).astype(str)
+    out["ProfileScore"] = (
+        safe_col(out, "ScoringThreatScore")
+        + safe_col(out, "CreativeProgressionScore")
+        + safe_col(out, "DefensiveDisruptionScore")
+        + safe_col(out, "BallSecurityScore")
+    ) / 4
+    out["QualityScore"] = (
+        safe_col(out, "RoleFitScore") * 0.34
+        + safe_col(out, "ProfileScore") * 0.24
+        + safe_col(out, "DecisionScore") * 0.16
+        + safe_col(out, "PerformanceReliabilityScore") * 0.14
+        + safe_col(out, "ExpectedThreatScore") * 0.07
+        + safe_col(out, "BallSecurityScore") * 0.05
+    ).clip(0, 100)
+    out["QualityTier"] = pd.cut(
+        out["QualityScore"],
+        bins=[-np.inf, 42, 52, 62, 72, np.inf],
+        labels=["Monitor", "Useful", "Good", "High quality", "Elite"],
+    ).astype(str)
+    out["FitDrivers"]     = _drivers_vec(out, {
+        "Composite": "CompositeRecruitmentScore", "Decision": "DecisionScore",
+        "Value": "ValueRecruitmentScore", "Scoring": "ScoringThreatScore",
+        "Creation": "CreativeProgressionScore", "Defense": "DefensiveDisruptionScore",
+        "Pressing": "PressingScore", "Security": "BallSecurityScore",
+        "xThreat": "ExpectedThreatScore", "Reliability": "PerformanceReliabilityScore",
+    })
+    out["QualityDrivers"] = _drivers_vec(out, {
+        "Role": "RoleFitScore", "Impact": "ProfileScore", "Decision": "DecisionScore",
+        "Reliability": "PerformanceReliabilityScore", "Threat": "ExpectedThreatScore",
+        "Security": "BallSecurityScore", "Creation": "CreativeProgressionScore",
+        "Defense": "DefensiveDisruptionScore", "Pressing": "PressingScore",
+    })
+    out["RiskFlags"]      = _risk_flags_vec(out)
+    out["PlayerProfile"]  = assign_player_profiles(out)
+    return out
+
+
+@st.cache_data(show_spinner=False)
+def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFrame:
+    out = _add_static_fields(df)
+    numerator = (
+        safe_col(out, "CompositeRecruitmentScore") * weights["Composite"]
+        + safe_col(out, "DecisionScore") * weights["Decision"]
+        + safe_col(out, "ValueRecruitmentScore") * weights["Value"]
+        + safe_col(out, "SuccessProbability") * weights["Success"]
+        + safe_col(out, "PerformanceReliabilityScore") * weights["Reliability"]
+        - safe_col(out, "SecurityRisk_per90") * weights["Risk penalty"]
+    )
+    denominator = max(sum(v for k, v in weights.items() if k != "Risk penalty"), 1)
+    out["ModelFitScore"] = (numerator / denominator).clip(0, 100)
+    out["ScoutFitScore"] = ((out["ModelFitScore"] * 0.58) + (out["RoleFitScore"] * 0.42)).clip(0, 100)
+    out["MarketTier"] = pd.cut(
+        out["ScoutFitScore"],
+        bins=[-np.inf, 42, 50, 58, 66, np.inf],
+        labels=["Watch", "Depth", "Shortlist", "Priority", "Must scout"],
+    ).astype(str)
+    out["TierReason"] = (
+        out["MarketTier"].astype(str)
+        + " because Scout Fit is "
+        + out["ScoutFitScore"].round(1).astype(str)
+        + ", driven by "
+        + out["FitDrivers"].astype(str)
+        + "."
+    )
+    return out
     candidates = {
         "Composite": row.get("CompositeRecruitmentScore", 0),
         "Decision": row.get("DecisionScore", 0),
