@@ -1620,13 +1620,13 @@ def _match_league(filename: str, leagues_df: pd.DataFrame) -> pd.Series | None:
 
 
 def render_scouting_workspace() -> None:
-    st.markdown("<div class='workspace-label'>🔍 Scouting — Wyscout database browser</div>", unsafe_allow_html=True)
-
     leagues_df = load_leagues_overview()
     wyscout_files = sorted(
         [p for p in WYSCOUT_DB_DIR.glob("*") if p.suffix.lower() in (".xlsx", ".xls", ".csv") and not p.name.startswith("~")],
         key=lambda p: p.name.lower(),
     )
+
+    st.markdown("<div class='page-title'>Scouting</div><div class='page-subtitle'>Raw Wyscout data browser — search and filter imported files</div>", unsafe_allow_html=True)
 
     if not wyscout_files:
         st.markdown(
@@ -1864,9 +1864,6 @@ def render_scouting_workspace() -> None:
 
 
 def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
-    st.markdown("<div class='workspace-label'>Model workspace</div>", unsafe_allow_html=True)
-    st.subheader("Smart club model")
-
     smart_df = metadata.get("smart_club", pd.DataFrame()).copy()
     if smart_df.empty:
         st.info("Smart Club Closeness workbook not loaded.")
@@ -1899,6 +1896,13 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
         .sort_values(["MedianCloseness", "BestCloseness"], ascending=False)
     )
 
+    with st.sidebar:
+        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🔬 Model &amp; Data</div><div class='sidebar-brand-meta'>Smart club closeness</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sbar-hdr'>Club model</div>", unsafe_allow_html=True)
+        selected_model = st.selectbox("Select model", summary[model_col].tolist(), key="model_selectbox")
+
+    st.markdown("<div class='page-title'>Model &amp; Data</div><div class='page-subtitle'>Smart club closeness and data coverage</div>", unsafe_allow_html=True)
+
     metric_cols = st.columns(4)
     with metric_cols[0]:
         metric_card("Club models", f"{summary[model_col].nunique():,}", "smart-club profiles")
@@ -1923,7 +1927,6 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
         )
 
     with right:
-        selected_model = st.selectbox("Club model", summary[model_col].tolist())
         selected = smart_df.loc[smart_df[model_col].eq(selected_model)].copy()
         st.subheader("Position spread")
         if "PositionGroup" in selected.columns:
@@ -2005,11 +2008,21 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
         ascending=False,
     )
 
-    st.markdown("<div class='workspace-label'>Goalkeepers workspace</div>", unsafe_allow_html=True)
-
     if keeper_df.empty:
         st.info("No goalkeeper rows were found in the loaded model outputs.")
         return
+
+    league_options = sorted(keeper_df["BundleLabel"].dropna().astype(str).unique())
+
+    with st.sidebar:
+        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🧤 Goalkeepers</div><div class='sidebar-brand-meta'>GK-specific scoring</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
+        selected_leagues = st.multiselect("Leagues", league_options, default=league_options, key="gk_bundles_filter")
+        age_min = float(np.floor(keeper_df["AgeYears"].min()))
+        age_max = float(np.ceil(keeper_df["AgeYears"].max()))
+        age_range = st.slider("Age range", age_min, age_max, (age_min, age_max), step=0.5, key="gk_age_filter")
+
+    st.markdown("<div class='page-title'>Goalkeepers</div><div class='page-subtitle'>GK-specific fit, reliability &amp; shot-stopping scores</div>", unsafe_allow_html=True)
 
     top_keeper = keeper_df.head(1)
     metric_cols = st.columns(4)
@@ -2030,12 +2043,6 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
         """,
         unsafe_allow_html=True,
     )
-
-    league_options = sorted(keeper_df["BundleLabel"].dropna().astype(str).unique())
-    selected_leagues = st.multiselect("Leagues / bundles", league_options, default=league_options, key="gk_bundles_filter")
-    age_min = float(np.floor(keeper_df["AgeYears"].min()))
-    age_max = float(np.ceil(keeper_df["AgeYears"].max()))
-    age_range = st.slider("Age range", age_min, age_max, (age_min, age_max), step=0.5, key="gk_age_filter")
 
     gk_filtered = keeper_df.loc[
         keeper_df["BundleLabel"].astype(str).isin(selected_leagues)
@@ -2177,7 +2184,11 @@ def render_team_workspace(data: pd.DataFrame) -> None:
     hradec_df = hradec_squad(team_df)
     external_czech = czech_df.loc[~czech_df["TeamName"].isin(hradec_df["TeamName"].unique())].copy()
 
-    st.markdown("<div class='workspace-label'>Team workspace</div>", unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-title'>🏟 Team Intelligence</div><div class='sidebar-brand-meta'>Squad gaps &amp; Czech market</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='note-box' style='font-size:.69rem;'>Compare Hradec&#39;s squad vs the Czech market to find recruitment priorities.</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='page-title'>Team Intelligence</div><div class='page-subtitle'>Hradec squad read vs Czech market benchmarks</div>", unsafe_allow_html=True)
 
     h_top = hradec_df.sort_values("ScoutFitScore", ascending=False).head(1)
     cz_top = external_czech.sort_values("ScoutFitScore", ascending=False).head(1)
@@ -2371,93 +2382,274 @@ st.markdown(
     .stApp { background: var(--bg) !important; color: var(--ink); }
     header[data-testid="stHeader"] { display: none !important; }
     div[data-testid="stToolbar"]   { display: none !important; }
-
     .block-container {
-        padding-top: 1rem;
+        padding-top: .75rem;
         padding-bottom: 2rem;
         max-width: 100% !important;
-        padding-left: 1.2rem !important;
-        padding-right: 1.2rem !important;
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
     }
-
-    /* ── TIGHTEN STREAMLIT'S BUILT-IN VERTICAL RHYTHM ────────── */
-    /* Each rendered widget/markdown sits in an .element-container;
-       Streamlit's default gap is ~1rem — pull it in to 0.45rem    */
-    div[data-testid="stVerticalBlock"] > div.element-container,
-    div[data-testid="stVerticalBlockBorderWrapper"]
-        > div[data-testid="stVerticalBlock"]
-        > div.element-container {
-        margin-bottom: 0.45rem !important;
-    }
-    /* The stVerticalBlock flex gap itself */
     div[data-testid="stVerticalBlock"] { gap: 0 !important; }
-    /* Tabs content — a little more breathing room inside each tab */
-    div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container {
-        margin-bottom: 0.6rem !important;
-    }
-    /* Reduce the large bottom margin st.subheader / h2 adds */
-    h2 { margin-bottom: 6px !important; padding-bottom: 4px; }
-    h3 { margin-bottom: 4px !important; }
-    /* Columns: tighten default gap between col children */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"]
-        > div.element-container {
-        margin-bottom: 0.4rem !important;
-    }
-    /* Reduce st.metric bottom margin */
+    div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .4rem !important; }
+    div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .5rem !important; }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .35rem !important; }
     div[data-testid="stMetric"] { margin-bottom: 0 !important; }
-
-    /* make dataframes truly full-width */
     [data-testid="stDataFrame"] > div { width: 100% !important; }
-
     h1, h2, h3 { color: var(--ink) !important; font-weight: 800; }
+    h2 { font-size: .78rem !important; text-transform: uppercase; letter-spacing: .12em; border-bottom: 1px solid var(--border) !important; padding-bottom: 6px; margin-bottom: 10px !important; color: var(--muted) !important; }
+    h3 { font-size: .85rem !important; margin-bottom: 6px !important; }
 
-    h2 {
-        font-size: .82rem !important;
-        text-transform: uppercase;
-        letter-spacing: .12em;
-        border-bottom: 1px solid var(--border) !important;
-        padding-bottom: 7px;
-        margin-bottom: 12px !important;
-        color: var(--muted) !important;
+    /* ── APP BRAND ──────────────────────────────────────────────── */
+    .app-brand {
+        font-size: .82rem;
+        font-weight: 900;
+        color: var(--teal);
+        letter-spacing: .04em;
+        padding: 2px 0 6px 0;
+        white-space: nowrap;
+    }
+    .app-brand-sub { color: var(--muted); font-weight: 600; }
+
+    /* ── WORKSPACE NAV TABS ─────────────────────────────────────── */
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 2px solid var(--border) !important;
+        border-radius: 0 !important;
+        padding: 0 0 0 0 !important;
+        gap: 0 !important;
+        margin-bottom: 16px !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
+        min-height: 36px !important; height: 36px !important;
+        font-size: .74rem !important; padding: 0 16px !important;
+        border-radius: 0 !important; border: none !important;
+        border-bottom: 2px solid transparent !important;
+        background: transparent !important; color: var(--faint) !important;
+        font-weight: 600 !important; letter-spacing: .03em !important;
+        text-transform: none !important; box-shadow: none !important;
+        margin-bottom: -2px !important; transition: color .15s, border-color .15s !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
+        background: transparent !important; color: var(--teal) !important;
+        font-weight: 800 !important; border-bottom: 2px solid var(--teal) !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
+        background: rgba(13,158,125,.05) !important; color: var(--teal) !important;
     }
 
-    /* ── SIDEBAR ─────────────────────────────────────────────── */
+    /* ── PAGE TITLE ─────────────────────────────────────────────── */
+    .page-title {
+        font-size: 1.1rem;
+        font-weight: 900;
+        color: var(--ink);
+        letter-spacing: -.01em;
+        margin: 0 0 2px 0;
+    }
+    .page-subtitle {
+        font-size: .72rem;
+        color: var(--faint);
+        font-weight: 500;
+        margin-bottom: 14px;
+    }
+
+    /* ── SIDEBAR ─────────────────────────────────────────────────── */
     section[data-testid="stSidebar"] {
-        background: #eef2f7 !important;
+        background: var(--surface) !important;
         border-right: 1px solid var(--border) !important;
     }
-
     section[data-testid="stSidebar"] .block-container { padding-top: .8rem; }
-    section[data-testid="stSidebar"] label  { color: var(--muted) !important; font-size: .76rem !important; font-weight: 600 !important; }
-    section[data-testid="stSidebar"] p      { color: var(--muted) !important; }
-    section[data-testid="stSidebar"] h2     { border-bottom-color: var(--border) !important; }
+    section[data-testid="stSidebar"] label { color: var(--muted) !important; font-size: .76rem !important; font-weight: 600 !important; }
+    section[data-testid="stSidebar"] p { color: var(--muted) !important; }
 
-    /* ── SIDEBAR BRAND ───────────────────────────────────────── */
+    /* ── SIDEBAR BRAND ───────────────────────────────────────────── */
     .sidebar-brand {
-        background: linear-gradient(135deg, rgba(13,158,125,.12) 0%, transparent 60%);
+        border-left: 3px solid var(--teal);
+        padding: 10px 12px;
+        margin-bottom: 14px;
+        background: rgba(13,158,125,.04);
+        border-radius: 0 6px 6px 0;
+    }
+    .sidebar-brand-title { color: var(--teal) !important; font-size: .92rem; font-weight: 900; letter-spacing: .02em; }
+    .sidebar-brand-meta  { color: var(--faint) !important; font-size: .67rem; margin-top: 2px; }
+
+    /* ── SIDEBAR SECTION HEADER ─────────────────────────────────── */
+    .sbar-hdr {
+        color: var(--muted);
+        font-size: .6rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .14em;
+        margin: 16px 0 4px 0;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border);
+    }
+    .sbar-active-bar {
+        background: rgba(13,158,125,.08);
+        border: 1px solid rgba(13,158,125,.2);
+        border-radius: 6px;
+        padding: 5px 9px;
+        font-size: .65rem;
+        font-weight: 700;
+        color: var(--teal);
+        margin: 8px 0;
+    }
+
+    /* ── BUTTONS ─────────────────────────────────────────────────── */
+    .stButton > button, .stDownloadButton > button {
+        border-radius: 6px !important;
+        border: 1px solid var(--border2) !important;
+        background: var(--surface) !important;
+        color: var(--muted) !important;
+        font-weight: 600 !important;
+        font-size: .74rem;
+        letter-spacing: .02em;
+        text-transform: none;
+        box-shadow: none !important;
+        transition: all .15s !important;
+        padding: 0 12px !important;
+        min-height: 32px;
+    }
+    .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
+        background: rgba(13,158,125,.1) !important;
+        border-color: var(--teal) !important;
+        color: var(--teal) !important;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        border-color: var(--teal) !important;
+        color: var(--teal) !important;
+        background: rgba(13,158,125,.07) !important;
+    }
+
+    /* ── TABS ────────────────────────────────────────────────────── */
+    div[data-testid="stTabs"] { border-bottom: 1px solid var(--border); margin-bottom: 0 !important; }
+    div[data-testid="stTabs"] button { font-weight: 700 !important; font-size: .72rem !important; letter-spacing: .04em; color: var(--faint) !important; padding: 8px 14px !important; border-radius: 0 !important; }
+    div[data-testid="stTabs"] button[aria-selected="true"] { color: var(--teal) !important; border-bottom: 2px solid var(--teal) !important; }
+    div[data-testid="stTabsContent"] { padding-top: 12px !important; }
+
+    /* ── METRIC CARDS ───────────────────────────────────────────── */
+    .metric-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-top: 2px solid var(--teal);
+        border-radius: 6px;
+        padding: 10px 13px;
+        box-shadow: var(--shadow-sm);
+    }
+    .metric-label { color: var(--faint); font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+    .metric-value { color: var(--ink); font-size: 1.3rem; font-weight: 900; line-height: 1.1; margin: 3px 0 1px; }
+    .metric-caption { color: var(--muted); font-size: .67rem; font-weight: 500; }
+
+    /* ── COCKPIT KPIs ───────────────────────────────────────────── */
+    .scouting-cockpit { margin: 0 0 10px 0; }
+    .cockpit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .cockpit-tile {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-top: 2px solid var(--teal);
+        border-radius: 6px;
+        padding: 9px 12px;
+        box-shadow: var(--shadow-sm);
+    }
+    .cockpit-label { color: var(--faint); font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+    .cockpit-value { color: var(--ink); font-size: 1.2rem; font-weight: 900; line-height: 1.1; margin: 2px 0 1px; }
+    .cockpit-note  { color: var(--muted); font-size: .62rem; }
+
+    /* ── ROLE RAIL ──────────────────────────────────────────────── */
+    .role-rail { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+    .role-cell {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        min-width: 60px;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+    }
+    .role-cell-role  { color: var(--faint); font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .role-cell-score { color: var(--ink); font-size: 1.1rem; font-weight: 900; line-height: 1; }
+    .role-cell-count { color: var(--muted); font-size: .58rem; }
+
+    /* ── PILLS ──────────────────────────────────────────────────── */
+    .pill-row { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+    .pill {
+        background: var(--raised);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 20px;
+        padding: 2px 10px;
+        font-size: .65rem;
+        font-weight: 600;
+    }
+    .pill.teal { background: rgba(13,158,125,.1); border-color: rgba(13,158,125,.3); color: var(--teal); }
+    .pill.amber { background: rgba(217,119,6,.1); border-color: rgba(217,119,6,.3); color: var(--amber); }
+    .pill.red   { background: rgba(220,38,38,.1); border-color: rgba(220,38,38,.3); color: var(--red); }
+
+    /* ── NOTE / INFO BOX ────────────────────────────────────────── */
+    .note-box {
+        background: var(--surface);
         border: 1px solid var(--border);
         border-left: 3px solid var(--teal);
-        padding: 12px 14px;
-        margin-bottom: 16px;
-        border-radius: 6px;
+        border-radius: 0 6px 6px 0;
+        padding: 9px 13px;
+        font-size: .77rem;
+        color: var(--muted);
+        line-height: 1.55;
+        margin: 6px 0;
     }
-    .sidebar-brand-title { color: var(--teal) !important; font-size: 1rem; font-weight: 900; letter-spacing: .04em; }
-    .sidebar-brand-meta  { color: var(--faint) !important; font-size: .68rem; margin-top: 3px; }
 
-    /* ── QUICK CHIPS ─────────────────────────────────────────── */
-    .quick-chips {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin: 0 0 6px 0;
-        align-items: center;
+    /* ── SECTION CARD ───────────────────────────────────────────── */
+    .section-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 16px;
+        margin: 4px 0 8px;
+        box-shadow: var(--shadow-sm);
     }
-    .quick-chip-label {
-        color: var(--faint);
-        font-size: .62rem;
-        font-weight: 700;
+
+    /* ── PROFILE CARD ───────────────────────────────────────────── */
+    .profile-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--teal);
+        border-radius: 0 8px 8px 0;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+    }
+    .profile-name { color: var(--ink); font-size: 1.15rem; font-weight: 900; }
+    .profile-meta { color: var(--muted); font-size: .73rem; margin-top: 2px; margin-bottom: 8px; }
+
+    /* ── INTEL STRIP ─────────────────────────────────────────────── */
+    .intel-strip {
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--teal);
+        background: var(--surface);
+        border-radius: 6px;
+        padding: 7px 13px;
+        margin: 0 0 8px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: var(--shadow-sm);
+    }
+    .intel-strip-title { color: var(--ink); font-size: .82rem; font-weight: 800; }
+    .intel-strip-meta  { color: var(--faint); font-size: .63rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+
+    /* ── WORKSPACE LABEL (legacy) ───────────────────────────────── */
+    .workspace-label {
+        color: var(--teal);
+        font-size: .6rem;
+        font-weight: 800;
+        letter-spacing: .14em;
         text-transform: uppercase;
-        letter-spacing: .1em;
+        margin: 2px 0 8px 0;
+        padding: 4px 0 4px 10px;
+        border-left: 2px solid var(--teal);
+        background: rgba(13,158,125,.05);
+        border-radius: 0 4px 4px 0;
     }
 
     /* ── LANDING HERO ────────────────────────────────────────── */
@@ -2528,129 +2720,21 @@ st.markdown(
     .landing-card-title { color: var(--ink); font-size: 1rem; font-weight: 800; margin-top: 6px; line-height: 1.1; }
     .landing-card-copy  { color: var(--faint); font-size: .72rem; line-height: 1.4; margin-top: 6px; }
 
-    /* ── WORKSPACE LABEL ─────────────────────────────────────── */
-    .workspace-label {
-        border-left: 2px solid var(--teal);
-        color: var(--teal);
-        font-size: .6rem;
-        font-weight: 800;
-        letter-spacing: .16em;
-        text-transform: uppercase;
-        margin: 2px 0 8px 0;
-        padding: 4px 0 4px 10px;
-        background: rgba(13,158,125,.06);
-        border-radius: 0 4px 4px 0;
-    }
-
-    /* ── INTEL STRIP ─────────────────────────────────────────── */
-    .intel-strip {
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--teal);
-        background: var(--surface);
-        border-radius: 6px;
-        padding: 7px 13px;
-        margin: 0 0 8px 0;
+    /* ── QUICK CHIPS ─────────────────────────────────────────── */
+    .quick-chips {
         display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 6px 0;
         align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        box-shadow: var(--shadow-sm);
     }
-    .intel-strip-title { color: var(--ink); font-size: .82rem; font-weight: 800; letter-spacing: .03em; }
-    .intel-strip-meta  { color: var(--faint); font-size: .63rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-
-    /* ── METRIC / KPI CARDS ──────────────────────────────────── */
-    .metric-card {
-        border: 1px solid var(--border);
-        border-top: 2px solid var(--teal);
-        background: var(--surface);
-        padding: 10px 13px;
-        border-radius: 6px;
-        box-shadow: var(--shadow-sm);
-        transition: border-top-color .18s;
-    }
-    .metric-card:hover { border-top-color: var(--teal-dim); }
-    .metric-label  { color: var(--faint); font-size: .57rem; text-transform: uppercase; letter-spacing: .13em; font-weight: 700; }
-    .metric-value  { margin-top: 3px; color: var(--ink); font-size: 1.35rem; font-weight: 900; line-height: 1; }
-    .metric-caption{ color: var(--muted); font-size: .64rem; margin-top: 3px; line-height: 1.3; }
-
-    /* ── COCKPIT KPIs ────────────────────────────────────────── */
-    .scouting-cockpit { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 10px 11px; margin: 0 0 10px 0; box-shadow: var(--shadow-sm); }
-    .cockpit-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; }
-    .cockpit-tile {
-        border: 1px solid var(--border);
-        background: var(--raised);
-        border-radius: 6px;
-        padding: 10px 12px 9px;
-        min-height: 66px;
-        position: relative;
-        overflow: hidden;
-        transition: border-color .18s;
-    }
-    .cockpit-tile:hover { border-color: var(--border2); }
-    .cockpit-tile::after {
-        content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
-        background: linear-gradient(90deg, var(--teal), transparent);
-    }
-    .cockpit-label { color: var(--faint); font-size: .56rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-    .cockpit-value { color: var(--ink); font-size: 1.3rem; font-weight: 900; line-height: 1; margin-top: 4px; }
-    .cockpit-note  { color: var(--muted); font-size: .61rem; line-height: 1.3; margin-top: 3px; }
-
-    /* ── ROLE RAIL ───────────────────────────────────────────── */
-    .role-rail { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; margin: 0 0 10px 0; }
-    .role-cell {
-        border: 1px solid var(--border);
-        border-top: 2px solid var(--teal);
-        background: var(--raised);
-        border-radius: 6px;
-        padding: 7px 9px 6px;
-        min-height: 52px;
-        transition: border-top-color .18s;
-    }
-    .role-cell-role  { color: var(--faint); font-size: .54rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-    .role-cell-score { color: var(--ink); font-size: 1rem; font-weight: 900; line-height: 1; margin-top: 3px; }
-    .role-cell-count { color: var(--faint); font-size: .6rem; margin-top: 2px; }
-
-    /* ── PROFILE CARD ────────────────────────────────────────── */
-    .profile-card {
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--teal);
-        background: var(--surface);
-        padding: 11px 14px;
-        border-radius: 6px;
-        box-shadow: var(--shadow-sm);
-    }
-    .profile-name { color: var(--ink); font-weight: 900; font-size: 1rem; line-height: 1.1; }
-    .profile-meta { color: var(--muted); font-size: .72rem; margin-top: 3px; line-height: 1.4; }
-    .pill-row { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
-    .pill {
-        border: 1px solid var(--border2);
-        color: var(--muted);
-        background: var(--raised);
-        padding: 3px 8px;
-        font-size: .59rem;
+    .quick-chip-label {
+        color: var(--faint);
+        font-size: .62rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .06em;
-        border-radius: 20px;
+        letter-spacing: .1em;
     }
-    .pill.teal  { border-color: rgba(13,158,125,.5);  color: var(--teal);  background: rgba(13,158,125,.1); }
-    .pill.amber { border-color: rgba(245,166,35,.5);  color: var(--amber); background: rgba(245,166,35,.1); }
-    .pill.red   { border-color: rgba(240,82,82,.5);   color: var(--red);   background: rgba(240,82,82,.1);  }
-
-    /* ── NOTE BOX ────────────────────────────────────────────── */
-    .note-box {
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--teal);
-        background: rgba(13,158,125,.05);
-        padding: 9px 12px;
-        color: var(--muted);
-        font-size: .75rem;
-        line-height: 1.5;
-        border-radius: 0 6px 6px 0;
-    }
-
-    .section-card { border: 1px solid var(--border); background: var(--surface); padding: 10px 12px; border-radius: 6px; }
 
     /* ── SCOUTING COMMAND ────────────────────────────────────── */
     .scouting-command {
@@ -2707,136 +2791,9 @@ st.markdown(
     .quality-player-name{ color: var(--ink); font-size: 1rem; font-weight: 800; line-height: 1.1; margin-top: 5px; }
     .quality-player-meta{ color: var(--muted); font-size: .68rem; line-height: 1.35; margin-top: 4px; }
 
-    /* ── RESPONSIVE ──────────────────────────────────────────── */
-    @media (max-width: 900px) {
-        .hero, .landing-grid, .scouting-command, .cockpit-grid,
-        .role-rail, .quality-hero, .quality-card-grid { grid-template-columns: 1fr; }
-        .hero { padding: 26px 22px; }
-    }
-
     /* ═══════════════════════════════════════════════════════════
        STREAMLIT WIDGET OVERRIDES
     ═══════════════════════════════════════════════════════════ */
-
-    /* ── SIDEBAR SECTIONS ───────────────────────────────────── */
-    .sbar-hdr {
-        color: var(--muted);
-        font-size: .62rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: .12em;
-        margin: 14px 0 4px 0;
-        padding-bottom: 4px;
-        border-bottom: 1px solid var(--border);
-    }
-    .sbar-active-bar {
-        background: rgba(13,158,125,.08);
-        border: 1px solid rgba(13,158,125,.22);
-        border-radius: 6px;
-        padding: 6px 10px;
-        margin: 8px 0 4px 0;
-        color: var(--teal);
-        font-size: .62rem;
-        font-weight: 700;
-        letter-spacing: .04em;
-    }
-
-    /* ── APP BRAND ──────────────────────────────────────────── */
-    .app-brand {
-        font-size: .92rem;
-        font-weight: 900;
-        color: var(--teal);
-        letter-spacing: .02em;
-        padding: 0 4px;
-        white-space: nowrap;
-    }
-    .app-brand-sub { color: var(--muted); font-weight: 600; }
-
-    /* ── WORKSPACE NAV TABS ─────────────────────────────────── */
-    /* The nav col is a stHorizontalBlock that contains st-key-workspace_main_* buttons.
-       We must NOT style the outer 2-col header row — so use the inner nav block only.
-       The inner stHorizontalBlock is the one whose direct-child columns each contain exactly one nav button. */
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
-        background: transparent !important;
-        border: none !important;
-        border-bottom: 2px solid var(--border) !important;
-        border-radius: 0 !important;
-        padding: 0 0 1px 0 !important;
-        gap: 0 !important;
-        margin-bottom: 14px !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
-        min-height: 36px !important;
-        height: 36px !important;
-        font-size: .72rem !important;
-        padding: 0 14px !important;
-        border-radius: 0 !important;
-        border: none !important;
-        border-bottom: 2px solid transparent !important;
-        background: transparent !important;
-        color: var(--faint) !important;
-        font-weight: 600 !important;
-        letter-spacing: .04em !important;
-        text-transform: none !important;
-        box-shadow: none !important;
-        margin-bottom: -2px !important;
-        transition: color .15s, border-color .15s !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
-        background: transparent !important;
-        color: var(--teal) !important;
-        font-weight: 800 !important;
-        border-bottom: 2px solid var(--teal) !important;
-        box-shadow: none !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
-        background: rgba(13,158,125,.06) !important;
-        color: var(--teal) !important;
-    }
-
-    /* Buttons */
-    .stButton > button, .stDownloadButton > button {
-        border-radius: 6px !important;
-        border: 1px solid var(--border2) !important;
-        background: var(--raised) !important;
-        color: var(--muted) !important;
-        font-weight: 700 !important;
-        font-size: .72rem;
-        letter-spacing: .05em;
-        text-transform: none;
-        box-shadow: none !important;
-        transition: all .18s !important;
-        padding: 0 12px !important;
-        min-height: 32px;
-    }
-    .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
-        background: rgba(13,158,125,.15) !important;
-        border-color: var(--teal) !important;
-        color: var(--teal) !important;
-    }
-    .stButton > button:hover, .stDownloadButton > button:hover {
-        border-color: var(--teal) !important;
-        color: var(--teal) !important;
-        background: rgba(13,158,125,.1) !important;
-    }
-
-    /* Tabs */
-    div[data-testid="stTabs"] { border-bottom: 1px solid var(--border); margin-bottom: 0 !important; }
-    div[data-testid="stTabs"] button {
-        font-weight: 700 !important;
-        font-size: .7rem !important;
-        letter-spacing: .06em;
-        color: var(--faint) !important;
-        padding: 8px 14px !important;
-        border-radius: 0 !important;
-        transition: color .18s !important;
-    }
-    div[data-testid="stTabs"] button[aria-selected="true"] {
-        color: var(--teal) !important;
-        border-bottom: 2px solid var(--teal) !important;
-        background: rgba(13,158,125,.06) !important;
-    }
-    div[data-testid="stTabs"] button:hover { color: var(--ink) !important; }
 
     /* DataFrames */
     [data-testid="stDataFrame"] {
@@ -3329,6 +3286,8 @@ if "quick_mode" not in st.session_state:
     st.session_state["quick_mode"] = "Full board"
 if "shortlist_players" not in st.session_state:
     st.session_state["shortlist_players"] = []
+
+st.markdown("<div class='page-title'>Recruitment Board</div><div class='page-subtitle'>Player quality rankings, profiles and signing cases</div>", unsafe_allow_html=True)
 
 outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
 quick_modes = ["Full board", "U23 quality", "Elite quality", "Reliable quality"]
