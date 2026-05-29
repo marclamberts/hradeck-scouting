@@ -702,6 +702,9 @@ def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFra
         + "."
     )
     return out
+
+
+def fit_drivers(row: pd.Series, limit: int = 3) -> str:
     candidates = {
         "Composite": row.get("CompositeRecruitmentScore", 0),
         "Decision": row.get("DecisionScore", 0),
@@ -758,63 +761,6 @@ def tier_reason(row: pd.Series) -> str:
     )
 
 
-@st.cache_data(show_spinner=False)
-def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFrame:
-    out = df.copy()
-    out["Archetype"] = assign_archetypes(out)
-    numerator = (
-        safe_col(out, "CompositeRecruitmentScore") * weights["Composite"]
-        + safe_col(out, "DecisionScore") * weights["Decision"]
-        + safe_col(out, "ValueRecruitmentScore") * weights["Value"]
-        + safe_col(out, "SuccessProbability") * weights["Success"]
-        + safe_col(out, "PerformanceReliabilityScore") * weights["Reliability"]
-        - safe_col(out, "SecurityRisk_per90") * weights["Risk penalty"]
-    )
-    denominator = max(sum(v for k, v in weights.items() if k != "Risk penalty"), 1)
-    out["ModelFitScore"] = (numerator / denominator).clip(0, 100)
-    out["RoleFitScore"] = out.apply(weighted_role_score, axis=1)
-    out["ScoutFitScore"] = ((out["ModelFitScore"] * 0.58) + (out["RoleFitScore"] * 0.42)).clip(0, 100)
-    out["AgeYears"] = safe_col(out, "AgeYears").round(1)
-    out["RiskBand"] = pd.cut(
-        safe_col(out, "SecurityRisk_per90"),
-        bins=[-np.inf, 5, 9, 13, np.inf],
-        labels=["Low", "Moderate", "Elevated", "High"],
-    ).astype(str)
-    out["Readiness"] = pd.cut(
-        safe_col(out, "PerformanceReliabilityScore"),
-        bins=[-np.inf, 55, 70, 85, np.inf],
-        labels=["Monitor", "Develop", "Ready", "High confidence"],
-    ).astype(str)
-    out["MarketTier"] = pd.cut(
-        out["ScoutFitScore"],
-        bins=[-np.inf, 42, 50, 58, 66, np.inf],
-        labels=["Watch", "Depth", "Shortlist", "Priority", "Must scout"],
-    ).astype(str)
-    out["ProfileScore"] = (
-        safe_col(out, "ScoringThreatScore")
-        + safe_col(out, "CreativeProgressionScore")
-        + safe_col(out, "DefensiveDisruptionScore")
-        + safe_col(out, "BallSecurityScore")
-    ) / 4
-    out["QualityScore"] = (
-        safe_col(out, "RoleFitScore") * 0.34
-        + safe_col(out, "ProfileScore") * 0.24
-        + safe_col(out, "DecisionScore") * 0.16
-        + safe_col(out, "PerformanceReliabilityScore") * 0.14
-        + safe_col(out, "ExpectedThreatScore") * 0.07
-        + safe_col(out, "BallSecurityScore") * 0.05
-    ).clip(0, 100)
-    out["QualityTier"] = pd.cut(
-        out["QualityScore"],
-        bins=[-np.inf, 42, 52, 62, 72, np.inf],
-        labels=["Monitor", "Useful", "Good", "High quality", "Elite"],
-    ).astype(str)
-    out["FitDrivers"] = out.apply(fit_drivers, axis=1)
-    out["QualityDrivers"] = out.apply(quality_drivers, axis=1)
-    out["RiskFlags"] = out.apply(lambda row: ", ".join(risk_flags(row)), axis=1)
-    out["TierReason"] = out.apply(tier_reason, axis=1)
-    out["PlayerProfile"] = assign_player_profiles(out)
-    return out
 
 
 def percentile_rank(series: pd.Series, value: float) -> float:
