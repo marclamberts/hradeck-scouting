@@ -1508,24 +1508,38 @@ def hradec_squad(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[team.str.contains("hradec|kralove|králové", regex=True)].copy()
 
 
+def _first_position(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only the first listed position when Wyscout stores comma-separated values."""
+    for col in ["Position", "PositionGroup", "Pos", "position", "pos"]:
+        if col in df.columns:
+            df[col] = (
+                df[col].astype(str)
+                .str.split(r"[,;]")
+                .str[0]
+                .str.strip()
+                .replace("nan", "")
+            )
+    return df
+
+
 def _load_wyscout_file(path: Path) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix in (".xlsx", ".xls"):
         try:
-            return _clean_columns(pd.read_excel(path))
+            return _first_position(_clean_columns(pd.read_excel(path)))
         except Exception:
             xl = pd.ExcelFile(path)
             frames = []
             for sheet in xl.sheet_names:
                 try:
-                    frames.append(_clean_columns(pd.read_excel(xl, sheet_name=sheet)))
+                    frames.append(_first_position(_clean_columns(pd.read_excel(xl, sheet_name=sheet))))
                 except Exception:
                     pass
             return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     elif suffix == ".csv":
         for enc in ("utf-8", "latin-1", "cp1252"):
             try:
-                return _clean_columns(pd.read_csv(path, encoding=enc))
+                return _first_position(_clean_columns(pd.read_csv(path, encoding=enc)))
             except Exception:
                 continue
     return pd.DataFrame()
