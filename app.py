@@ -1470,23 +1470,20 @@ def enter_scouting_workspace() -> None:
 
 def render_workspace_nav(location: str = "top") -> None:
     active = st.session_state.get("active_workspace", "Recruitment")
-    _brand_col, _nav_col = st.columns([1, 4], gap="small", vertical_alignment="center")
-    with _brand_col:
-        st.markdown("<div class='app-brand'>⚽ FCHK<span class='app-brand-sub'> Scouting</span></div>", unsafe_allow_html=True)
-    with _nav_col:
-        nav_cols = st.columns(len(WORKSPACES), gap="small")
-        for idx, section in enumerate(WORKSPACES):
-            icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
-            is_active = active == section
-            with nav_cols[idx]:
-                st.button(
-                    f"{icon}  {section}",
-                    key=f"workspace_{location}_{section}",
-                    type="primary" if is_active else "secondary",
-                    width="stretch",
-                    on_click=set_workspace,
-                    args=(section,),
-                )
+    st.markdown("<div class='app-brand'>⚽ FCHK <span class='app-brand-sub'>Scouting</span></div>", unsafe_allow_html=True)
+    nav_cols = st.columns(len(WORKSPACES), gap="small")
+    for idx, section in enumerate(WORKSPACES):
+        icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
+        is_active = active == section
+        with nav_cols[idx]:
+            st.button(
+                f"{icon}  {section}",
+                key=f"workspace_{location}_{section}",
+                type="primary" if is_active else "secondary",
+                width="stretch",
+                on_click=set_workspace,
+                args=(section,),
+            )
 
 
 BALANCED_WEIGHTS = {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1}
@@ -3298,118 +3295,8 @@ if "shortlist_data" not in st.session_state:
     st.session_state["shortlist_data"] = _load_shortlist_file()
     st.session_state["shortlist_players"] = list(st.session_state["shortlist_data"].keys())
 
-if "show_scouting_workspace" not in st.session_state:
-    st.session_state["show_scouting_workspace"] = True
 if "active_workspace" not in st.session_state:
     st.session_state["active_workspace"] = "Recruitment"
-
-if not st.session_state["show_scouting_workspace"]:
-    _ldata = load_default_data()
-    _n_players = len(_ldata)
-    _n_leagues = _ldata["BundleLabel"].nunique() if "BundleLabel" in _ldata.columns else 0
-    _n_positions = _ldata["PositionGroup"].nunique() if "PositionGroup" in _ldata.columns else 0
-    _n_high = int(_ldata.get("QualityTier", pd.Series()).isin(["High quality", "Elite"]).sum()) if "QualityTier" in _ldata.columns else 0
-
-    # ── Landing-page full-bleed overrides ────────────────────────────────────
-    # Hide sidebar, remove container padding so the page fills the viewport.
-    st.markdown("""
-    <style>
-    section[data-testid="stSidebar"]  { display: none !important; }
-    .block-container {
-        padding: 0 !important;
-        max-width: 100% !important;
-    }
-    header[data-testid="stHeader"] { background: transparent !important; }
-    div[data-testid="stToolbar"]   { display: none !important; }
-    /* Workspace card columns — add horizontal breathing room */
-    div[data-testid="stHorizontalBlock"] {
-        padding: 0 48px !important;
-        gap: 14px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Hero (no blank lines — blank lines break CommonMark HTML blocks) ─────
-    _pitch_svg = '<svg viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;opacity:.55;"><rect x="2" y="2" width="396" height="256" rx="4" fill="none" stroke="#10d4aa" stroke-width="1.5"/><line x1="200" y1="2" x2="200" y2="258" stroke="#10d4aa" stroke-width="1"/><circle cx="200" cy="130" r="36" fill="none" stroke="#10d4aa" stroke-width="1"/><circle cx="200" cy="130" r="3" fill="#10d4aa"/><rect x="2" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/><rect x="2" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/><circle cx="56" cy="130" r="2" fill="#10d4aa"/><rect x="332" y="75" width="66" height="110" fill="none" stroke="#10d4aa" stroke-width="1"/><rect x="376" y="98" width="22" height="64" fill="none" stroke="#10d4aa" stroke-width="1"/><circle cx="344" cy="130" r="2" fill="#10d4aa"/><path d="M2 14 A12 12 0 0 1 14 2" fill="none" stroke="#10d4aa" stroke-width="1"/><path d="M386 2 A12 12 0 0 1 398 14" fill="none" stroke="#10d4aa" stroke-width="1"/><path d="M398 246 A12 12 0 0 1 386 258" fill="none" stroke="#10d4aa" stroke-width="1"/><path d="M14 258 A12 12 0 0 1 2 246" fill="none" stroke="#10d4aa" stroke-width="1"/></svg>'
-    st.markdown(
-        f'<div class="lp-wrapper">'
-        f'<div class="lp-hero">'
-        f'<div class="lp-hero-left">'
-        f'<div class="lp-badge">&#x26BD; FCHK Model V3 &middot; Hradeck Scouting</div>'
-        f'<h1 class="lp-title">Player Quality<br><span class="lp-title-accent">Command Room</span></h1>'
-        f'<p class="lp-sub">Professional-grade football scouting and recruitment intelligence. Every decision backed by data &mdash; from Czech leagues to Europe.</p>'
-        f'<div class="lp-stats">'
-        f'<div class="lp-stat"><span class="lp-stat-n">{_n_players:,}</span><span class="lp-stat-l">Players</span></div>'
-        f'<div class="lp-stat-div"></div>'
-        f'<div class="lp-stat"><span class="lp-stat-n">{_n_leagues}</span><span class="lp-stat-l">Leagues</span></div>'
-        f'<div class="lp-stat-div"></div>'
-        f'<div class="lp-stat"><span class="lp-stat-n">{_n_positions}</span><span class="lp-stat-l">Positions</span></div>'
-        f'<div class="lp-stat-div"></div>'
-        f'<div class="lp-stat"><span class="lp-stat-n">12</span><span class="lp-stat-l">Score Dims</span></div>'
-        f'</div>'
-        f'</div>'
-        f'<div class="lp-hero-right">'
-        f'<div class="lp-pitch">{_pitch_svg}<div class="lp-pitch-label">FCHK Intelligence Engine</div></div>'
-        f'<div class="lp-feature-pills">'
-        f'<span class="lp-pill">&#x1F4CA; Quality scoring</span>'
-        f'<span class="lp-pill">&#x1F3AF; Position fit</span>'
-        f'<span class="lp-pill">&#x1F30D; European scouting</span>'
-        f'<span class="lp-pill">&#x1F9E4; GK analysis</span>'
-        f'<span class="lp-pill teal">&#x26A1; Real-time filters</span>'
-        f'<span class="lp-pill">&#x1F4E5; PDF &amp; CSV export</span>'
-        f'</div>'
-        f'</div>'
-        f'</div>'
-        f'<div class="lp-section-header">'
-        f'<span class="lp-section-line"></span>'
-        f'<span class="lp-section-text">Choose your workspace</span>'
-        f'<span class="lp-section-line"></span>'
-        f'</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── Dashboard icon cards ──────────────────────────────────────────────────
-    _workspace_meta = {
-        "Recruitment": ("📊", "Recruitment Board",  "Quality rankings, player profiles, radar charts, transfer value & signing cases"),
-        "Scouting":    ("🔍", "Scouting",           "Raw Wyscout data browser — search & filter imported scouting files"),
-        "Goalkeepers": ("🧤", "Goalkeepers",        "GK-exclusive boards, shot-stopping metrics & reliability"),
-        "Team":        ("🏟️", "Team Intelligence",  "Squad gaps, Czech market benchmarks & watchlist"),
-        "Model":       ("🔬", "Model & Data",       "Smart club closeness, data coverage & confidence bands"),
-    }
-    landing_cols = st.columns(len(WORKSPACES), gap="medium")
-    for idx, section in enumerate(WORKSPACES):
-        icon, title, desc = _workspace_meta.get(section, ("⚽", section, ""))
-        is_primary = section == "Recruitment"
-        with landing_cols[idx]:
-            _card_cls = "dash-card dash-card--primary" if is_primary else "dash-card"
-            st.markdown(
-                f'<div class="{_card_cls}"><div class="dash-card-icon">{icon}</div><div class="dash-card-title">{title}</div><div class="dash-card-desc">{desc}</div></div>',
-                unsafe_allow_html=True,
-            )
-            st.button(
-                f"{'→  ' if is_primary else ''}Open {title}",
-                key=f"landing_{section}",
-                type="primary" if is_primary else "secondary",
-                width="stretch",
-                on_click=set_workspace,
-                args=(section,),
-            )
-
-    # ── Bottom feature strip ──────────────────────────────────────────────────
-    st.markdown(
-        '<div class="lp-strip">'
-        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x26A1;</div><div class="lp-strip-body"><div class="lp-strip-title">Instant quality lenses</div><div class="lp-strip-desc">Switch between Balanced, Technique, Ready and Upside presets &mdash; or set your own weights.</div></div></div>'
-        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x1F3AF;</div><div class="lp-strip-body"><div class="lp-strip-title">Hradec-fit algorithm</div><div class="lp-strip-desc">Every external player scored on exactly how well they&rsquo;d address your squad&rsquo;s positional gaps.</div></div></div>'
-        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x1F30D;</div><div class="lp-strip-body"><div class="lp-strip-title">European market map</div><div class="lp-strip-desc">Interactive bubble map of scout-priority by country &mdash; see where to send your scouts next.</div></div></div>'
-        '<div class="lp-strip-item"><div class="lp-strip-icon">&#x1F4E5;</div><div class="lp-strip-body"><div class="lp-strip-title">Board-ready exports</div><div class="lp-strip-desc">One-click PDF scouting reports and CSV exports for every filtered view and shortlist.</div></div></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    if st.session_state.get("landing_notice"):
-        st.info(st.session_state["landing_notice"])
-    st.stop()
 
 render_workspace_nav("main")
 
