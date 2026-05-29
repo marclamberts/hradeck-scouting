@@ -1469,21 +1469,24 @@ def enter_scouting_workspace() -> None:
 
 
 def render_workspace_nav(location: str = "top") -> None:
-    st.markdown("<div class='workspace-nav-spacer' style='display:none'></div>", unsafe_allow_html=True)
     active = st.session_state.get("active_workspace", "Recruitment")
-    nav_cols = st.columns(len(WORKSPACES), gap="small")
-    for idx, section in enumerate(WORKSPACES):
-        icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
-        is_active = active == section
-        with nav_cols[idx]:
-            st.button(
-                f"{icon}  {section}",
-                key=f"workspace_{location}_{section}",
-                type="primary" if is_active else "secondary",
-                width="stretch",
-                on_click=set_workspace,
-                args=(section,),
-            )
+    _brand_col, _nav_col = st.columns([1, 4], gap="small", vertical_alignment="center")
+    with _brand_col:
+        st.markdown("<div class='app-brand'>⚽ FCHK<span class='app-brand-sub'> Scouting</span></div>", unsafe_allow_html=True)
+    with _nav_col:
+        nav_cols = st.columns(len(WORKSPACES), gap="small")
+        for idx, section in enumerate(WORKSPACES):
+            icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
+            is_active = active == section
+            with nav_cols[idx]:
+                st.button(
+                    f"{icon}  {section}",
+                    key=f"workspace_{location}_{section}",
+                    type="primary" if is_active else "secondary",
+                    width="stretch",
+                    on_click=set_workspace,
+                    args=(section,),
+                )
 
 
 BALANCED_WEIGHTS = {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1}
@@ -2377,7 +2380,7 @@ st.markdown(
     div[data-testid="stToolbar"]   { display: none !important; }
 
     .block-container {
-        padding-top: .5rem;
+        padding-top: 1rem;
         padding-bottom: 2rem;
         max-width: 100% !important;
         padding-left: 1.2rem !important;
@@ -2447,17 +2450,6 @@ st.markdown(
     }
     .sidebar-brand-title { color: var(--teal) !important; font-size: 1rem; font-weight: 900; letter-spacing: .04em; }
     .sidebar-brand-meta  { color: var(--faint) !important; font-size: .68rem; margin-top: 3px; }
-
-    .menu-caption {
-        color: var(--faint) !important;
-        font-size: .72rem;
-        line-height: 1.5;
-        background: rgba(255,255,255,.03);
-        border-left: 2px solid var(--border2);
-        padding: 7px 10px;
-        margin-bottom: 14px;
-        border-radius: 0 4px 4px 0;
-    }
 
     /* ── QUICK CHIPS ─────────────────────────────────────────── */
     .quick-chips {
@@ -2735,13 +2727,13 @@ st.markdown(
 
     /* ── SIDEBAR SECTIONS ───────────────────────────────────── */
     .sbar-hdr {
-        color: var(--faint);
-        font-size: .56rem;
+        color: var(--muted);
+        font-size: .62rem;
         font-weight: 800;
-        letter-spacing: .2em;
         text-transform: uppercase;
-        margin: 14px 0 3px 0;
-        padding-bottom: 5px;
+        letter-spacing: .12em;
+        margin: 14px 0 4px 0;
+        padding-bottom: 4px;
         border-bottom: 1px solid var(--border);
     }
     .sbar-active-bar {
@@ -2756,39 +2748,56 @@ st.markdown(
         letter-spacing: .04em;
     }
 
-    /* ── WORKSPACE NAV PILLS ─────────────────────────────────── */
-    /* Target the horizontal columns row that holds workspace nav buttons.
-       Uses the stable st-key-workspace_main_* class Streamlit adds from button keys. */
+    /* ── APP BRAND ──────────────────────────────────────────── */
+    .app-brand {
+        font-size: .92rem;
+        font-weight: 900;
+        color: var(--teal);
+        letter-spacing: .02em;
+        padding: 0 4px;
+        white-space: nowrap;
+    }
+    .app-brand-sub { color: var(--muted); font-weight: 600; }
+
+    /* ── WORKSPACE NAV TABS ─────────────────────────────────── */
+    /* The nav col is a stHorizontalBlock that contains st-key-workspace_main_* buttons.
+       We must NOT style the outer 2-col header row — so use the inner nav block only.
+       The inner stHorizontalBlock is the one whose direct-child columns each contain exactly one nav button. */
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
-        background: var(--raised) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 10px !important;
-        padding: 3px 4px !important;
-        gap: 2px !important;
-        margin-bottom: 10px !important;
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 2px solid var(--border) !important;
+        border-radius: 0 !important;
+        padding: 0 0 1px 0 !important;
+        gap: 0 !important;
+        margin-bottom: 14px !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
-        min-height: 28px !important;
-        height: 28px !important;
-        font-size: .65rem !important;
-        padding: 0 10px !important;
-        border-radius: 7px !important;
+        min-height: 36px !important;
+        height: 36px !important;
+        font-size: .72rem !important;
+        padding: 0 14px !important;
+        border-radius: 0 !important;
         border: none !important;
+        border-bottom: 2px solid transparent !important;
         background: transparent !important;
         color: var(--faint) !important;
         font-weight: 600 !important;
         letter-spacing: .04em !important;
         text-transform: none !important;
         box-shadow: none !important;
+        margin-bottom: -2px !important;
+        transition: color .15s, border-color .15s !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
-        background: #ffffff !important;
+        background: transparent !important;
         color: var(--teal) !important;
-        font-weight: 700 !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,.08) !important;
+        font-weight: 800 !important;
+        border-bottom: 2px solid var(--teal) !important;
+        box-shadow: none !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
-        background: rgba(13,158,125,.08) !important;
+        background: rgba(13,158,125,.06) !important;
         color: var(--teal) !important;
     }
 
@@ -2801,7 +2810,7 @@ st.markdown(
         font-weight: 700 !important;
         font-size: .72rem;
         letter-spacing: .05em;
-        text-transform: uppercase;
+        text-transform: none;
         box-shadow: none !important;
         transition: all .18s !important;
         padding: 0 12px !important;
@@ -3290,7 +3299,7 @@ if "shortlist_data" not in st.session_state:
     st.session_state["shortlist_players"] = list(st.session_state["shortlist_data"].keys())
 
 if "show_scouting_workspace" not in st.session_state:
-    st.session_state["show_scouting_workspace"] = False
+    st.session_state["show_scouting_workspace"] = True
 if "active_workspace" not in st.session_state:
     st.session_state["active_workspace"] = "Recruitment"
 
@@ -3412,14 +3421,6 @@ _data_updated = "unknown"
 if _rec_file.exists():
     from datetime import datetime as _dt
     _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
-st.markdown(
-    f'<div class="intel-strip">'
-    f'<div class="intel-strip-title">{escape(active_workspace)} intelligence</div>'
-    f'<div class="intel-strip-meta">{len(data):,} players · {data["BundleLabel"].nunique()} leagues · model v3'
-    f' · <span style="color:var(--teal);">data {_data_updated}</span></div>'
-    f'</div>',
-    unsafe_allow_html=True,
-)
 if active_workspace != "Recruitment":
     if active_workspace == "Scouting":
         render_scouting_workspace()
@@ -3468,7 +3469,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("<div class='menu-caption'>Quality &amp; fit model — adjust lens weights to rank players for different recruitment profiles.</div>", unsafe_allow_html=True)
     model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
     defaults = preset_weights[model_preset]
     with st.expander("Lens weights", expanded=False):
