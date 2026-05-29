@@ -844,6 +844,67 @@ def _format_pdf_frame(frame: pd.DataFrame, max_text: int = 30) -> list[list[str]
     return [list(out.columns)] + out.values.tolist()
 
 
+def build_player_card_pdf(player: pd.Series, ref_df: pd.DataFrame, scout_notes: str = "") -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    story = []
+    story.append(Paragraph(f"Player Card: {player.get('PlayerName', 'Unknown')}", styles["Title"]))
+    meta = " · ".join(filter(None, [
+        str(player.get("TeamName", "")), str(player.get("PositionGroup", "")),
+        str(player.get("BundleLabel", "")), f"Age {player.get('AgeYears', ''):.1f}" if pd.notna(player.get("AgeYears")) else "",
+        f"{int(player.get('MinutesPlayed', 0)):,} min" if pd.notna(player.get("MinutesPlayed")) else "",
+    ]))
+    story.append(Paragraph(meta, styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    scores_data = [["Quality", "Role Fit", "Impact", "Decision", "Reliability", "Risk Band"]]
+    scores_data.append([
+        f"{player.get('QualityScore', 0):.1f}", f"{player.get('RoleFitScore', 0):.1f}",
+        f"{player.get('ProfileScore', 0):.1f}", f"{player.get('DecisionScore', 0):.1f}",
+        f"{player.get('PerformanceReliabilityScore', 0):.1f}", str(player.get("RiskBand", "?")),
+    ])
+    story.append(Paragraph("Scores", styles["Heading2"]))
+    story.append(_pdf_table(scores_data, header_color="#2a9d8f"))
+    story.append(Spacer(1, 10))
+
+    profile_rows = [["Field", "Value"]]
+    for field, key in [("Archetype", "Archetype"), ("Quality tier", "QualityTier"), ("Readiness", "Readiness"),
+                       ("Primary style", "PrimaryPlayerStyle"), ("Secondary style", "SecondaryPlayerStyle"),
+                       ("Style summary", "PlayerStyleSummary"), ("Hradec fit", "WhyThisClubStyle"),
+                       ("Style clubs", "SmartClubTop3"), ("Closeness tier", "SmartClubClosenessTier")]:
+        val = str(player.get(key, "") or "")
+        if val and val not in ("nan", "None", ""):
+            profile_rows.append([field, shorten(val, width=80, placeholder="…")])
+    if len(profile_rows) > 1:
+        story.append(Paragraph("Profile", styles["Heading2"]))
+        story.append(_pdf_table(profile_rows, header_color="#457b9d"))
+        story.append(Spacer(1, 10))
+
+    for field, key in [("Quality drivers", "QualityDrivers"), ("Fit drivers", "FitDrivers"), ("Risk flags", "RiskFlags")]:
+        val = str(player.get(key, "") or "")
+        if val and val not in ("nan", "None", ""):
+            story.append(Paragraph(f"<b>{field}:</b> {shorten(val, width=120, placeholder='…')}", styles["Normal"]))
+    story.append(Spacer(1, 8))
+
+    if scout_notes:
+        story.append(Paragraph("Scout Notes", styles["Heading2"]))
+        story.append(Paragraph(scout_notes, styles["Normal"]))
+        story.append(Spacer(1, 8))
+
+    pos_group = str(player.get("PositionGroup", ""))
+    comp = ref_df.loc[ref_df["PositionGroup"].eq(pos_group) & ref_df["PlayerName"].ne(str(player.get("PlayerName", "")))]
+    comp = comp.sort_values("QualityScore", ascending=False).head(8)
+    if not comp.empty:
+        comp_cols = [c for c in ["PlayerName", "TeamName", "AgeYears", "QualityScore", "RoleFitScore", "Archetype"] if c in comp.columns]
+        comp_view = comp[comp_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","AgeYears":"Age","QualityScore":"Quality","RoleFitScore":"Fit"})
+        story.append(Paragraph(f"Top {pos_group} comparators (position pool)", styles["Heading2"]))
+        story.append(_pdf_table(_format_pdf_frame(comp_view, max_text=28), header_color="#102a43"))
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
 def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", top_n: int = 50) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -1152,6 +1213,7 @@ def reset_filters() -> None:
         "positions_filter",
         "bundles_filter",
         "archetypes_filter",
+        "countries_filter",
         "u23_filter",
         "age_filter",
         "minutes_filter",
@@ -1243,7 +1305,7 @@ def render_workspace_nav(location: str = "top") -> None:
                 section,
                 key=f"workspace_{location}_{section}",
                 type="primary" if active == section else "secondary",
-                width="stretch",
+                use_container_width=True,
                 on_click=set_workspace,
                 args=(section,),
             )
@@ -1277,7 +1339,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     required_cols = {model_col, score_col}
     if not required_cols.issubset(smart_df.columns):
         st.info("Smart Club Closeness workbook is loaded, but the expected model and closeness columns were not found.")
-        st.dataframe(smart_df.head(50), width="stretch", hide_index=True)
+        st.dataframe(smart_df.head(50), use_container_width=True, hide_index=True)
         return
 
     smart_df[score_col] = pd.to_numeric(smart_df[score_col], errors="coerce")
@@ -1395,7 +1457,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
                 ]
                 if col in related_styles.columns
             ]
-            st.dataframe(related_styles[style_cols].head(50), width="stretch", hide_index=True)
+            st.dataframe(related_styles[style_cols].head(50), use_container_width=True, hide_index=True)
 
 
 def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
@@ -1406,7 +1468,6 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     )
 
     st.markdown("<div class='workspace-label'>Goalkeepers workspace</div>", unsafe_allow_html=True)
-    st.subheader("Goalkeeper board")
 
     if keeper_df.empty:
         st.info("No goalkeeper rows were found in the loaded model outputs.")
@@ -1477,7 +1538,7 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     )
     st.dataframe(
         board.round(2),
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         column_config={
             "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
@@ -1493,7 +1554,6 @@ def render_recruitment_workspace(data: pd.DataFrame) -> None:
     recruitment_df = recruitment_df.loc[~recruitment_df["PositionGroup"].astype(str).eq("GK")].copy()
 
     st.markdown("<div class='workspace-label'>Recruitment workspace</div>", unsafe_allow_html=True)
-    st.subheader("Recruitment case board")
 
     if recruitment_df.empty:
         st.info("No outfield recruitment rows were found in the loaded model outputs.")
@@ -1617,7 +1677,7 @@ def render_recruitment_workspace(data: pd.DataFrame) -> None:
         )
         st.dataframe(
             board.round(2),
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "Case": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
@@ -1683,7 +1743,6 @@ def render_team_workspace(data: pd.DataFrame) -> None:
     external_czech = czech_df.loc[~czech_df["TeamName"].isin(hradec_df["TeamName"].unique())].copy()
 
     st.markdown("<div class='workspace-label'>Team workspace</div>", unsafe_allow_html=True)
-    st.subheader("Hradec Kralove focus")
 
     h_top = hradec_df.sort_values("ScoutFitScore", ascending=False).head(1)
     cz_top = external_czech.sort_values("ScoutFitScore", ascending=False).head(1)
@@ -1742,7 +1801,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
     st.subheader("Squad read")
     st.dataframe(
         squad_view.round(2),
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         column_config={
             "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
@@ -1779,7 +1838,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         st.subheader("Role gaps")
         st.dataframe(
             role_summary.rename(columns={"PositionGroup": "Role"}).round(1),
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "CzechMedianFit": st.column_config.ProgressColumn("Czech fit", min_value=0, max_value=100, format="%.1f"),
@@ -1827,7 +1886,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         )
         st.dataframe(
             watch_view.round(2),
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             column_config={"Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f")},
         )
@@ -2850,13 +2909,17 @@ render_workspace_nav("main")
 active_workspace = st.session_state.get("active_workspace", "Scouting")
 data = load_default_data()
 model_metadata = load_model_metadata()
+_rec_file = _model_file("recruitment")
+_data_updated = "unknown"
+if _rec_file.exists():
+    from datetime import datetime as _dt
+    _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
 st.markdown(
-    f"""
-    <div class="intel-strip">
-        <div class="intel-strip-title">{escape(active_workspace)} intelligence</div>
-        <div class="intel-strip-meta">{len(data):,} players · {data['BundleLabel'].nunique()} leagues · model v3</div>
-    </div>
-    """,
+    f'<div class="intel-strip">'
+    f'<div class="intel-strip-title">{escape(active_workspace)} intelligence</div>'
+    f'<div class="intel-strip-meta">{len(data):,} players · {data["BundleLabel"].nunique()} leagues · model v3'
+    f' · <span style="color:var(--teal);">data {_data_updated}</span></div>'
+    f'</div>',
     unsafe_allow_html=True,
 )
 if active_workspace != "Scouting":
@@ -2910,7 +2973,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("<div class='menu-caption'>Pure player quality only — recruitment value, resale, wage and fee risk are in the Recruitment workspace.</div>", unsafe_allow_html=True)
-    model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
+    model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", use_container_width=True)
     defaults = preset_weights[model_preset]
     with st.expander("Lens weights", expanded=False):
         weights = {
@@ -2936,6 +2999,11 @@ with st.sidebar:
     positions = st.multiselect("Roles", position_groups, default=position_groups, key="positions_filter")
     bundles = st.multiselect("Leagues", bundle_groups, default=bundle_groups, key="bundles_filter")
     archetypes = st.multiselect("Archetypes", archetype_groups, default=archetype_groups, key="archetypes_filter")
+    if "CountryLabel" in df.columns:
+        _country_opts = sorted(df["CountryLabel"].dropna().astype(str).replace("", "Unknown").unique())
+        countries = st.multiselect("Country", _country_opts, default=_country_opts, key="countries_filter")
+    else:
+        countries = []
     u23_only = st.toggle("U23 only", value=False, key="u23_filter")
     age_range = st.slider(
         "Age",
@@ -2971,6 +3039,8 @@ mask = (
 )
 if u23_only and "IsU23Target" in df:
     mask &= df["IsU23Target"].fillna(False).astype(bool)
+if countries and "CountryLabel" in df.columns:
+    mask &= df["CountryLabel"].astype(str).replace("", "Unknown").isin(countries)
 if search:
     haystack = (df["PlayerName"].fillna("").astype(str) + " " + df["TeamName"].fillna("").astype(str)).str.lower()
     mask &= haystack.str.contains(search.lower(), regex=False)
@@ -2995,13 +3065,13 @@ st.markdown("<div class='quick-chips'><span class='quick-chip-label'>Quick filte
 qm_cols = st.columns([1, 1, 1, 1, 2])
 _qm = st.session_state.get("quick_mode", "Full board")
 with qm_cols[0]:
-    st.button("⚡ Full board",  type="primary" if _qm == "Full board"      else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
+    st.button("⚡ Full board",  type="primary" if _qm == "Full board"      else "secondary", use_container_width=True, on_click=set_quick_mode, args=("Full board",))
 with qm_cols[1]:
-    st.button("🌱 U23 quality", type="primary" if _qm == "U23 quality"     else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
+    st.button("🌱 U23 quality", type="primary" if _qm == "U23 quality"     else "secondary", use_container_width=True, on_click=set_quick_mode, args=("U23 quality",))
 with qm_cols[2]:
-    st.button("🏆 Elite only",  type="primary" if _qm == "Elite quality"   else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
+    st.button("🏆 Elite only",  type="primary" if _qm == "Elite quality"   else "secondary", use_container_width=True, on_click=set_quick_mode, args=("Elite quality",))
 with qm_cols[3]:
-    st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
+    st.button("🛡 Reliable",    type="primary" if _qm == "Reliable quality" else "secondary", use_container_width=True, on_click=set_quick_mode, args=("Reliable quality",))
 with qm_cols[4]:
     _shortlist_count = len(st.session_state.get("shortlist_players", []))
     st.markdown(
@@ -3168,6 +3238,34 @@ with player_tab:
         f'</div>',
         unsafe_allow_html=True,
     )
+    # Style profile — surface model style columns when available
+    _primary_style = str(player.get("PrimaryPlayerStyle", "") or "").strip()
+    _secondary_style = str(player.get("SecondaryPlayerStyle", "") or "").strip()
+    _style_summary = str(player.get("PlayerStyleSummary", "") or "").strip()
+    _why_club = str(player.get("WhyThisClubStyle", "") or "").strip()
+    _smart_top3 = str(player.get("SmartClubTop3", "") or "").strip()
+    _closeness_tier = str(player.get("SmartClubClosenessTier", "") or "").strip()
+    _has_style_data = any(v and v not in ("nan", "None") for v in [_primary_style, _style_summary, _why_club, _smart_top3])
+    if _has_style_data:
+        _style_parts = []
+        if _primary_style and _primary_style not in ("nan", "None"):
+            _sty = escape(_primary_style)
+            if _secondary_style and _secondary_style not in ("nan", "None"):
+                _sty += f' <span style="color:var(--muted);">· {escape(_secondary_style)}</span>'
+            _style_parts.append(f'<strong style="color:var(--teal);">Playing style:</strong> {_sty}')
+        if _style_summary and _style_summary not in ("nan", "None"):
+            _style_parts.append(f'<span style="color:var(--muted);font-size:.8rem;">{escape(_style_summary)}</span>')
+        if _why_club and _why_club not in ("nan", "None"):
+            _style_parts.append(f'<strong style="color:var(--teal);">Hradec fit:</strong> {escape(_why_club)}')
+        if _smart_top3 and _smart_top3 not in ("nan", "None"):
+            _tier_badge = f' <span class="pill">{escape(_closeness_tier)}</span>' if _closeness_tier and _closeness_tier not in ("nan","None") else ""
+            _style_parts.append(f'<strong style="color:var(--muted);">Style clubs:</strong> {escape(_smart_top3)}{_tier_badge}')
+        st.markdown(
+            '<div class="note-box" style="margin-top:6px;border-left-color:rgba(16,212,170,.5);">'
+            + '<br>'.join(_style_parts)
+            + '</div>',
+            unsafe_allow_html=True,
+        )
     _sl_add_cols = st.columns([1, 1, 2])
     with _sl_add_cols[0]:
         _sl_priority = st.selectbox("Priority", ["Watch", "Hot", "Observed"], key=f"sl_pri_{selected_label[:20]}")
@@ -3179,6 +3277,14 @@ with player_tab:
             st.success(f"Added {player['PlayerName']} to shortlist as {_sl_priority}")
     with _sl_add_cols[2]:
         st.text_input("Scout note (optional)", key=f"sl_notes_{selected_label[:20]}", placeholder="E.g. Watched vs Sparta, strong in press…")
+    _card_notes = st.session_state.get(f"sl_notes_{selected_label[:20]}", "")
+    st.download_button(
+        "📄 Download player card PDF",
+        data=build_player_card_pdf(player, df.loc[df["PositionGroup"].eq(player["PositionGroup"])], scout_notes=_card_notes),
+        file_name=f"fchk_player_{player['PlayerName'].replace(' ', '_').lower()}.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+    )
     lab_left, lab_right = st.columns([1, 1])
     with lab_left:
         st.pyplot(render_player_pizza(df.loc[df["PositionGroup"].eq(player["PositionGroup"])], player), clear_figure=True)
@@ -3305,7 +3411,7 @@ with hradec_tab:
             "PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears",
             "HradecTargetScore", "PositionNeed", "QualityScore", "ValueRecruitmentScore",
             "AgeResaleScore", "SmartClubScore", "PerformanceReliabilityScore",
-            "RiskBand", "Archetype",
+            "RiskBand", "Archetype", "WhyThisClubStyle",
         ] if c in targets_view.columns]
 
         st.dataframe(
@@ -3316,6 +3422,7 @@ with hradec_tab:
                 "QualityScore": "Quality", "ValueRecruitmentScore": "Value",
                 "AgeResaleScore": "Resale", "SmartClubScore": "Style Fit",
                 "PerformanceReliabilityScore": "Reliability", "RiskBand": "Risk",
+                "WhyThisClubStyle": "Why Hradec",
             }).round(1),
             use_container_width=True,
             hide_index=True,
@@ -3531,9 +3638,9 @@ with export_tab:
     shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("QualityScore", ascending=False)
     export_left, export_right = st.columns([1, 1])
     with export_left:
-        st.download_button("Download board CSV", data=export_df.to_csv(index=False).encode("utf-8"), file_name="fchk_quality_board.csv", mime="text/csv", width="stretch")
+        st.download_button("Download board CSV", data=export_df.to_csv(index=False).encode("utf-8"), file_name="fchk_quality_board.csv", mime="text/csv", use_container_width=True)
     with export_right:
-        st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", width="stretch")
+        st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", use_container_width=True)
     _sl_data = st.session_state.get("shortlist_data", {})
     _sl_names = list(_sl_data.keys())
     shortlist_df = df.loc[df["PlayerName"].isin(_sl_names)].sort_values("QualityScore", ascending=False)
