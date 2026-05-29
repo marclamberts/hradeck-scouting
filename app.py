@@ -2312,33 +2312,32 @@ def render_team_workspace(data: pd.DataFrame) -> None:
 
 st.markdown(
     """
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
     /* ── TOKENS ──────────────────────────────────────────────── */
     :root {
         --teal:      #0d9e7d;
-        --teal-glow: rgba(13,158,125,.15);
-        --ink:       #1a2332;
-        --muted:     #64748b;
-        --faint:     #94a3b8;
-        --border:    #e2e8f0;
-        --surface:   #ffffff;
-        --raised:    #f8fafc;
-        --sidebar:   #0f172a;
-        --sid-text:  #94a3b8;
-        --sid-hi:    #e2e8f0;
-        --sid-border:#1e293b;
-        --amber:     #d97706;
-        --red:       #dc2626;
-        --green:     #059669;
-        --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+        --teal-hi:   #10d4aa;
+        --teal-glow: rgba(13,158,125,.18);
+        --ink:       #e6edf3;
+        --muted:     #8b949e;
+        --faint:     #6e7681;
+        --border:    #30363d;
+        --surface:   #161b22;
+        --raised:    #1c2128;
+        --bg:        #0d1117;
+        --amber:     #d29922;
+        --red:       #f85149;
+        --green:     #3fb950;
+        --shadow:    0 2px 8px rgba(0,0,0,.4);
     }
 
     /* ── GLOBAL ──────────────────────────────────────────────── */
     html, body, .stApp {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-        background: #ffffff !important;
+        background: var(--bg) !important;
         color: var(--ink) !important;
     }
     header[data-testid="stHeader"],
@@ -2348,156 +2347,107 @@ st.markdown(
         padding-top: .75rem !important;
         padding-bottom: 3rem !important;
         max-width: 100% !important;
-        padding-left: 1.75rem !important;
-        padding-right: 1.75rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
     }
 
-    /* vertical rhythm */
     div[data-testid="stVerticalBlock"] { gap: 0 !important; }
     div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .35rem !important; }
     div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .5rem !important; }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .3rem !important; }
     div[data-testid="stMetric"] { margin-bottom: 0 !important; }
     [data-testid="stDataFrame"] > div { width: 100% !important; }
 
     h1, h2, h3 { font-family: 'Inter', sans-serif !important; font-weight: 800; color: var(--ink) !important; }
-    h2 { font-size: .7rem !important; text-transform: uppercase; letter-spacing: .14em; color: var(--muted) !important;
-         border-bottom: 1px solid var(--border) !important; padding-bottom: 5px; margin-bottom: 8px !important; }
+    h2 { font-size: .68rem !important; text-transform: uppercase; letter-spacing: .14em;
+         color: var(--faint) !important; border-bottom: 1px solid var(--border) !important;
+         padding-bottom: 5px; margin-bottom: 8px !important; }
     h3 { font-size: .88rem !important; margin-bottom: 5px !important; }
 
-    /* ── DARK SIDEBAR ───────────────────────────────────────── */
+    /* ── SIDEBAR ─────────────────────────────────────────────── */
     section[data-testid="stSidebar"] {
-        background: var(--sidebar) !important;
-        border-right: 1px solid var(--sid-border) !important;
+        background: #0a0d13 !important;
+        border-right: 1px solid var(--border) !important;
     }
     section[data-testid="stSidebar"] .block-container {
-        padding-top: 1rem !important;
+        padding-top: 1.25rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
-    /* all text in sidebar */
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] div,
-    section[data-testid="stSidebar"] .stMarkdown { color: var(--sid-text) !important; }
-    section[data-testid="stSidebar"] h2 {
-        color: var(--sid-text) !important;
-        border-bottom-color: var(--sid-border) !important;
-    }
-    /* sidebar inputs */
-    section[data-testid="stSidebar"] input[type="text"],
-    section[data-testid="stSidebar"] .stTextInput input {
-        background: #1e293b !important;
-        border-color: var(--sid-border) !important;
-        color: var(--sid-hi) !important;
-    }
-    /* sidebar expanders */
-    section[data-testid="stSidebar"] [data-testid="stExpander"] {
-        background: #1e293b !important;
-        border-color: var(--sid-border) !important;
-        border-radius: 6px !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stExpander"] summary span {
-        color: var(--sid-text) !important;
-    }
-    /* sidebar multiselect tags */
-    section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb="tag"] {
-        background: rgba(13,158,125,.25) !important;
-    }
-    /* sidebar buttons */
-    section[data-testid="stSidebar"] .stButton > button {
-        background: #1e293b !important;
-        border-color: #334155 !important;
-        color: var(--sid-text) !important;
-    }
-    section[data-testid="stSidebar"] .stButton > button:hover {
-        border-color: var(--teal) !important;
-        color: var(--teal) !important;
-        background: rgba(13,158,125,.12) !important;
-    }
-    section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
-        background: rgba(13,158,125,.2) !important;
-        border-color: var(--teal) !important;
-        color: #10d4aa !important;
-    }
-    /* sidebar segmented control */
-    section[data-testid="stSidebar"] [data-testid="stSegmentedControl"] {
-        background: #1e293b !important;
-    }
 
-    /* ── SIDEBAR CUSTOM COMPONENTS ──────────────────────────── */
+    /* ── SIDEBAR CUSTOM ──────────────────────────────────────── */
     .sidebar-brand {
         border-left: 3px solid var(--teal);
         padding: 10px 12px;
-        margin-bottom: 16px;
+        margin-bottom: 20px;
         background: rgba(13,158,125,.08);
         border-radius: 0 6px 6px 0;
     }
-    .sidebar-brand-title { color: #10d4aa !important; font-size: .9rem; font-weight: 800; letter-spacing: .02em; }
-    .sidebar-brand-meta  { color: var(--sid-text) !important; font-size: .67rem; margin-top: 2px; }
+    .sidebar-brand-title { color: var(--teal-hi) !important; font-size: .88rem; font-weight: 800; letter-spacing: .02em; }
+    .sidebar-brand-meta  { color: var(--muted) !important; font-size: .65rem; margin-top: 3px; }
     .sbar-hdr {
-        color: #475569;
-        font-size: .58rem;
-        font-weight: 800;
+        color: var(--faint);
+        font-size: .56rem;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .16em;
-        margin: 16px 0 4px 0;
-        padding-bottom: 4px;
-        border-bottom: 1px solid var(--sid-border);
+        letter-spacing: .18em;
+        margin: 18px 0 5px 0;
+        padding-bottom: 5px;
+        border-bottom: 1px solid var(--border);
     }
     .sbar-active-bar {
         background: rgba(13,158,125,.12);
-        border: 1px solid rgba(13,158,125,.25);
+        border: 1px solid rgba(13,158,125,.3);
         border-radius: 5px;
-        padding: 5px 9px;
-        font-size: .65rem;
+        padding: 6px 10px;
+        font-size: .64rem;
         font-weight: 700;
-        color: #10d4aa;
+        color: var(--teal-hi);
         margin: 8px 0;
     }
 
-    /* ── APP BRAND + NAV TABS ───────────────────────────────── */
+    /* ── APP BRAND ───────────────────────────────────────────── */
     .app-brand {
         font-family: 'Inter', sans-serif;
-        font-size: .78rem;
-        font-weight: 800;
-        color: var(--teal);
-        letter-spacing: .04em;
+        font-size: .8rem;
+        font-weight: 900;
+        color: var(--teal-hi);
+        letter-spacing: .06em;
+        text-transform: uppercase;
         padding: 0 0 4px 0;
     }
-    .app-brand-sub { color: var(--muted); font-weight: 500; }
+    .app-brand-sub { color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: .01em; }
 
+    /* ── WORKSPACE NAV TABS ──────────────────────────────────── */
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
         background: transparent !important;
         border: none !important;
         border-bottom: 1px solid var(--border) !important;
         border-radius: 0 !important;
         padding: 0 !important;
-        gap: 2px !important;
-        margin-bottom: 18px !important;
+        gap: 0 !important;
+        margin-bottom: 20px !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
-        min-height: 38px !important; height: 38px !important;
-        font-size: .75rem !important; font-weight: 600 !important;
-        padding: 0 18px !important; border-radius: 0 !important;
+        min-height: 40px !important; height: 40px !important;
+        font-size: .74rem !important; font-weight: 600 !important;
+        padding: 0 20px !important; border-radius: 0 !important;
         border: none !important; border-bottom: 2px solid transparent !important;
         background: transparent !important; color: var(--muted) !important;
-        letter-spacing: .01em !important; text-transform: none !important;
+        letter-spacing: .01em !important;
         box-shadow: none !important; margin-bottom: -1px !important;
-        transition: color .15s, border-color .15s !important;
+        transition: color .15s, border-color .15s, background .15s !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
-        color: var(--teal) !important; font-weight: 700 !important;
-        border-bottom-color: var(--teal) !important;
+        color: var(--teal-hi) !important; font-weight: 700 !important;
+        border-bottom: 2px solid var(--teal) !important;
         background: transparent !important; box-shadow: none !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
-        color: var(--teal) !important;
-        background: var(--raised) !important;
+        color: var(--teal-hi) !important;
+        background: rgba(13,158,125,.07) !important;
     }
 
-    /* ── MAIN CONTENT BUTTONS ───────────────────────────────── */
+    /* ── BUTTONS ─────────────────────────────────────────────── */
     .stButton > button, .stDownloadButton > button {
         font-family: 'Inter', sans-serif !important;
         border-radius: 6px !important;
@@ -2506,41 +2456,38 @@ st.markdown(
         color: var(--muted) !important;
         font-weight: 600 !important;
         font-size: .74rem !important;
-        text-transform: none !important;
         box-shadow: var(--shadow) !important;
         transition: all .15s !important;
         min-height: 32px !important;
     }
     .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
-        background: var(--teal-glow) !important;
+        background: rgba(13,158,125,.15) !important;
         border-color: var(--teal) !important;
-        color: var(--teal) !important;
+        color: var(--teal-hi) !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
         border-color: var(--teal) !important;
-        color: var(--teal) !important;
-        background: var(--teal-glow) !important;
+        color: var(--teal-hi) !important;
+        background: rgba(13,158,125,.12) !important;
     }
 
-    /* ── MAIN CONTENT TABS ──────────────────────────────────── */
+    /* ── CONTENT TABS ────────────────────────────────────────── */
     div[data-testid="stTabs"] { border-bottom: 1px solid var(--border); }
     div[data-testid="stTabs"] button {
         font-family: 'Inter', sans-serif !important;
-        font-weight: 600 !important; font-size: .73rem !important;
+        font-weight: 600 !important; font-size: .72rem !important;
         color: var(--muted) !important; padding: 8px 16px !important;
-        border-radius: 0 !important;
+        border-radius: 0 !important; background: transparent !important;
     }
     div[data-testid="stTabs"] button[aria-selected="true"] {
-        color: var(--teal) !important;
+        color: var(--teal-hi) !important;
         border-bottom: 2px solid var(--teal) !important;
         font-weight: 700 !important;
     }
-    div[data-testid="stTabsContent"] { padding-top: 14px !important; }
+    div[data-testid="stTabsContent"] { padding-top: 16px !important; }
 
-    /* ── INPUTS (main area) ──────────────────────────────────── */
-    .stTextInput input,
-    .stSelectbox [data-baseweb="select"] > div:first-child,
-    .stMultiSelect [data-baseweb="select"] > div:first-child {
+    /* ── INPUTS ──────────────────────────────────────────────── */
+    .stTextInput input {
         border-color: var(--border) !important;
         border-radius: 6px !important;
         font-family: 'Inter', sans-serif !important;
@@ -2548,7 +2495,20 @@ st.markdown(
     }
     .stTextInput input:focus { border-color: var(--teal) !important; box-shadow: 0 0 0 2px var(--teal-glow) !important; }
 
-    /* ── CUSTOM HTML COMPONENTS ─────────────────────────────── */
+    /* ── METRIC TILES ────────────────────────────────────────── */
+    [data-testid="stMetric"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px !important;
+        padding: 12px 14px !important;
+    }
+    [data-testid="stMetricLabel"] { font-size: .62rem !important; font-weight: 700 !important;
+        text-transform: uppercase !important; letter-spacing: .1em !important; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 900 !important;
+        color: var(--ink) !important; }
+    [data-testid="stMetricDelta"] { font-size: .7rem !important; }
+
+    /* ── CUSTOM HTML ─────────────────────────────────────────── */
     .metric-card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -2562,54 +2522,54 @@ st.markdown(
     .metric-caption{ color: var(--muted); font-size: .68rem; }
 
     .note-box {
-        background: var(--raised);
+        background: var(--surface);
         border: 1px solid var(--border);
         border-left: 3px solid var(--teal);
         border-radius: 0 6px 6px 0;
-        padding: 9px 13px;
-        font-size: .78rem; color: var(--muted); line-height: 1.55;
+        padding: 10px 14px;
+        font-size: .78rem; color: var(--muted); line-height: 1.6;
         margin: 6px 0;
     }
     .section-card {
         background: var(--surface); border: 1px solid var(--border);
-        border-radius: 8px; padding: 14px 16px; box-shadow: var(--shadow);
+        border-radius: 8px; padding: 16px 18px; box-shadow: var(--shadow);
     }
     .profile-card {
         background: var(--surface); border: 1px solid var(--border);
         border-left: 3px solid var(--teal); border-radius: 0 8px 8px 0;
-        padding: 12px 16px; margin-bottom: 10px;
+        padding: 14px 18px; margin-bottom: 12px;
     }
-    .profile-name { color: var(--ink); font-size: 1.1rem; font-weight: 900; }
-    .profile-meta { color: var(--muted); font-size: .73rem; margin-top: 2px; margin-bottom: 8px; }
+    .profile-name { color: var(--ink); font-size: 1.15rem; font-weight: 900; }
+    .profile-meta { color: var(--muted); font-size: .73rem; margin-top: 3px; margin-bottom: 10px; }
 
     .pill-row { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
     .pill {
         background: var(--raised); border: 1px solid var(--border);
         color: var(--muted); border-radius: 20px; padding: 2px 10px;
-        font-size: .65rem; font-weight: 600;
+        font-size: .64rem; font-weight: 600;
     }
-    .pill.teal  { background: rgba(13,158,125,.1); border-color: rgba(13,158,125,.3); color: var(--teal); }
-    .pill.amber { background: rgba(217,119,6,.1);  border-color: rgba(217,119,6,.3);  color: var(--amber); }
-    .pill.red   { background: rgba(220,38,38,.1);  border-color: rgba(220,38,38,.3);  color: var(--red); }
+    .pill.teal  { background: rgba(13,158,125,.12); border-color: rgba(13,158,125,.35); color: var(--teal-hi); }
+    .pill.amber { background: rgba(210,153,34,.12);  border-color: rgba(210,153,34,.35);  color: var(--amber); }
+    .pill.red   { background: rgba(248,81,73,.12);   border-color: rgba(248,81,73,.35);   color: var(--red); }
 
     .intel-strip {
         border: 1px solid var(--border); border-left: 3px solid var(--teal);
-        background: var(--raised); border-radius: 6px; padding: 8px 14px;
+        background: var(--surface); border-radius: 6px; padding: 10px 14px;
         margin: 0 0 10px 0; display: flex; align-items: center;
         justify-content: space-between; gap: 12px;
     }
     .intel-strip-title { color: var(--ink); font-size: .82rem; font-weight: 700; }
-    .intel-strip-meta  { color: var(--faint); font-size: .63rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+    .intel-strip-meta  { color: var(--faint); font-size: .62rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 
     .workspace-label {
-        color: var(--teal); font-size: .6rem; font-weight: 800;
-        letter-spacing: .14em; text-transform: uppercase;
-        margin: 2px 0 8px 0; padding: 4px 0 4px 10px;
-        border-left: 2px solid var(--teal); background: var(--teal-glow);
+        color: var(--teal-hi); font-size: .58rem; font-weight: 800;
+        letter-spacing: .16em; text-transform: uppercase;
+        margin: 2px 0 10px 0; padding: 4px 0 4px 10px;
+        border-left: 2px solid var(--teal); background: rgba(13,158,125,.07);
         border-radius: 0 4px 4px 0;
     }
-    .page-title    { font-size: 1.1rem; font-weight: 800; color: var(--ink); letter-spacing: -.01em; margin: 0 0 1px 0; }
-    .page-subtitle { font-size: .72rem; color: var(--faint); margin-bottom: 14px; }
+    .page-title    { font-size: 1.15rem; font-weight: 800; color: var(--ink); letter-spacing: -.01em; margin: 0 0 2px 0; }
+    .page-subtitle { font-size: .72rem; color: var(--faint); margin-bottom: 16px; }
 </style>
     """,
     unsafe_allow_html=True,
