@@ -2346,33 +2346,29 @@ def render_team_workspace(data: pd.DataFrame) -> None:
 st.markdown(
     """
     <style>
-    /* ═══════════════════════════════════════════════════════════════
-       DESIGN TOKENS  — clean light: cool white / slate palette
-    ═══════════════════════════════════════════════════════════════ */
+    /* ═══ DESIGN TOKENS ════════════════════════════════════════════ */
     :root {
-        --bg:       #f5f7fa;   /* page background – light cool grey       */
-        --surface:  #ffffff;   /* card / panel background                 */
-        --raised:   #eef2f7;   /* elevated elements, inputs               */
-        --border:   #dde3ec;   /* subtle dividers                         */
-        --border2:  #c8d3df;   /* stronger borders, outlines              */
-        --teal:     #0d9e7d;   /* primary accent (dark enough on white)   */
-        --teal-dim: #0a7d62;   /* darker teal for hover                   */
-        --amber:    #d97706;   /* warning / resale                        */
-        --red:      #dc2626;   /* danger / high risk                      */
-        --green:    #059669;   /* success / confirmed                     */
-        --blue:     #2563eb;   /* info / links                            */
-        --purple:   #7c3aed;   /* special labels                          */
-        --ink:      #1a2332;   /* primary text – near black               */
-        --muted:    #4a5e75;   /* secondary text                          */
-        --faint:    #6b808f;   /* placeholder, disabled                   */
+        --bg:       #f5f7fa;
+        --surface:  #ffffff;
+        --raised:   #eef2f7;
+        --border:   #dde3ec;
+        --border2:  #c8d3df;
+        --teal:     #0d9e7d;
+        --teal-dim: #0a7d62;
+        --amber:    #d97706;
+        --red:      #dc2626;
+        --green:    #059669;
+        --blue:     #2563eb;
+        --purple:   #7c3aed;
+        --ink:      #1a2332;
+        --muted:    #4a5e75;
+        --faint:    #6b808f;
         --shadow:   0 4px 20px rgba(0,0,0,.08);
         --shadow-sm:0 2px 8px  rgba(0,0,0,.05);
     }
 
-    /* ── GLOBAL ──────────────────────────────────────────────── */
+    /* ── GLOBAL ─────────────────────────────────────────────────── */
     .stApp { background: var(--bg) !important; color: var(--ink); }
-
-    /* Hide Streamlit header — it intercepts clicks on workspace nav */
     header[data-testid="stHeader"] { display: none !important; }
     div[data-testid="stToolbar"]   { display: none !important; }
 
