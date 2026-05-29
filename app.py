@@ -1530,6 +1530,8 @@ def load_leagues_overview() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_excel(path)
     df.columns = [str(c).strip() for c in df.columns]
+    if "Division" in df.columns:
+        df["Division"] = df["Division"].astype(str)
     return df
 
 
@@ -1811,7 +1813,7 @@ def render_scouting_workspace() -> None:
             if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
                 col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
 
-    st.dataframe(ws_display, use_container_width=True, hide_index=True, height=720, column_config=col_config)
+    st.dataframe(ws_display, width="stretch", hide_index=True, height=720, column_config=col_config)
 
     # ── Column explorer expander ──────────────────────────────────────────────
     if _ws_numeric_cols:
@@ -1833,12 +1835,12 @@ def render_scouting_workspace() -> None:
                             .properties(height=220)
                             .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
                         )
-                        st.altair_chart(_hist_chart, use_container_width=True)
+                        st.altair_chart(_hist_chart, width="stretch")
                     with exp_right:
                         _stats = _series.describe()
                         _stats.index = ["Count","Mean","Std","Min","P25","Median","P75","Max"]
                         st.dataframe(_stats.reset_index().rename(columns={"index":"Stat",0:"Value"}).round(2),
-                                     use_container_width=True, hide_index=True)
+                                     width="stretch", hide_index=True)
 
     # ── League index expander ─────────────────────────────────────────────────
     if not leagues_df.empty:
@@ -1850,12 +1852,13 @@ def render_scouting_workspace() -> None:
                     present_names.add(str(m.get("League Name", "")))
             lo_view = leagues_df.copy()
             lo_view["✓"] = lo_view["League Name"].isin(present_names).map({True: "✓", False: ""})
+            lo_view["Division"] = lo_view["Division"].astype(str)
             li_tier = st.selectbox("Tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
             if li_tier != "All":
                 lo_view = lo_view.loc[lo_view["Tier Label"].eq(li_tier)]
             st.dataframe(
                 lo_view[["League Name","Country","Tier Label","Division","✓"]],
-                use_container_width=True, hide_index=True, height=420,
+                width="stretch", hide_index=True, height=420,
             )
 
 
@@ -1874,7 +1877,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     required_cols = {model_col, score_col}
     if not required_cols.issubset(smart_df.columns):
         st.info("Smart Club Closeness workbook is loaded, but the expected model and closeness columns were not found.")
-        st.dataframe(smart_df.head(50), use_container_width=True, hide_index=True)
+        st.dataframe(smart_df.head(50), width="stretch", hide_index=True)
         return
 
     smart_df[score_col] = pd.to_numeric(smart_df[score_col], errors="coerce")
@@ -1911,7 +1914,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
         st.subheader("Club model ranking")
         st.dataframe(
             summary,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
@@ -1933,7 +1936,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
             )
             st.dataframe(
                 position_summary,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
@@ -1961,7 +1964,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
     top_matches = selected.sort_values(sort_cols, ascending=[False] + ([True] if len(sort_cols) > 1 else [])).head(100)
     st.dataframe(
         top_matches[top_cols],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "SmartClubClosenessScore": st.column_config.ProgressColumn("Closeness", min_value=0, max_value=100, format="%.1f"),
@@ -1992,7 +1995,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
                 ]
                 if col in related_styles.columns
             ]
-            st.dataframe(related_styles[style_cols].head(50), use_container_width=True, hide_index=True)
+            st.dataframe(related_styles[style_cols].head(50), width="stretch", hide_index=True)
 
 
 def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
@@ -2073,7 +2076,7 @@ def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
     )
     st.dataframe(
         board.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
@@ -2136,7 +2139,7 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
         _board_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","CaseScore","ValueRecruitmentScore","AgeResaleScore","SuccessProbability","StyleFit","CostRisk","PrimaryPlayerStyle","SmartClubTop3"] if c in rd.columns]
         st.dataframe(
             rd[_board_cols].head(100).rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","CaseScore":"Case","ValueRecruitmentScore":"Value","AgeResaleScore":"Resale","SuccessProbability":"Success","PrimaryPlayerStyle":"Style","SmartClubTop3":"Style Clubs"}).round(2),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "Case": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
                 "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
@@ -2162,10 +2165,10 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
                 .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
                 .interactive()
             )
-            st.altair_chart(case_chart, use_container_width=True)
+            st.altair_chart(case_chart, width="stretch")
         else:
             _shape = rd.groupby(["PositionGroup","StyleFit"]).agg(Players=("PlayerName","count"),MedianCase=("CaseScore","median")).round(1).reset_index().sort_values("MedianCase",ascending=False)
-            st.dataframe(_shape, use_container_width=True, hide_index=True)
+            st.dataframe(_shape, width="stretch", hide_index=True)
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
@@ -2233,7 +2236,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
     st.subheader("Squad read")
     st.dataframe(
         squad_view.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
@@ -2270,7 +2273,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         st.subheader("Role gaps")
         st.dataframe(
             role_summary.rename(columns={"PositionGroup": "Role"}).round(1),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "CzechMedianFit": st.column_config.ProgressColumn("Czech fit", min_value=0, max_value=100, format="%.1f"),
@@ -2318,7 +2321,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
         )
         st.dataframe(
             watch_view.round(2),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={"Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f")},
         )
@@ -2337,7 +2340,7 @@ def render_team_workspace(data: pd.DataFrame) -> None:
             .reset_index()
             .sort_values(["LeagueLabel", "MedianFit"], ascending=[True, False])
         )
-        st.dataframe(league_summary, use_container_width=True, hide_index=True)
+        st.dataframe(league_summary, width="stretch", hide_index=True)
 
 
 st.markdown(
@@ -3485,7 +3488,7 @@ archetype_groups = sorted(df["Archetype"].dropna().astype(str).unique())
 
 with st.sidebar:
     # ── Search ──────────────────────────────────────────────────
-    search = st.text_input("", key="search_filter", placeholder="🔍  Search player or club…")
+    search = st.text_input("Search", key="search_filter", placeholder="🔍  Search player or club…", label_visibility="collapsed")
 
     # ── Positions ───────────────────────────────────────────────
     st.markdown("<div class='sbar-hdr'>Positions</div>", unsafe_allow_html=True)
@@ -3751,7 +3754,7 @@ with quality_tab:
     )
     st.dataframe(
         quality_board.round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=600,
         column_config={
@@ -3870,7 +3873,7 @@ with player_tab:
         )
         st.dataframe(
             per90,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Value": st.column_config.NumberColumn("Value", format="%.2f"),
@@ -3931,14 +3934,14 @@ with player_tab:
             .configure_view(fill="#0f1623", stroke=None)
             .configure(background="#080c14")
         )
-        st.altair_chart(_age_chart, use_container_width=True)
+        st.altair_chart(_age_chart, width="stretch")
 
     comparable = similar_players(df, player, same_position=True, n=12)
     st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:14px 0 8px;'>Closest quality profiles</div>", unsafe_allow_html=True)
     similar_cols = ["PlayerName", "TeamName", "PositionGroup", "AgeYears", "MinutesPlayed", "SimilarityScore", "QualityScore", "RoleFitScore", "ProfileScore", "Archetype"]
     st.dataframe(
         comparable[[c for c in similar_cols if c in comparable.columns]].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","MinutesPlayed":"Minutes","SimilarityScore":"Similarity","QualityScore":"Quality","RoleFitScore":"Role Fit","ProfileScore":"Impact"}).round(2),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Quality":   st.column_config.ProgressColumn("Quality",   min_value=0, max_value=100, format="%.1f"),
@@ -3996,7 +3999,7 @@ with hradec_tab:
                 "PerformanceReliabilityScore": "Reliability", "RiskBand": "Risk",
                 "WhyThisClubStyle": "Why Hradec",
             }).round(1),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Hradec Fit ▼": st.column_config.ProgressColumn("Hradec Fit ▼", min_value=0, max_value=130, format="%.1f"),
@@ -4039,7 +4042,7 @@ with hradec_tab:
                 .configure_view(fill="#0f1623", stroke=None)
                 .configure(background="#080c14")
             )
-            st.altair_chart(_need_chart, use_container_width=True)
+            st.altair_chart(_need_chart, width="stretch")
 
         # Best XI
         xi_order = ["CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
@@ -4058,7 +4061,7 @@ with hradec_tab:
             })
         if xi_rows:
             st.subheader("Suggested Best XI from targets")
-            st.dataframe(pd.DataFrame(xi_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(xi_rows), width="stretch", hide_index=True)
 
 with intel_tab:
     st.markdown("<div class='workspace-label'>🌍 League & market intelligence</div>", unsafe_allow_html=True)
@@ -4070,7 +4073,7 @@ with intel_tab:
         map_col, map_info_col = st.columns([2.2, 1])
         with map_col:
             try:
-                st.altair_chart(render_european_map(market_df), use_container_width=True)
+                st.altair_chart(render_european_map(market_df), width="stretch")
             except Exception as e:
                 st.warning(f"Map could not render: {e}")
         with map_info_col:
@@ -4078,7 +4081,7 @@ with intel_tab:
             top_markets = market_df.head(8)[["Country", "Players", "MedianScore", "GoScore", "Recommendation"]].rename(
                 columns={"MedianScore": "Median Q", "GoScore": "Priority"}
             )
-            st.dataframe(top_markets.round(1), use_container_width=True, hide_index=True)
+            st.dataframe(top_markets.round(1), width="stretch", hide_index=True)
 
     # ── League quality bar chart ────────────────────────────────
     st.subheader("Quality by league")
@@ -4120,7 +4123,7 @@ with intel_tab:
             .configure_view(fill="#0f1623", stroke=None)
             .configure(background="#080c14")
         )
-        st.altair_chart(bar_chart, use_container_width=True)
+        st.altair_chart(bar_chart, width="stretch")
 
     # ── Full league table ───────────────────────────────────────
     with st.expander("Full league table", expanded=False):
@@ -4128,7 +4131,7 @@ with intel_tab:
             league_summary.rename(columns={"BundleLabel": "League", "MedianQuality": "Median Q",
                                             "MedianRoleFit": "Median Fit", "EliteCount": "Elite",
                                             "ElitePct": "Elite %", "MedianAge": "Median Age"}).round(1),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "Median Q":   st.column_config.ProgressColumn("Median Q",   min_value=0, max_value=100, format="%.1f"),
                 "Median Fit": st.column_config.ProgressColumn("Median Fit", min_value=0, max_value=100, format="%.1f"),
@@ -4142,14 +4145,14 @@ with intel_tab:
         dist_metric = st.selectbox("Metric", ["QualityScore", "RoleFitScore", "ProfileScore",
                                                "DecisionScore", "PerformanceReliabilityScore",
                                                "CompositeRecruitmentScore"], key="dist_metric_intel")
-        st.pyplot(render_score_distribution(filtered, dist_metric), clear_figure=True, use_container_width=True)
+        st.pyplot(render_score_distribution(filtered, dist_metric), clear_figure=True, width="stretch")
     with dist_col2:
-        st.pyplot(render_position_boxplot(filtered, dist_metric), clear_figure=True, use_container_width=True)
+        st.pyplot(render_position_boxplot(filtered, dist_metric), clear_figure=True, width="stretch")
 
     # ── League heatmap ──────────────────────────────────────────
     with st.expander("League depth heatmap", expanded=False):
         hm_metric = st.selectbox("Heatmap metric", ["QualityScore", "RoleFitScore", "CompositeRecruitmentScore"], key="hm_metric")
-        st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, use_container_width=True)
+        st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, width="stretch")
 
 with compare_tab:
     st.markdown("<div class='workspace-label'>⚖️ Side-by-side comparison</div>", unsafe_allow_html=True)
@@ -4201,7 +4204,7 @@ with compare_tab:
             .configure_view(fill="#0f1623", stroke=None)
             .configure(background="#080c14")
         )
-        st.altair_chart(compare_chart, use_container_width=True)
+        st.altair_chart(compare_chart, width="stretch")
 
 with case_tab:
     st.markdown("<div class='workspace-label'>💼 Case Analysis — transfer value, resale &amp; style fit</div>", unsafe_allow_html=True)
@@ -4239,7 +4242,7 @@ with export_tab:
         shortlist_enriched = shortlist_enriched.sort_values(["_pri_ord", "QualityScore"], ascending=[True, False])
         st.dataframe(
             shortlist_enriched[sl_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","QualityScore":"Quality","QualityTier":"Tier","RoleFitScore":"Role Fit","RiskBand":"Risk"}).round(2),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "Quality":  st.column_config.ProgressColumn("Quality",  min_value=0, max_value=100, format="%.1f"),
                 "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
