@@ -98,6 +98,58 @@ POSITION_PROFILES: dict[str, list[str]] = {
     "CB": ["Ball-playing CB", "Aggressive stopper", "Libero / sweeper", "Aerial specialist"],
     "GK": ["Sweeper keeper", "Shot-stopper", "Commanding GK", "Ball-playing GK"],
 }
+# Column weights per profile — mirrors the logic in assign_player_profiles
+PROFILE_WEIGHTS: dict[str, dict[str, dict[str, float]]] = {
+    "ST": {
+        "Goalscoring striker": {"ScoringThreatScore": 2.0, "ExpectedThreatScore": 1.5},
+        "Target striker":      {"DefensiveDisruptionScore": 2.0, "ScoringThreatScore": 1.0},
+        "Dynamic striker":     {"PressingScore": 2.0, "CreativeProgressionScore": 1.0},
+        "Second striker":      {"CreativeProgressionScore": 2.0, "ExpectedThreatScore": 1.0},
+    },
+    "W": {
+        "Inside forward":  {"ScoringThreatScore": 2.0, "ExpectedThreatScore": 1.5},
+        "Wide winger":     {"CreativeProgressionScore": 1.5, "PressingScore": 1.0},
+        "Pressing winger": {"PressingScore": 2.0, "DefensiveDisruptionScore": 1.0},
+        "Creative winger": {"CreativeProgressionScore": 2.0, "DecisionScore": 1.0},
+    },
+    "AM": {
+        "Classic playmaker":  {"CreativeProgressionScore": 2.0, "DecisionScore": 1.5},
+        "Shadow striker":     {"ScoringThreatScore": 2.0, "ExpectedThreatScore": 1.5},
+        "Deep creator":       {"BallSecurityScore": 2.0, "CreativeProgressionScore": 1.0},
+        "Press orchestrator": {"PressingScore": 2.0, "CreativeProgressionScore": 1.0},
+    },
+    "CM": {
+        "Box-to-box":            {"PressingScore": 1.0, "ExpectedThreatScore": 1.0, "DefensiveDisruptionScore": 1.0},
+        "Progressive carrier":   {"CreativeProgressionScore": 2.0, "DecisionScore": 1.0},
+        "Press-resistant pivot": {"BallSecurityScore": 2.0, "CreativeProgressionScore": 1.0},
+        "Defensive CM":          {"DefensiveDisruptionScore": 2.0, "PressingScore": 1.0},
+    },
+    "DM": {
+        "Defensive shield": {"DefensiveDisruptionScore": 2.0, "BallSecurityScore": 1.5},
+        "Regista":          {"CreativeProgressionScore": 2.0, "BallSecurityScore": 1.0, "DecisionScore": 1.0},
+        "Press trigger":    {"PressingScore": 2.0, "DefensiveDisruptionScore": 1.0},
+        "Holding pivot":    {"BallSecurityScore": 2.0, "PerformanceReliabilityScore": 1.0},
+    },
+    "FB": {
+        "Attacking fullback":  {"CreativeProgressionScore": 2.0, "ExpectedThreatScore": 1.5},
+        "Defensive fullback":  {"DefensiveDisruptionScore": 2.0, "BallSecurityScore": 1.5},
+        "Inverted fullback":   {"CreativeProgressionScore": 1.5, "BallSecurityScore": 1.5},
+        "Wing-back":           {"ExpectedThreatScore": 1.5, "PressingScore": 1.5},
+    },
+    "CB": {
+        "Ball-playing CB":    {"CreativeProgressionScore": 2.0, "BallSecurityScore": 1.5},
+        "Aggressive stopper": {"DefensiveDisruptionScore": 2.0, "PressingScore": 1.5},
+        "Libero / sweeper":   {"CreativeProgressionScore": 1.5, "DefensiveDisruptionScore": 1.0},
+        "Aerial specialist":  {"DefensiveDisruptionScore": 3.0},
+    },
+    "GK": {
+        "Sweeper keeper":   {"DecisionScore": 2.0, "PressingScore": 1.0},
+        "Shot-stopper":     {"PerformanceReliabilityScore": 2.0, "BallSecurityScore": 1.0},
+        "Commanding GK":    {"DefensiveDisruptionScore": 2.0, "BallSecurityScore": 1.0},
+        "Ball-playing GK":  {"CreativeProgressionScore": 2.0, "BallSecurityScore": 1.0},
+    },
+}
+
 TIER_COLORS = {
     "Must scout": "#e76f51",
     "Priority": "#f4a261",
@@ -551,6 +603,29 @@ def assign_player_profiles(df: pd.DataFrame) -> pd.Series:
         scores_df = pd.DataFrame(profile_scores, index=df.index)
         result.loc[mask] = scores_df.loc[mask].idxmax(axis=1)
     return result
+
+
+def calc_profile_fit(df: pd.DataFrame, position: str, profile: str) -> pd.Series:
+    """Return a 0–100 z-score-based profile fit for every row in df.
+    Scores are normalised within the position group so 50 = average,
+    65 = one std above average, 35 = one std below."""
+    weights = PROFILE_WEIGHTS.get(position, {}).get(profile, {})
+    if not weights:
+        return pd.Series(50.0, index=df.index)
+
+    raw = pd.Series(0.0, index=df.index)
+    for col, w in weights.items():
+        raw = raw + safe_col(df, col) * w
+
+    # z-score within the position pool
+    pos_mask = df.get("PositionGroup", pd.Series("", index=df.index)).astype(str).eq(position)
+    pos_raw = raw.loc[pos_mask]
+    if len(pos_raw) < 2 or pos_raw.std() < 1e-6:
+        return pd.Series(50.0, index=df.index)
+
+    mean, std = pos_raw.mean(), pos_raw.std()
+    z = (raw - mean) / std
+    return (z * 15 + 50).clip(0, 100).round(1)
 
 
 def weighted_role_score(row: pd.Series) -> float:
@@ -2927,8 +3002,8 @@ if filtered.empty:
 
 _shortlist_count = len(st.session_state.get("shortlist_players", []))
 
-quality_tab, player_tab, compare_tab, hradec_tab, intel_tab, case_tab, export_tab = st.tabs(
-    ["📊 Quality Board", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "💼 Case Analysis", "📥 Export"]
+quality_tab, profile_tab, player_tab, compare_tab, hradec_tab, intel_tab, case_tab, export_tab = st.tabs(
+    ["📊 Quality Board", "🎭 Profile Search", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "💼 Case Analysis", "📥 Export"]
 )
 
 with quality_tab:
@@ -3012,6 +3087,73 @@ with quality_tab:
             "Minutes":     st.column_config.NumberColumn("Minutes", format="%d"),
         },
     )
+
+with profile_tab:
+    _all_positions = sorted(PROFILE_WEIGHTS.keys())
+    _prof_pos_col, _prof_pick_col = st.columns([1, 2], gap="small")
+    with _prof_pos_col:
+        _target_pos = st.selectbox("Position", ["—"] + _all_positions, key="profile_target_pos", label_visibility="visible")
+    with _prof_pick_col:
+        _profile_options = list(PROFILE_WEIGHTS.get(_target_pos, {}).keys()) if _target_pos != "—" else []
+        _target_profile = st.selectbox(
+            "Profile",
+            ["—"] + _profile_options,
+            key="profile_target_name",
+            disabled=_target_pos == "—",
+            label_visibility="visible",
+        )
+
+    if _target_pos == "—" or _target_profile == "—":
+        st.markdown(
+            "<div class='note-box'>Select a <strong>position</strong> and a <strong>player profile</strong> above "
+            "to rank every player in that position by how closely they fit the profile, "
+            "scored using z-scores within the position pool.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        _pos_pool = filtered.loc[filtered["PositionGroup"].astype(str).eq(_target_pos)].copy()
+        if _pos_pool.empty:
+            st.info(f"No {_target_pos} players in the current filtered set.")
+        else:
+            _pos_pool["ProfileFit"] = calc_profile_fit(_pos_pool, _target_pos, _target_profile)
+            _pos_pool = _pos_pool.sort_values("ProfileFit", ascending=False)
+
+            # Header strip showing profile definition
+            _pw = PROFILE_WEIGHTS[_target_pos][_target_profile]
+            _drivers = " · ".join(f"{k.replace('Score','').replace('CreativeProgression','Creativity').replace('DefensiveDisruption','Defence').replace('ScoringThreat','Scoring').replace('ExpectedThreat','xThreat').replace('BallSecurity','Security').replace('PerformanceReliability','Reliability').replace('Pressing','Press')} ×{v}" for k, v in _pw.items())
+            st.markdown(
+                f"<div class='note-box'><strong style='color:var(--teal-hi);'>{_target_profile}</strong> "
+                f"<span style='color:var(--muted);'>({_target_pos})</span>"
+                f"<br><span style='color:var(--faint);font-size:.7rem;'>Profile drivers: {_drivers}</span><br>"
+                f"<span style='color:var(--faint);font-size:.7rem;'>"
+                f"Z-score scaled: 50 = position average · 65 = top 16% · 80 = top 2%"
+                f"</span></div>",
+                unsafe_allow_html=True,
+            )
+
+            _prof_board_cols = [
+                "PlayerName", "TeamName", "BundleLabel", "AgeYears", "MinutesPlayed",
+                "ProfileFit", "QualityScore", "QualityTier", "Archetype",
+            ] + [c for c in _pw.keys() if c in _pos_pool.columns]
+            _prof_board = _pos_pool[[c for c in _prof_board_cols if c in _pos_pool.columns]].rename(columns={
+                "PlayerName": "Player", "TeamName": "Team", "BundleLabel": "League",
+                "AgeYears": "Age", "MinutesPlayed": "Minutes",
+                "QualityScore": "Quality", "QualityTier": "Tier",
+                "ScoringThreatScore": "Scoring", "ExpectedThreatScore": "xThreat",
+                "CreativeProgressionScore": "Creativity", "DefensiveDisruptionScore": "Defence",
+                "PressingScore": "Press", "BallSecurityScore": "Security",
+                "DecisionScore": "Decision", "PerformanceReliabilityScore": "Reliability",
+            })
+            _prof_col_cfg = {
+                "ProfileFit": st.column_config.ProgressColumn("Profile Fit ▼", min_value=0, max_value=100, format="%.1f"),
+                "Quality":    st.column_config.ProgressColumn("Quality",       min_value=0, max_value=100, format="%.1f"),
+                "Age":        st.column_config.NumberColumn("Age", format="%.1f"),
+                "Minutes":    st.column_config.NumberColumn("Minutes", format="%d"),
+            }
+            for _dc in ["Scoring", "xThreat", "Creativity", "Defence", "Press", "Security", "Decision", "Reliability"]:
+                if _dc in _prof_board.columns:
+                    _prof_col_cfg[_dc] = st.column_config.ProgressColumn(_dc, min_value=0, max_value=100, format="%.1f")
+            st.dataframe(_prof_board.round(2), width="stretch", hide_index=True, height=780, column_config=_prof_col_cfg)
 
 with player_tab:
     st.markdown("<div class='workspace-label'>🔬 Player Lab — deep dive profile & radar</div>", unsafe_allow_html=True)
