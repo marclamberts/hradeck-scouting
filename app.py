@@ -87,6 +87,17 @@ POSITION_COLORS = {
     "W": "#e76f51",
     "ST": "#c2410c",
 }
+
+POSITION_PROFILES: dict[str, list[str]] = {
+    "ST": ["Goalscoring striker", "Target striker", "Dynamic striker", "Second striker"],
+    "W":  ["Inside forward", "Wide winger", "Pressing winger", "Creative winger"],
+    "AM": ["Classic playmaker", "Shadow striker", "Deep creator", "Press orchestrator"],
+    "CM": ["Box-to-box", "Progressive carrier", "Press-resistant pivot", "Defensive CM"],
+    "DM": ["Defensive shield", "Regista", "Press trigger", "Holding pivot"],
+    "FB": ["Attacking fullback", "Defensive fullback", "Inverted fullback", "Wing-back"],
+    "CB": ["Ball-playing CB", "Aggressive stopper", "Libero / sweeper", "Aerial specialist"],
+    "GK": ["Sweeper keeper", "Shot-stopper", "Commanding GK", "Ball-playing GK"],
+}
 TIER_COLORS = {
     "Must scout": "#e76f51",
     "Priority": "#f4a261",
@@ -470,6 +481,78 @@ def assign_archetypes(df: pd.DataFrame) -> pd.Series:
     return pd.Series(labels, index=df.index)
 
 
+def assign_player_profiles(df: pd.DataFrame) -> pd.Series:
+    pos         = df.get("PositionGroup", pd.Series("", index=df.index)).fillna("").astype(str)
+    scoring     = safe_col(df, "ScoringThreatScore")
+    expected    = safe_col(df, "ExpectedThreatScore")
+    creative    = safe_col(df, "CreativeProgressionScore")
+    defense     = safe_col(df, "DefensiveDisruptionScore")
+    press       = safe_col(df, "PressingScore")
+    security    = safe_col(df, "BallSecurityScore")
+    decision    = safe_col(df, "DecisionScore")
+    reliability = safe_col(df, "PerformanceReliabilityScore")
+
+    _spec: dict[str, dict[str, pd.Series]] = {
+        "ST": {
+            "Goalscoring striker": scoring  * 2   + expected  * 1.5,
+            "Target striker":      defense  * 2   + scoring   * 1.0,
+            "Dynamic striker":     press    * 2   + creative  * 1.0,
+            "Second striker":      creative * 2   + expected  * 1.0,
+        },
+        "W": {
+            "Inside forward":  scoring  * 2   + expected  * 1.5,
+            "Wide winger":     creative * 1.5 + press     * 1.0,
+            "Pressing winger": press    * 2   + defense   * 1.0,
+            "Creative winger": creative * 2   + decision  * 1.0,
+        },
+        "AM": {
+            "Classic playmaker":  creative * 2   + decision  * 1.5,
+            "Shadow striker":     scoring  * 2   + expected  * 1.5,
+            "Deep creator":       security * 2   + creative  * 1.0,
+            "Press orchestrator": press    * 2   + creative  * 1.0,
+        },
+        "CM": {
+            "Box-to-box":            press    * 1.0 + expected * 1.0 + defense * 1.0,
+            "Progressive carrier":   creative * 2   + decision * 1.0,
+            "Press-resistant pivot": security * 2   + creative * 1.0,
+            "Defensive CM":          defense  * 2   + press    * 1.0,
+        },
+        "DM": {
+            "Defensive shield": defense  * 2   + security   * 1.5,
+            "Regista":          creative * 2   + security   * 1.0 + decision * 1.0,
+            "Press trigger":    press    * 2   + defense    * 1.0,
+            "Holding pivot":    security * 2   + reliability * 1.0,
+        },
+        "FB": {
+            "Attacking fullback":  creative * 2   + expected  * 1.5,
+            "Defensive fullback":  defense  * 2   + security  * 1.5,
+            "Inverted fullback":   creative * 1.5 + security  * 1.5,
+            "Wing-back":           expected * 1.5 + press     * 1.5,
+        },
+        "CB": {
+            "Ball-playing CB":    creative * 2   + security * 1.5,
+            "Aggressive stopper": defense  * 2   + press    * 1.5,
+            "Libero / sweeper":   creative * 1.5 + defense  * 1.0,
+            "Aerial specialist":  defense  * 3,
+        },
+        "GK": {
+            "Sweeper keeper":   decision    * 2 + press    * 1.0,
+            "Shot-stopper":     reliability * 2 + security * 1.0,
+            "Commanding GK":    defense     * 2 + security * 1.0,
+            "Ball-playing GK":  creative    * 2 + security * 1.0,
+        },
+    }
+
+    result = pd.Series("", index=df.index)
+    for pos_code, profile_scores in _spec.items():
+        mask = pos.eq(pos_code)
+        if not mask.any():
+            continue
+        scores_df = pd.DataFrame(profile_scores, index=df.index)
+        result.loc[mask] = scores_df.loc[mask].idxmax(axis=1)
+    return result
+
+
 def weighted_role_score(row: pd.Series) -> float:
     weights = ROLE_SCORE_WEIGHTS.get(str(row.get("PositionGroup", "")), ROLE_SCORE_WEIGHTS["CM"])
     positive_total = sum(v for v in weights.values() if v > 0)
@@ -596,6 +679,7 @@ def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFra
     out["QualityDrivers"] = out.apply(quality_drivers, axis=1)
     out["RiskFlags"] = out.apply(lambda row: ", ".join(risk_flags(row)), axis=1)
     out["TierReason"] = out.apply(tier_reason, axis=1)
+    out["PlayerProfile"] = assign_player_profiles(out)
     return out
 
 
@@ -781,21 +865,21 @@ def render_position_boxplot(df: pd.DataFrame, metric: str):
     order = ["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"]
     groups = [pd.to_numeric(df.loc[df["PositionGroup"].eq(pos), metric], errors="coerce").dropna() for pos in order]
     fig, ax = plt.subplots(figsize=(10, 4.8), dpi=150)
-    fig.patch.set_facecolor("#080c14")
-    ax.set_facecolor("#0f1623")
+    fig.patch.set_facecolor("#f5f7fa")
+    ax.set_facecolor("#ffffff")
     bp = ax.boxplot(groups, patch_artist=True, tick_labels=order, showfliers=False,
-                    medianprops={"color": "#00d4a8", "linewidth": 2},
-                    whiskerprops={"color": "#1e2d3d"}, capprops={"color": "#1e2d3d"})
+                    medianprops={"color": "#0d9e7d", "linewidth": 2},
+                    whiskerprops={"color": "#c8d3df"}, capprops={"color": "#c8d3df"})
     for patch, pos in zip(bp["boxes"], order):
         patch.set_facecolor(POSITION_COLORS.get(pos, "#457b9d"))
-        patch.set_alpha(0.8)
-        patch.set_edgecolor("#1e2d3d")
-    ax.set_title(f"{metric} by position", loc="left", fontsize=13, fontweight="bold", color="#e8edf3")
-    ax.set_ylabel("Score", color="#8fa3b1", fontsize=9)
-    ax.tick_params(colors="#8fa3b1")
+        patch.set_alpha(0.75)
+        patch.set_edgecolor("#c8d3df")
+    ax.set_title(f"{metric} by position", loc="left", fontsize=13, fontweight="bold", color="#1a2332")
+    ax.set_ylabel("Score", color="#4a5e75", fontsize=9)
+    ax.tick_params(colors="#4a5e75")
     for spine in ax.spines.values():
-        spine.set_edgecolor("#1e2d3d")
-    ax.grid(axis="y", color="#1e2d3d", linewidth=0.7)
+        spine.set_edgecolor("#dde3ec")
+    ax.grid(axis="y", color="#dde3ec", linewidth=0.7)
     ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
     return fig
@@ -1211,6 +1295,7 @@ def download_name(prefix: str, suffix: str) -> str:
 def reset_filters() -> None:
     for key in [
         "positions_filter",
+        "profiles_filter",
         "bundles_filter",
         "archetypes_filter",
         "countries_filter",
@@ -1457,7 +1542,7 @@ def render_scouting_workspace() -> None:
             '<div class="note-box" style="border-left-color:var(--amber);">'
             '<strong style="color:var(--amber);">No Wyscout files found.</strong><br>'
             f'Upload your exported Wyscout Excel or CSV files to '
-            f'<code style="color:var(--teal);background:rgba(16,212,170,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code>'
+            f'<code style="color:var(--teal);background:rgba(13,158,125,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -1699,7 +1784,7 @@ def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]
             '<div class="note-box" style="border-left-color:var(--amber);">'
             '<strong style="color:var(--amber);">No Wyscout files found.</strong><br>'
             'Upload your exported Wyscout Excel or CSV files to:<br>'
-            '<code style="color:var(--teal);background:rgba(16,212,170,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code><br><br>'
+            '<code style="color:var(--teal);background:rgba(13,158,125,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code><br><br>'
             'Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong>. '
             'Any Wyscout export works — player lists, match data, league exports.'
             '</div>',
@@ -2354,26 +2439,26 @@ st.markdown(
     """
     <style>
     /* ═══════════════════════════════════════════════════════════════
-       DESIGN TOKENS  — softer dark: slate-blue palette, not black
+       DESIGN TOKENS  — clean light: cool white / slate palette
     ═══════════════════════════════════════════════════════════════ */
     :root {
-        --bg:       #111827;   /* page background – dark slate, not black */
-        --surface:  #1c2537;   /* card / panel background                 */
-        --raised:   #243044;   /* elevated elements, inputs               */
-        --border:   #2e3f55;   /* subtle dividers                         */
-        --border2:  #3a5068;   /* stronger borders, outlines              */
-        --teal:     #10d4aa;   /* primary accent                          */
-        --teal-dim: #0aaa88;   /* darker teal for hover                   */
-        --amber:    #f5a623;   /* warning / resale                        */
-        --red:      #f05252;   /* danger / high risk                      */
-        --green:    #34d399;   /* success / confirmed                     */
-        --blue:     #60a5fa;   /* info / links                            */
-        --purple:   #a78bfa;   /* special labels                          */
-        --ink:      #f1f5f9;   /* primary text – soft white               */
-        --muted:    #94afc4;   /* secondary text                          */
-        --faint:    #637d96;   /* placeholder, disabled                   */
-        --shadow:   0 4px 20px rgba(0,0,0,.35);
-        --shadow-sm:0 2px 8px  rgba(0,0,0,.25);
+        --bg:       #f5f7fa;   /* page background – light cool grey       */
+        --surface:  #ffffff;   /* card / panel background                 */
+        --raised:   #eef2f7;   /* elevated elements, inputs               */
+        --border:   #dde3ec;   /* subtle dividers                         */
+        --border2:  #c8d3df;   /* stronger borders, outlines              */
+        --teal:     #0d9e7d;   /* primary accent (dark enough on white)   */
+        --teal-dim: #0a7d62;   /* darker teal for hover                   */
+        --amber:    #d97706;   /* warning / resale                        */
+        --red:      #dc2626;   /* danger / high risk                      */
+        --green:    #059669;   /* success / confirmed                     */
+        --blue:     #2563eb;   /* info / links                            */
+        --purple:   #7c3aed;   /* special labels                          */
+        --ink:      #1a2332;   /* primary text – near black               */
+        --muted:    #4a5e75;   /* secondary text                          */
+        --faint:    #6b808f;   /* placeholder, disabled                   */
+        --shadow:   0 4px 20px rgba(0,0,0,.08);
+        --shadow-sm:0 2px 8px  rgba(0,0,0,.05);
     }
 
     /* ── GLOBAL ──────────────────────────────────────────────── */
@@ -2430,7 +2515,7 @@ st.markdown(
 
     /* ── SIDEBAR ─────────────────────────────────────────────── */
     section[data-testid="stSidebar"] {
-        background: #0d1422 !important;
+        background: #eef2f7 !important;
         border-right: 1px solid var(--border) !important;
     }
 
@@ -2441,7 +2526,7 @@ st.markdown(
 
     /* ── SIDEBAR BRAND ───────────────────────────────────────── */
     .sidebar-brand {
-        background: linear-gradient(135deg, rgba(16,212,170,.12) 0%, transparent 60%);
+        background: linear-gradient(135deg, rgba(13,158,125,.12) 0%, transparent 60%);
         border: 1px solid var(--border);
         border-left: 3px solid var(--teal);
         padding: 12px 14px;
@@ -2480,7 +2565,7 @@ st.markdown(
 
     /* ── LANDING HERO ────────────────────────────────────────── */
     .hero {
-        background: linear-gradient(135deg, #162035 0%, #1c2537 55%, #1a2d3e 100%);
+        background: linear-gradient(135deg, #e8f0f9 0%, #eef2f7 55%, #e0ecf8 100%);
         border: 1px solid var(--border2);
         border-radius: 10px;
         padding: 48px 44px 40px;
@@ -2494,7 +2579,7 @@ st.markdown(
         position: absolute;
         top: -80px; right: -80px;
         width: 380px; height: 380px;
-        background: radial-gradient(circle, rgba(16,212,170,.14) 0%, transparent 65%);
+        background: radial-gradient(circle, rgba(13,158,125,.14) 0%, transparent 65%);
         pointer-events: none;
     }
     .hero::after {
@@ -2517,7 +2602,7 @@ st.markdown(
         gap: 6px;
     }
     .hero h1 {
-        color: #fff !important;
+        color: var(--ink) !important;
         font-size: clamp(2rem, 3.5vw, 3.4rem);
         font-weight: 900;
         line-height: 1.05;
@@ -2527,7 +2612,7 @@ st.markdown(
     .hero p { color: var(--muted); font-size: .95rem; line-height: 1.65; max-width: 540px; margin: 0; }
     .hero-stats { display: flex; gap: 36px; margin-top: 32px; flex-wrap: wrap; }
     .hero-stat-item { display: flex; flex-direction: column; gap: 3px; }
-    .hero-stat-value { color: #fff; font-size: 1.7rem; font-weight: 900; line-height: 1; }
+    .hero-stat-value { color: var(--ink); font-size: 1.7rem; font-weight: 900; line-height: 1; }
     .hero-stat-label { color: var(--faint); font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
 
     /* ── LANDING CARDS ───────────────────────────────────────── */
@@ -2556,7 +2641,7 @@ st.markdown(
         text-transform: uppercase;
         margin: 2px 0 8px 0;
         padding: 4px 0 4px 10px;
-        background: rgba(16,212,170,.06);
+        background: rgba(13,158,125,.06);
         border-radius: 0 4px 4px 0;
     }
 
@@ -2652,7 +2737,7 @@ st.markdown(
         letter-spacing: .06em;
         border-radius: 20px;
     }
-    .pill.teal  { border-color: rgba(16,212,170,.5);  color: var(--teal);  background: rgba(16,212,170,.1); }
+    .pill.teal  { border-color: rgba(13,158,125,.5);  color: var(--teal);  background: rgba(13,158,125,.1); }
     .pill.amber { border-color: rgba(245,166,35,.5);  color: var(--amber); background: rgba(245,166,35,.1); }
     .pill.red   { border-color: rgba(240,82,82,.5);   color: var(--red);   background: rgba(240,82,82,.1);  }
 
@@ -2660,7 +2745,7 @@ st.markdown(
     .note-box {
         border: 1px solid var(--border);
         border-left: 3px solid var(--teal);
-        background: rgba(16,212,170,.05);
+        background: rgba(13,158,125,.05);
         padding: 9px 12px;
         color: var(--muted);
         font-size: .75rem;
@@ -2672,7 +2757,7 @@ st.markdown(
 
     /* ── SCOUTING COMMAND ────────────────────────────────────── */
     .scouting-command {
-        background: linear-gradient(135deg, #162035 0%, #1c2537 100%);
+        background: linear-gradient(135deg, #eef2f7 0%, #ffffff 100%);
         border: 1px solid var(--border2);
         border-radius: 10px;
         padding: 22px 24px;
@@ -2692,7 +2777,7 @@ st.markdown(
 
     /* ── QUALITY HERO ────────────────────────────────────────── */
     .quality-hero {
-        background: linear-gradient(135deg, #162035 0%, #1c2537 100%);
+        background: linear-gradient(135deg, #eef2f7 0%, #ffffff 100%);
         border: 1px solid var(--border2);
         border-radius: 8px;
         padding: 12px 16px;
@@ -2752,14 +2837,14 @@ st.markdown(
         min-height: 32px;
     }
     .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
-        background: rgba(16,212,170,.15) !important;
+        background: rgba(13,158,125,.15) !important;
         border-color: var(--teal) !important;
         color: var(--teal) !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
         border-color: var(--teal) !important;
         color: var(--teal) !important;
-        background: rgba(16,212,170,.1) !important;
+        background: rgba(13,158,125,.1) !important;
     }
 
     /* Tabs */
@@ -2776,7 +2861,7 @@ st.markdown(
     div[data-testid="stTabs"] button[aria-selected="true"] {
         color: var(--teal) !important;
         border-bottom: 2px solid var(--teal) !important;
-        background: rgba(16,212,170,.06) !important;
+        background: rgba(13,158,125,.06) !important;
     }
     div[data-testid="stTabs"] button:hover { color: var(--ink) !important; }
 
@@ -2823,7 +2908,7 @@ st.markdown(
         border-radius: 6px !important;
     }
     input::placeholder, textarea::placeholder { color: var(--faint) !important; }
-    [data-baseweb="tag"] { background: rgba(16,212,170,.14) !important; border-radius: 4px !important; color: var(--teal) !important; }
+    [data-baseweb="tag"] { background: rgba(13,158,125,.14) !important; border-radius: 4px !important; color: var(--teal) !important; }
 
     /* Sliders */
     .stSlider [data-baseweb="slider"] [role="slider"] { background: var(--teal) !important; }
@@ -2840,7 +2925,7 @@ st.markdown(
         font-weight: 700 !important;
     }
     div[data-testid="stSegmentedControl"] button[aria-checked="true"] {
-        background: rgba(16,212,170,.18) !important;
+        background: rgba(13,158,125,.18) !important;
         border-color: var(--teal) !important;
         color: var(--teal) !important;
     }
@@ -2857,7 +2942,7 @@ st.markdown(
     }
 
     /* Multiselect option hover */
-    li[role="option"]:hover { background: rgba(16,212,170,.1) !important; }
+    li[role="option"]:hover { background: rgba(13,158,125,.1) !important; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -2892,7 +2977,7 @@ st.markdown(
     }
     .dash-card--primary {
         border-color: var(--teal);
-        background: linear-gradient(160deg, rgba(16,212,170,.12) 0%, var(--surface) 55%);
+        background: linear-gradient(160deg, rgba(13,158,125,.08) 0%, var(--surface) 55%);
     }
     .dash-card--primary:hover {
         box-shadow: 0 0 0 2px var(--teal), var(--shadow);
@@ -2935,7 +3020,7 @@ st.markdown(
         gap: 48px;
         min-height: 62vh;
         padding: 64px 64px 56px;
-        background: linear-gradient(140deg, #080e1c 0%, #0d1625 40%, #111827 70%, #0f1e30 100%);
+        background: linear-gradient(140deg, #e8f0f9 0%, #eef2f7 40%, #f5f7fa 70%, #e4ecf8 100%);
         border-bottom: 1px solid var(--border);
         position: relative;
         overflow: hidden;
@@ -2946,7 +3031,7 @@ st.markdown(
         content:"";
         position:absolute; top:-100px; right:-80px;
         width:560px; height:560px;
-        background:radial-gradient(circle, rgba(16,212,170,.16) 0%, transparent 62%);
+        background:radial-gradient(circle, rgba(13,158,125,.16) 0%, transparent 62%);
         pointer-events:none;
     }
     /* blue glow — bottom left */
@@ -2968,13 +3053,13 @@ st.markdown(
         display:inline-flex; align-items:center; gap:8px;
         color:var(--teal);
         font-size:.63rem; font-weight:800; letter-spacing:.2em; text-transform:uppercase;
-        background:rgba(16,212,170,.08);
-        border:1px solid rgba(16,212,170,.28);
+        background:rgba(13,158,125,.08);
+        border:1px solid rgba(13,158,125,.28);
         border-radius:100px;
         padding:6px 16px 6px 12px;
         margin-bottom:24px;
         width:fit-content;
-        box-shadow:0 0 12px rgba(16,212,170,.12);
+        box-shadow:0 0 12px rgba(13,158,125,.12);
     }
     .lp-badge::before {
         content:"";
@@ -2990,7 +3075,7 @@ st.markdown(
     }
 
     .lp-title {
-        color:#fff !important;
+        color:var(--ink) !important;
         font-size:clamp(2.6rem,4.8vw,4.4rem);
         font-weight:900;
         line-height:1.0;
@@ -2999,7 +3084,7 @@ st.markdown(
     }
     .lp-title-accent {
         color:var(--teal);
-        text-shadow:0 0 40px rgba(16,212,170,.35);
+        text-shadow:0 0 40px rgba(13,158,125,.35);
     }
 
     /* thin teal underline accent */
@@ -3025,7 +3110,7 @@ st.markdown(
     /* stats row */
     .lp-stats {
         display:flex; align-items:center; gap:0;
-        background:rgba(255,255,255,.03);
+        background:rgba(0,0,0,.03);
         border:1px solid var(--border);
         border-radius:12px;
         padding:16px 24px;
@@ -3034,7 +3119,7 @@ st.markdown(
     }
     .lp-stat { display:flex; flex-direction:column; gap:4px; padding:0 28px 0 0; }
     .lp-stat-n {
-        color:#fff;
+        color:var(--ink);
         font-size:2.2rem; font-weight:900; line-height:1;
         letter-spacing:-.02em;
     }
@@ -3056,12 +3141,12 @@ st.markdown(
 
     .lp-pitch {
         width:100%; max-width:400px;
-        background:linear-gradient(160deg, rgba(16,212,170,.06) 0%, rgba(16,212,170,.02) 100%);
-        border:1px solid rgba(16,212,170,.22);
+        background:linear-gradient(160deg, rgba(13,158,125,.06) 0%, rgba(13,158,125,.02) 100%);
+        border:1px solid rgba(13,158,125,.22);
         border-radius:16px;
         padding:20px 20px 14px;
         display:flex; flex-direction:column; align-items:center; gap:12px;
-        box-shadow:0 0 40px rgba(16,212,170,.08), inset 0 1px 0 rgba(255,255,255,.04);
+        box-shadow:0 0 40px rgba(13,158,125,.08), inset 0 1px 0 rgba(255,255,255,.04);
     }
     .lp-pitch-label {
         color:var(--teal);
@@ -3073,7 +3158,7 @@ st.markdown(
         display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:400px;
     }
     .lp-pill {
-        background:rgba(255,255,255,.04);
+        background:rgba(0,0,0,.03);
         border:1px solid var(--border);
         color:var(--muted);
         font-size:.67rem; font-weight:600;
@@ -3084,10 +3169,10 @@ st.markdown(
     }
     .lp-pill:hover { border-color:var(--border2); color:var(--ink); }
     .lp-pill.teal {
-        background:rgba(16,212,170,.1);
-        border-color:rgba(16,212,170,.35);
+        background:rgba(13,158,125,.1);
+        border-color:rgba(13,158,125,.35);
         color:var(--teal);
-        box-shadow:0 0 10px rgba(16,212,170,.1);
+        box-shadow:0 0 10px rgba(13,158,125,.1);
     }
 
     /* ── SECTION DIVIDER ──────────────────────────────────── */
@@ -3116,11 +3201,11 @@ st.markdown(
     /* Bigger, polished cards */
     .dash-card {
         border:1px solid var(--border) !important;
-        background:linear-gradient(160deg, var(--surface) 0%, #1a2236 100%) !important;
+        background:linear-gradient(160deg, var(--surface) 0%, #f0f4f8 100%) !important;
         border-radius:14px !important;
         padding:32px 20px 26px !important;
         text-align:center !important;
-        box-shadow:0 2px 16px rgba(0,0,0,.28) !important;
+        box-shadow:0 2px 16px rgba(0,0,0,.06) !important;
         transition:border-color .22s, box-shadow .22s, transform .18s !important;
         min-height:230px !important;
         display:flex !important;
@@ -3134,25 +3219,25 @@ st.markdown(
     .dash-card::before {
         content:"";
         position:absolute; top:0; left:0; right:0; height:1px;
-        background:linear-gradient(90deg, transparent, rgba(255,255,255,.07), transparent);
+        background:linear-gradient(90deg, transparent, rgba(0,0,0,.05), transparent);
     }
     .dash-card:hover {
         border-color:var(--teal) !important;
-        box-shadow:0 0 0 1px var(--teal), 0 8px 32px rgba(16,212,170,.12) !important;
+        box-shadow:0 0 0 1px var(--teal), 0 8px 32px rgba(13,158,125,.10) !important;
         transform:translateY(-3px) !important;
     }
     .dash-card--primary {
-        border-color:rgba(16,212,170,.4) !important;
-        background:linear-gradient(160deg, rgba(16,212,170,.1) 0%, rgba(16,212,170,.04) 40%, #1a2236 100%) !important;
-        box-shadow:0 0 0 1px rgba(16,212,170,.2), 0 4px 24px rgba(16,212,170,.1) !important;
+        border-color:rgba(13,158,125,.4) !important;
+        background:linear-gradient(160deg, rgba(13,158,125,.08) 0%, rgba(13,158,125,.03) 40%, var(--surface) 100%) !important;
+        box-shadow:0 0 0 1px rgba(13,158,125,.2), 0 4px 24px rgba(13,158,125,.06) !important;
     }
     .dash-card--primary:hover {
-        box-shadow:0 0 0 2px var(--teal), 0 8px 36px rgba(16,212,170,.2) !important;
+        box-shadow:0 0 0 2px var(--teal), 0 8px 36px rgba(13,158,125,.14) !important;
     }
     .dash-card-icon {
         font-size:3rem !important;
         line-height:1 !important;
-        filter:drop-shadow(0 2px 10px rgba(0,0,0,.5)) !important;
+        filter:drop-shadow(0 2px 10px rgba(0,0,0,.18)) !important;
         margin-bottom:2px !important;
     }
     .dash-card-title {
@@ -3191,7 +3276,7 @@ st.markdown(
         opacity:0;
         transition:opacity .25s;
     }
-    .lp-strip-item:hover { background:rgba(16,212,170,.04); }
+    .lp-strip-item:hover { background:rgba(13,158,125,.04); }
     .lp-strip-item:hover::before { opacity:1; }
     .lp-strip-item:last-child { border-right:none; }
     .lp-strip-icon {
@@ -3437,6 +3522,14 @@ with st.sidebar:
     if saved_positions and any(position not in position_groups for position in saved_positions):
         st.session_state["positions_filter"] = position_groups
     positions = st.multiselect("Roles", position_groups, default=position_groups, key="positions_filter")
+    _profile_opts: list[str] = []
+    for _p in positions:
+        _profile_opts.extend(POSITION_PROFILES.get(_p, []))
+    _profile_opts = sorted(set(_profile_opts))
+    if _profile_opts:
+        profiles = st.multiselect("Player profiles", _profile_opts, default=_profile_opts, key="profiles_filter")
+    else:
+        profiles = []
     bundles = st.multiselect("Leagues", bundle_groups, default=bundle_groups, key="bundles_filter")
     archetypes = st.multiselect("Archetypes", archetype_groups, default=archetype_groups, key="archetypes_filter")
     if "CountryLabel" in df.columns:
@@ -3481,6 +3574,8 @@ if u23_only and "IsU23Target" in df:
     mask &= df["IsU23Target"].fillna(False).astype(bool)
 if countries and "CountryLabel" in df.columns:
     mask &= df["CountryLabel"].astype(str).replace("", "Unknown").isin(countries)
+if profiles and "PlayerProfile" in df.columns:
+    mask &= df["PlayerProfile"].isin(profiles)
 if search:
     haystack = (df["PlayerName"].fillna("").astype(str) + " " + df["TeamName"].fillna("").astype(str)).str.lower()
     mask &= haystack.str.contains(search.lower(), regex=False)
@@ -3701,7 +3796,7 @@ with player_tab:
             _tier_badge = f' <span class="pill">{escape(_closeness_tier)}</span>' if _closeness_tier and _closeness_tier not in ("nan","None") else ""
             _style_parts.append(f'<strong style="color:var(--muted);">Style clubs:</strong> {escape(_smart_top3)}{_tier_badge}')
         st.markdown(
-            '<div class="note-box" style="margin-top:6px;border-left-color:rgba(16,212,170,.5);">'
+            '<div class="note-box" style="margin-top:6px;border-left-color:rgba(13,158,125,.5);">'
             + '<br>'.join(_style_parts)
             + '</div>',
             unsafe_allow_html=True,
