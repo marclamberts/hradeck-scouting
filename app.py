@@ -2167,23 +2167,35 @@ def render_scouting_workspace() -> None:
 
     with ws_profile_tab:
         # ── Profile target selectors ─────────────────────────────────────────
-        _ws_pos_groups = sorted(WYSCOUT_PROFILE_WEIGHTS.keys())
+        # Show actual Wyscout position codes present in the data, filtered to
+        # those that map to a known profile group
+        if _pos_col and not ws_df.empty:
+            _ws_all_raw_pos = sorted(
+                ws_df[_pos_col].astype(str).str.strip().unique().tolist()
+            )
+            _ws_mapped_pos = [p for p in _ws_all_raw_pos if WYSCOUT_POSITION_MAP.get(p)]
+        else:
+            _ws_mapped_pos = []
+
         _wppos_col, _wppro_col = st.columns([1, 2], gap="small")
         with _wppos_col:
-            _ws_target_pos = st.selectbox(
-                "Position group", ["—"] + _ws_pos_groups,
+            _ws_raw_pos_sel = st.selectbox(
+                "Position", ["—"] + _ws_mapped_pos,
                 key="ws_profile_pos", label_visibility="visible",
             )
+        # Resolve raw Wyscout position → profile group
+        _ws_target_pos = WYSCOUT_POSITION_MAP.get(_ws_raw_pos_sel, "") if _ws_raw_pos_sel != "—" else ""
+
         with _wppro_col:
-            _ws_prof_options = list(WYSCOUT_PROFILE_WEIGHTS.get(_ws_target_pos, {}).keys()) if _ws_target_pos != "—" else []
+            _ws_prof_options = list(WYSCOUT_PROFILE_WEIGHTS.get(_ws_target_pos, {}).keys()) if _ws_target_pos else []
             _ws_target_profile = st.selectbox(
                 "Profile", ["—"] + _ws_prof_options,
-                key="ws_profile_name", disabled=_ws_target_pos == "—", label_visibility="visible",
+                key="ws_profile_name", disabled=not _ws_target_pos, label_visibility="visible",
             )
 
-        if _ws_target_pos == "—" or _ws_target_profile == "—":
+        if not _ws_target_pos or _ws_target_profile == "—":
             st.markdown(
-                "<div class='note-box'>Select a <strong>position group</strong> and a <strong>profile</strong> above "
+                "<div class='note-box'>Select a <strong>position</strong> and a <strong>profile</strong> above "
                 "to rank every player in that position by how well they fit the profile, "
                 "using z-scores calculated from Wyscout metrics within the position pool.</div>",
                 unsafe_allow_html=True,
@@ -2195,7 +2207,7 @@ def render_scouting_workspace() -> None:
                 _ws_scored["_PosGroup"] = _ws_scored[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("")
             _ws_scored["ProfileFit"] = calc_wyscout_profile_fit(_ws_scored, _ws_target_pos, _ws_target_profile)
 
-            # Apply sidebar filters (except position — profile group replaces that)
+            # Apply sidebar filters (except position — the position selector replaces that)
             if sel_leagues:
                 _ws_scored = _ws_scored.loc[_ws_scored["_League"].isin(sel_leagues)]
             if sel_teams and _team_col:
@@ -2208,14 +2220,11 @@ def render_scouting_workspace() -> None:
                     _hay = _ws_scored[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
                     _ws_scored = _ws_scored.loc[_hay.str.contains(ws_search.lower(), regex=False)]
 
-            # Filter to players in this position group
+            # Show players whose raw position maps to the selected group
             _ws_pos_pool = _ws_scored.loc[_ws_scored["_PosGroup"].eq(_ws_target_pos)].copy()
 
             if _ws_pos_pool.empty:
-                st.info(
-                    f"No {_ws_target_pos} players found. Check that the Wyscout position codes are mapped — "
-                    f"expected codes: {', '.join(k for k, v in WYSCOUT_POSITION_MAP.items() if v == _ws_target_pos)}."
-                )
+                st.info(f"No {_ws_raw_pos_sel} players found with current filters.")
             else:
                 _ws_pos_pool = _ws_pos_pool.sort_values("ProfileFit", ascending=False)
 
@@ -2228,14 +2237,18 @@ def render_scouting_workspace() -> None:
                     f'<br><span style="color:var(--amber);font-size:.65rem;">Missing columns (scored as 0): '
                     f'{", ".join(_ws_missing)}</span>' if _ws_missing else ""
                 )
+                # Count how many position codes are included in this group
+                _ws_group_codes = [k for k, v in WYSCOUT_POSITION_MAP.items() if v == _ws_target_pos]
+                _ws_pool_size = len(ws_df.loc[ws_df.get("_PosGroup", pd.Series("", index=ws_df.index)).eq(_ws_target_pos)])
                 st.markdown(
                     f"<div class='note-box'>"
                     f"<strong style='color:var(--teal-hi);'>{_ws_target_profile}</strong> "
-                    f"<span style='color:var(--muted);'>({_ws_target_pos})</span>"
+                    f"<span style='color:var(--muted);'>{_ws_raw_pos_sel} · {_ws_target_pos} group "
+                    f"({', '.join(_ws_group_codes)}) · z-scores vs {_ws_pool_size:,} players</span>"
                     f"<br><span style='color:var(--faint);font-size:.7rem;'>Drivers: {_ws_drivers}</span>"
                     f"{_ws_note}"
                     f"<br><span style='color:var(--faint);font-size:.7rem;'>"
-                    f"Z-score scaled: 50 = position average · 65 = top 16% · 80 = top 2%"
+                    f"50 = position average · 65 = top 16% · 80 = top 2%"
                     f"</span></div>",
                     unsafe_allow_html=True,
                 )
@@ -2264,11 +2277,10 @@ def render_scouting_workspace() -> None:
                     "ProfileFit": st.column_config.ProgressColumn("Profile Fit ▼", min_value=0, max_value=100, format="%.1f"),
                 }
                 for _wsc in _ws_avail_drivers:
-                    _display_name = _wsc  # Wyscout names are already human-readable
                     _cmin = float(_ws_prof_board[_wsc].min()) if _wsc in _ws_prof_board.columns and not _ws_prof_board[_wsc].isna().all() else 0.0
                     _cmax = float(_ws_prof_board[_wsc].max()) if _wsc in _ws_prof_board.columns and not _ws_prof_board[_wsc].isna().all() else 1.0
                     if _cmax > _cmin:
-                        _ws_prof_cfg[_wsc] = st.column_config.ProgressColumn(_display_name, min_value=_cmin, max_value=_cmax, format="%.2f")
+                        _ws_prof_cfg[_wsc] = st.column_config.ProgressColumn(_wsc, min_value=_cmin, max_value=_cmax, format="%.2f")
 
                 st.dataframe(_ws_prof_board.round(2), width="stretch", hide_index=True, height=780, column_config=_ws_prof_cfg)
 
