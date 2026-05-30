@@ -39,6 +39,11 @@ def main() -> None:
             chunk["File"] = xlsx.name
             chunk = chunk.dropna(subset=["Player"])
             chunk = chunk[chunk["Player"].astype(str).str.strip() != ""]
+            # Strip to first position (Wyscout stores comma-separated lists)
+            if "Position" in chunk.columns:
+                chunk["Position"] = (
+                    chunk["Position"].astype(str).str.split(r"[,;]").str[0].str.strip()
+                )
             chunks.append(chunk)
         except Exception as exc:
             print(f"  SKIP {xlsx.name}: {exc}")

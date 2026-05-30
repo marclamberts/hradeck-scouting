@@ -155,8 +155,8 @@ WYSCOUT_POSITION_MAP: dict[str, str] = {
     "CF": "ST", "SS": "ST",
     "LW": "W",  "RW": "W", "LWF": "W", "RWF": "W", "WF": "W",
     "AMF": "AM", "LAMF": "AM", "RAMF": "AM",
-    "CMF": "CM", "LCM": "CM", "RCM": "CM",
-    "DMF": "DM", "LDM": "DM", "RDM": "DM",
+    "CMF": "CM", "LCM": "CM", "RCM": "CM", "LCMF": "CM", "RCMF": "CM",
+    "DMF": "DM", "LDM": "DM", "RDM": "DM", "LDMF": "DM", "RDMF": "DM",
     "LB": "FB",  "RB": "FB", "LWB": "FB", "RWB": "FB",
     "CB": "CB",  "LCB": "CB", "RCB": "CB",
     "GK": "GK",
@@ -2547,7 +2547,8 @@ def render_search_workspace(data: pd.DataFrame) -> None:
             )
             league_label = f"{country_raw} {div_label}".strip() if div_label not in ("1", "I") else country_raw
             raw_pos = str(ws_row.get("Position", "") or "")
-            ws_pg   = WYSCOUT_POSITION_MAP.get(raw_pos.strip(), "")
+            raw_pos = raw_pos.split(",")[0].split(";")[0].strip()  # first position only
+            ws_pg   = WYSCOUT_POSITION_MAP.get(raw_pos, "")
             _age_raw = pd.to_numeric(ws_row.get("Age"), errors="coerce")
             results_rows.append({
                 "Player":      ws_name,
@@ -2614,7 +2615,8 @@ def render_search_workspace(data: pd.DataFrame) -> None:
         pos_group = str(impect_row.get("PositionGroup", ""))
     else:
         raw_pos   = str(ws_idx_row.get("Position", "") or "")  # type: ignore[union-attr]
-        pos_group = WYSCOUT_POSITION_MAP.get(raw_pos.strip(), raw_pos)
+        raw_pos   = raw_pos.split(",")[0].split(";")[0].strip()  # first position only
+        pos_group = WYSCOUT_POSITION_MAP.get(raw_pos, "")
 
     # Pre-load Wyscout data so charts and table share it
     _ws_row_loaded: pd.Series | None = None
@@ -2685,7 +2687,8 @@ def render_search_workspace(data: pd.DataFrame) -> None:
         # Wyscout-only header
         _ws_age_raw = ws_idx_row.get("Age", "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
         _ws_age_str = f"{float(_ws_age_raw):.0f} yrs" if pd.notna(pd.to_numeric(_ws_age_raw, errors="coerce")) else ""
-        _ws_raw_pos = str(ws_idx_row.get("Position", "") or "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
+        _ws_raw_pos_full = str(ws_idx_row.get("Position", "") or "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
+        _ws_raw_pos = _ws_raw_pos_full.split(",")[0].split(";")[0].strip()
         country_raw2, _ = _parse_wyscout_filename(_ws_file_loaded)
         st.markdown(
             f'<div class="profile-card">'
