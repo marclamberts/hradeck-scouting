@@ -2780,11 +2780,11 @@ def render_search_workspace(data: pd.DataFrame) -> None:
         _impect_tbl_ctx = _exp_left
         _ws_tbl_ctx     = _exp_right
     elif _show_impect_tbl:
-        _impect_tbl_ctx = st
+        _impect_tbl_ctx = st.container()
         _ws_tbl_ctx     = None  # type: ignore[assignment]
     else:
         _impect_tbl_ctx = None  # type: ignore[assignment]
-        _ws_tbl_ctx     = st
+        _ws_tbl_ctx     = st.container()
 
     if _show_impect_tbl:
         with _impect_tbl_ctx:  # type: ignore[union-attr]
