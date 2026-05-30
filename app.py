@@ -2601,14 +2601,15 @@ def render_search_workspace(data: pd.DataFrame) -> None:
 
     # ── Player profile ────────────────────────────────────────────────────────
     sel = results_df.iloc[event.selection.rows[0]]
-    is_wyscout_only = sel["_data_idx"] is None
+    is_wyscout_only = pd.isna(sel["_data_idx"])
 
     # Resolve IMPECT row (None for Wyscout-only players)
     impect_row: pd.Series | None = data.loc[sel["_data_idx"]] if not is_wyscout_only else None
 
     # Resolve Wyscout source: link DB row (IMPECT-linked) OR index row (Wyscout-only)
-    ws_link     = sel["_ws_link"]
-    ws_idx_row  = sel["_ws_idx_row"]
+    # pd.isna() because pandas converts None → NaN in mixed-type DataFrame columns
+    ws_link     = sel["_ws_link"]    if pd.notna(sel["_ws_link"])    else None
+    ws_idx_row  = sel["_ws_idx_row"] if pd.notna(sel["_ws_idx_row"]) else None
     has_wyscout = ws_link is not None or ws_idx_row is not None
 
     if impect_row is not None:
