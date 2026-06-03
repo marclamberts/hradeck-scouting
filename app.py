@@ -3332,7 +3332,9 @@ st.markdown(
         --green:     #3bd39f;
         --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
         --shadow:    0 4px 16px rgba(0,0,0,.45);
-        --radius:    6px;
+        --radius:    10px;
+        --radius-sm: 7px;
+        --radius-pill: 999px;
     }
 
     /* ── RESET & BASE ────────────────────────────────────────── */
@@ -3450,33 +3452,27 @@ st.markdown(
     }
 
     /* ── WIDGETS: MULTISELECT ────────────────────────────────── */
-    /* Outer container */
     .stMultiSelect [data-baseweb="select"] > div:first-child {
         background: var(--surface) !important;
         border: 1px solid var(--border-hi) !important;
         border-radius: var(--radius) !important;
-        min-height: 34px !important;
-        gap: 3px !important;
+        min-height: 36px !important; gap: 3px !important;
     }
     .stMultiSelect [data-baseweb="select"] > div:first-child:focus-within {
-        border-color: rgba(0,199,183,.45) !important;
+        border-color: rgba(0,199,183,.5) !important;
         box-shadow: 0 0 0 3px var(--teal-dim) !important;
     }
-    /* Tags */
     .stMultiSelect [data-baseweb="tag"] {
         background: var(--raised) !important;
         border: 1px solid var(--border-hi) !important;
-        border-radius: 4px !important;
+        border-radius: var(--radius-pill) !important;
         height: 20px !important; margin: 2px 0 !important;
     }
     .stMultiSelect [data-baseweb="tag"] [data-testid="stMultiSelectChipText"] {
-        font-size: .63rem !important; font-weight: 600 !important;
-        color: var(--muted) !important; line-height: 1 !important;
+        font-size: .62rem !important; font-weight: 600 !important;
+        color: var(--muted) !important;
     }
-    .stMultiSelect [data-baseweb="tag"] span[role="presentation"] {
-        color: var(--faint) !important;
-    }
-    /* Input inside multiselect */
+    .stMultiSelect [data-baseweb="tag"] span[role="presentation"] { color: var(--faint) !important; }
     .stMultiSelect input { color: var(--ink) !important; font-size: .73rem !important; }
 
     /* ── WIDGETS: SELECTBOX ──────────────────────────────────── */
@@ -3484,67 +3480,92 @@ st.markdown(
         background: var(--surface) !important;
         border: 1px solid var(--border-hi) !important;
         border-radius: var(--radius) !important;
-        min-height: 34px !important;
+        min-height: 36px !important;
     }
     .stSelectbox [data-baseweb="select"] > div:first-child:focus-within {
-        border-color: rgba(0,199,183,.45) !important;
+        border-color: rgba(0,199,183,.5) !important;
+        box-shadow: 0 0 0 3px var(--teal-dim) !important;
     }
-    /* Dropdown menu */
     [data-baseweb="popover"] { z-index: 9999 !important; }
     [data-baseweb="menu"] ul {
         background: var(--raised) !important;
         border: 1px solid var(--border-hi) !important;
         border-radius: var(--radius) !important;
         box-shadow: var(--shadow) !important;
+        overflow: hidden !important;
     }
     [data-baseweb="menu"] li[role="option"] {
         font-size: .73rem !important; color: var(--muted) !important;
-        background: transparent !important;
+        background: transparent !important; border-radius: 0 !important;
     }
     [data-baseweb="menu"] li[role="option"]:hover,
     [data-baseweb="menu"] li[aria-selected="true"] {
-        background: var(--teal-dim) !important;
-        color: var(--teal-hi) !important;
+        background: var(--teal-dim) !important; color: var(--teal-hi) !important;
     }
 
-    /* ── WIDGETS: SLIDER ─────────────────────────────────────── */
-    [data-testid="stSlider"] [data-baseweb="slider"] {
-        padding: 8px 0 !important;
+    /* ── WIDGETS: NUMBER INPUT ───────────────────────────────── */
+    [data-testid="stNumberInput"] > div {
+        border-radius: var(--radius) !important;
+        border: 1px solid var(--border-hi) !important;
+        background: var(--surface) !important;
+        overflow: hidden !important;
     }
+    [data-testid="stNumberInput"] input {
+        background: transparent !important; color: var(--ink) !important;
+        font-size: .79rem !important;
+    }
+    [data-testid="stNumberInput"] button {
+        all: unset !important; color: var(--faint) !important;
+        padding: 0 8px !important; cursor: pointer !important;
+        font-size: .9rem !important;
+    }
+    [data-testid="stNumberInput"] button:hover { color: var(--teal-hi) !important; }
+
+    /* ── WIDGETS: SLIDER ─────────────────────────────────────── */
+    [data-testid="stSlider"] [data-baseweb="slider"] { padding: 8px 0 !important; }
     [data-testid="stSlider"] [role="slider"] {
         background: var(--teal) !important;
         border: 2px solid var(--bg) !important;
         width: 14px !important; height: 14px !important;
+        border-radius: 50% !important;
         box-shadow: 0 0 0 3px var(--teal-dim) !important;
     }
-    /* Track */
-    [data-testid="stSlider"] > div > div > div {
-        height: 3px !important;
-    }
+    [data-testid="stSlider"] > div > div > div { height: 3px !important; }
 
     /* ── WIDGETS: TOGGLE ─────────────────────────────────────── */
     [data-testid="stToggle"] p { font-size: .72rem !important; font-weight: 500 !important; color: var(--muted) !important; }
-    [data-testid="stToggle"] [data-baseweb="checkbox"] span:last-child {
-        font-size: .72rem !important; color: var(--muted) !important;
+
+    /* ── WIDGETS: CHECKBOX ───────────────────────────────────── */
+    .stCheckbox label { font-size: .72rem !important; color: var(--muted) !important; gap: 7px !important; }
+    .stCheckbox [data-testid="stCheckboxValue"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border-hi) !important;
+        border-radius: 4px !important;
     }
+    .stCheckbox [data-testid="stCheckboxValue"][aria-checked="true"] {
+        background: var(--teal) !important; border-color: var(--teal) !important;
+    }
+
+    /* ── WIDGETS: RADIO ──────────────────────────────────────── */
+    .stRadio label { font-size: .72rem !important; color: var(--muted) !important; }
+    .stRadio [data-testid="stMarkdownContainer"] p { font-size: .72rem !important; color: var(--muted) !important; }
 
     /* ── WIDGETS: SEGMENTED CONTROL ─────────────────────────── */
     [data-testid="stSegmentedControl"] {
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
-        border-radius: 6px !important;
-        padding: 2px !important; gap: 2px !important;
+        border-radius: var(--radius) !important;
+        padding: 3px !important; gap: 2px !important;
     }
     [data-testid="stSegmentedControl"] label {
-        border-radius: 4px !important;
+        border-radius: var(--radius-sm) !important;
         font-size: .67rem !important; font-weight: 600 !important;
-        color: var(--faint) !important; padding: 5px 10px !important;
+        color: var(--faint) !important; padding: 5px 12px !important;
         border: none !important; background: transparent !important;
         transition: all .12s !important;
     }
     [data-testid="stSegmentedControl"] label:has(input:checked) {
-        background: var(--teal-dim) !important;
-        color: var(--teal-hi) !important;
+        background: var(--teal-dim) !important; color: var(--teal-hi) !important;
         border: 1px solid rgba(0,199,183,.25) !important;
     }
     [data-testid="stSegmentedControl"] input { display: none !important; }
@@ -3556,9 +3577,8 @@ st.markdown(
         border-radius: var(--radius) !important;
     }
     .stTextInput input {
-        background: transparent !important;
-        color: var(--ink) !important;
-        font-size: .79rem !important; padding: 7px 11px !important;
+        background: transparent !important; color: var(--ink) !important;
+        font-size: .79rem !important; padding: 7px 12px !important;
     }
     .stTextInput input::placeholder { color: var(--faint) !important; }
     .stTextInput > div > div:focus-within {
@@ -3569,21 +3589,21 @@ st.markdown(
     /* ── WIDGETS: BUTTONS ────────────────────────────────────── */
     .stButton > button, .stDownloadButton > button {
         font-family: 'Inter', sans-serif !important;
-        border-radius: var(--radius) !important;
+        border-radius: var(--radius-pill) !important;
         border: 1px solid var(--border-hi) !important;
         background: var(--surface) !important;
         color: var(--muted) !important;
         font-size: .71rem !important; font-weight: 600 !important;
-        min-height: 32px !important; letter-spacing: .01em !important;
-        transition: all .12s !important;
+        min-height: 33px !important; padding: 0 16px !important;
+        letter-spacing: .01em !important; transition: all .15s !important;
     }
     .stButton > button[kind="primary"] {
         background: var(--teal-dim) !important;
-        border-color: rgba(0,199,183,.35) !important;
+        border-color: rgba(0,199,183,.4) !important;
         color: var(--teal-hi) !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
-        border-color: rgba(0,199,183,.45) !important;
+        border-color: rgba(0,199,183,.5) !important;
         color: var(--teal-hi) !important;
         background: var(--teal-dim) !important;
     }
@@ -3593,21 +3613,28 @@ st.markdown(
         border: 1px solid var(--border) !important;
         border-radius: var(--radius) !important;
         background: var(--surface) !important;
-        margin-bottom: 5px !important;
+        margin-bottom: 6px !important; overflow: hidden !important;
     }
     .stExpander details summary {
         font-family: 'Inter', sans-serif !important;
         font-size: .72rem !important; font-weight: 600 !important;
-        color: var(--muted) !important; padding: 9px 13px !important;
+        color: var(--muted) !important; padding: 10px 14px !important;
     }
-    .stExpander details summary:hover { color: var(--ink) !important; }
-    .stExpander details[open] summary  {
-        border-bottom: 1px solid var(--border) !important;
-        color: var(--ink) !important;
+    .stExpander details summary:hover { color: var(--ink) !important; background: var(--raised) !important; }
+    .stExpander details[open] summary { border-bottom: 1px solid var(--border) !important; color: var(--ink) !important; }
+    .stExpander details > div[data-testid="stExpanderDetails"] { padding: 12px 14px !important; }
+
+    /* ── ALERTS / INFO / SUCCESS / WARNING ───────────────────── */
+    [data-testid="stAlert"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border-hi) !important;
+        border-radius: var(--radius) !important;
+        font-size: .73rem !important;
     }
-    .stExpander details > div[data-testid="stExpanderDetails"] {
-        padding: 10px 13px !important;
-    }
+    [data-testid="stAlert"][kind="info"] { border-left: 3px solid var(--teal) !important; }
+    [data-testid="stAlert"][kind="warning"] { border-left: 3px solid var(--amber) !important; }
+    [data-testid="stAlert"][kind="error"] { border-left: 3px solid var(--red) !important; }
+    [data-testid="stAlert"][kind="success"] { border-left: 3px solid var(--green) !important; }
 
     /* ── TABS ────────────────────────────────────────────────── */
     div[data-testid="stTabs"] {
