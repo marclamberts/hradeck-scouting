@@ -1881,11 +1881,12 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-WORKSPACES = ["Recruitment", "Scouting", "Search", "Goalkeepers", "Team", "Model"]
+WORKSPACES = ["Recruitment", "Scouting", "Search", "Anomaly", "Goalkeepers", "Team", "Model"]
 _WORKSPACE_ICONS = {
     "Recruitment": ("🎯", "Rankings & cases"),
     "Scouting":    ("🔍", "Wyscout database"),
     "Search":      ("🔎", "Player profile search"),
+    "Anomaly":     ("⚡", "Metric outlier finder"),
     "Goalkeepers": ("🧤", "GK boards"),
     "Team":        ("🏟", "Squad & Czech market"),
     "Model":       ("🤖", "Smart club model"),
@@ -3141,6 +3142,209 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
             st.dataframe(_shape, width="stretch", hide_index=True)
 
 
+def render_anomaly_workspace(data: pd.DataFrame) -> None:
+    """Surface statistical outlier players — exceptional in specific metrics."""
+    score_cols = [v for v in PIZZA_METRICS.values() if v in data.columns]
+    all_positions = sorted(data["PositionGroup"].dropna().astype(str).unique())
+    all_leagues   = sorted(data["BundleLabel"].dropna().astype(str).unique())
+
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'>"
+            "<div class='sidebar-brand-icon'>⚡</div>"
+            "<div><div class='sidebar-brand-title'>Anomaly Scouting</div>"
+            "<div class='sidebar-brand-meta'>Metric outlier finder</div></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
+        sel_positions = st.multiselect("Positions", all_positions, default=all_positions, key="anom_positions")
+        sel_leagues   = st.multiselect("Leagues",   all_leagues,   default=all_leagues,  key="anom_leagues")
+        min_minutes   = st.slider("Min minutes", 0, 3000, 600, step=100, key="anom_min_min")
+        st.markdown("<div class='sbar-hdr'>Anomaly config</div>", unsafe_allow_html=True)
+        metric_labels = list(PIZZA_METRICS.keys())
+        sel_metrics   = st.multiselect("Metrics to scan", metric_labels, default=metric_labels, key="anom_metrics")
+        z_threshold   = st.slider("Z-score threshold (outlier cutoff)", 1.0, 3.5, 1.8, step=0.1, key="anom_z")
+        top_n         = st.slider("Max results", 10, 200, 60, step=10, key="anom_top_n")
+
+    st.markdown(
+        "<div class='page-header'>"
+        "<div class='page-header-icon'>⚡</div>"
+        "<div><div class='page-header-title'>Anomaly Scouting</div>"
+        "<div class='page-header-sub'>Find players who are exceptional in at least one metric — hidden gems not ranked by composite scores</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if not sel_metrics:
+        st.info("Select at least one metric in the sidebar.")
+        return
+
+    sel_score_cols = [PIZZA_METRICS[m] for m in sel_metrics if PIZZA_METRICS[m] in data.columns]
+    if not sel_score_cols:
+        st.warning("None of the selected metrics exist in this dataset.")
+        return
+
+    # Filter pool
+    pool = data.copy()
+    if sel_positions:
+        pool = pool.loc[pool["PositionGroup"].astype(str).isin(sel_positions)]
+    if sel_leagues:
+        pool = pool.loc[pool["BundleLabel"].astype(str).isin(sel_leagues)]
+    if "MinutesPlayed" in pool.columns:
+        pool = pool.loc[pool["MinutesPlayed"].fillna(0) >= min_minutes]
+
+    if pool.empty:
+        st.warning("No players match the current filters.")
+        return
+
+    # Compute per-position z-scores so we compare within peer group
+    z_frames = []
+    for pos, grp in pool.groupby("PositionGroup"):
+        z_part = grp[["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed"] + sel_score_cols].copy()
+        for col in sel_score_cols:
+            mu  = grp[col].mean()
+            sig = grp[col].std(ddof=0)
+            if sig and sig > 0:
+                z_part[f"_z_{col}"] = (grp[col] - mu) / sig
+            else:
+                z_part[f"_z_{col}"] = 0.0
+        z_frames.append(z_part)
+
+    if not z_frames:
+        st.warning("Not enough data to compute z-scores.")
+        return
+
+    zdf = pd.concat(z_frames, ignore_index=True)
+    z_cols = [f"_z_{c}" for c in sel_score_cols]
+
+    # Peak z-score and which metric produced it
+    zdf["_peak_z"]      = zdf[z_cols].max(axis=1)
+    zdf["_best_z_col"]  = zdf[z_cols].idxmax(axis=1).str.replace("_z_", "", regex=False)
+    label_map = {v: k for k, v in PIZZA_METRICS.items()}
+    zdf["_best_metric"] = zdf["_best_z_col"].map(label_map).fillna(zdf["_best_z_col"])
+
+    # Count how many metrics are above threshold (breadth of anomaly)
+    zdf["_anomaly_breadth"] = (zdf[z_cols] >= z_threshold).sum(axis=1)
+
+    # Keep only genuine outliers: peak z >= threshold
+    anomalies = zdf.loc[zdf["_peak_z"] >= z_threshold].copy()
+    anomalies  = anomalies.sort_values(["_anomaly_breadth", "_peak_z"], ascending=False).head(top_n)
+
+    # Summary KPIs
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    with kpi1:
+        metric_card("Outliers found", f"{len(anomalies)}", f"z ≥ {z_threshold:.1f} on any metric")
+    with kpi2:
+        metric_card("Pool scanned", f"{len(pool):,}", "players after filters")
+    with kpi3:
+        top_breadth = int(anomalies["_anomaly_breadth"].max()) if not anomalies.empty else 0
+        metric_card("Max metric width", f"{top_breadth}", "metrics in top tier")
+    with kpi4:
+        best_metric_freq = anomalies["_best_metric"].value_counts().idxmax() if not anomalies.empty else "—"
+        metric_card("Most common outlier", best_metric_freq, "metric driving anomalies")
+
+    if anomalies.empty:
+        st.info(f"No outliers found at z ≥ {z_threshold:.1f}. Try lowering the threshold or adding more metrics.")
+        return
+
+    st.markdown(
+        "<div class='note-box'>Anomaly score = peak z-score vs position peer group. "
+        "Players ranked by breadth (how many metrics are exceptional) then by peak score. "
+        "A player with a high z-score in one metric is genuinely elite at that skill even if their composite is average.</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Build display columns
+    rename_scores = {c: label_map.get(c, c) for c in sel_score_cols}
+    display_cols_src  = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed", "_best_metric", "_anomaly_breadth", "_peak_z"] + sel_score_cols
+    display_cols_src  = [c for c in display_cols_src if c in anomalies.columns]
+    display           = anomalies[display_cols_src].rename(columns={
+        "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
+        "BundleLabel": "League", "AgeYears": "Age", "MinutesPlayed": "Minutes",
+        "_best_metric": "Best metric", "_anomaly_breadth": "Metrics >z", "_peak_z": "Peak z",
+        **rename_scores,
+    }).round(2)
+
+    col_config: dict = {
+        "Peak z":     st.column_config.NumberColumn("Peak z",     format="%.2f"),
+        "Metrics >z": st.column_config.NumberColumn("Metrics >z", format="%d"),
+        "Age":        st.column_config.NumberColumn("Age",        format="%.1f"),
+        "Minutes":    st.column_config.NumberColumn("Minutes",    format="%d"),
+    }
+    for lbl in label_map.values():
+        if lbl in display.columns:
+            col_config[lbl] = st.column_config.ProgressColumn(lbl, min_value=0, max_value=100, format="%.1f")
+
+    st.dataframe(display, width="stretch", hide_index=True, height=520, column_config=col_config)
+
+    # Anomaly bubble chart: peak z vs composite score
+    if "CompositeRecruitmentScore" in anomalies.columns:
+        bubble_df = anomalies[["PlayerName", "PositionGroup", "_peak_z", "CompositeRecruitmentScore", "_best_metric", "_anomaly_breadth"]].dropna().rename(
+            columns={"PlayerName": "Player", "PositionGroup": "Role", "_peak_z": "Peak Z",
+                     "CompositeRecruitmentScore": "Composite", "_best_metric": "Best Metric",
+                     "_anomaly_breadth": "Breadth"}
+        )
+        bubble_chart = (
+            alt.Chart(bubble_df)
+            .mark_circle(opacity=0.82)
+            .encode(
+                x=alt.X("Composite:Q", title="Composite score (overall quality)",
+                        scale=alt.Scale(domain=[0, 100]),
+                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                y=alt.Y("Peak Z:Q", title="Peak z-score (specialist excellence)",
+                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                size=alt.Size("Breadth:Q", scale=alt.Scale(range=[40, 320]), title="Metric breadth"),
+                color=alt.Color("Role:N", title="Position",
+                                scale=alt.Scale(domain=list(POSITION_COLORS.keys()),
+                                                range=list(POSITION_COLORS.values()))),
+                tooltip=["Player", "Role", alt.Tooltip("Composite:Q", format=".1f"),
+                         alt.Tooltip("Peak Z:Q", format=".2f"), "Best Metric",
+                         alt.Tooltip("Breadth:Q", title="Metrics above z")],
+            )
+            .properties(
+                height=340,
+                title=alt.TitleParams(
+                    "Composite quality vs specialist peak z-score — top-left = hidden gems",
+                    color="#8fa3b1", fontSize=11,
+                ),
+            )
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+            .interactive()
+        )
+        st.altair_chart(bubble_chart, width="stretch")
+
+    # Per-metric breakdown bar
+    metric_counts = (
+        anomalies.groupby("_best_metric")
+        .agg(Count=("PlayerName", "count"), AvgPeakZ=("_peak_z", "mean"))
+        .reset_index()
+        .rename(columns={"_best_metric": "Metric"})
+        .sort_values("Count", ascending=False)
+    )
+    if not metric_counts.empty:
+        mc_chart = (
+            alt.Chart(metric_counts)
+            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+            .encode(
+                y=alt.Y("Metric:N", sort="-x", title=None,
+                        axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
+                x=alt.X("Count:Q", title="Outlier count",
+                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                color=alt.Color("AvgPeakZ:Q",
+                                scale=alt.Scale(domain=[z_threshold, z_threshold + 1.5], range=["#1e3a5f", "#00c7b7"]),
+                                legend=alt.Legend(title="Avg peak z", labelColor="#8fa3b1", titleColor="#8fa3b1")),
+                tooltip=[alt.Tooltip("Metric:N"), alt.Tooltip("Count:Q"), alt.Tooltip("AvgPeakZ:Q", format=".2f", title="Avg peak z")],
+            )
+            .properties(height=max(140, len(metric_counts) * 28),
+                        title=alt.TitleParams("Which metric drives most anomalies", color="#8fa3b1", fontSize=12))
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(mc_chart, width="stretch")
+
+
 def render_team_workspace(data: pd.DataFrame) -> None:
     team_df = add_scouting_fields(data, BALANCED_WEIGHTS)
     czech_df = czech_market(team_df)
@@ -3777,6 +3981,8 @@ if active_workspace != "Recruitment":
         render_scouting_workspace()
     elif active_workspace == "Search":
         render_search_workspace(data)
+    elif active_workspace == "Anomaly":
+        render_anomaly_workspace(data)
     elif active_workspace == "Model":
         render_model_workspace(data, model_metadata)
     elif active_workspace == "Goalkeepers":
