@@ -1881,15 +1881,13 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-WORKSPACES = ["Recruitment", "Scouting", "Search", "Anomaly", "Goalkeepers", "Team", "Model"]
+WORKSPACES = ["Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist"]
 _WORKSPACE_ICONS = {
-    "Recruitment": ("🎯", "Rankings & cases"),
-    "Scouting":    ("🔍", "Wyscout database"),
-    "Search":      ("🔎", "Player profile search"),
-    "Anomaly":     ("⚡", "Metric outlier finder"),
-    "Goalkeepers": ("🧤", "GK boards"),
-    "Team":        ("🏟", "Squad & Czech market"),
-    "Model":       ("🤖", "Smart club model"),
+    "Command":      ("⚡", "Anomaly landscape"),
+    "Deep Scan":    ("🔬", "Multi-method detector"),
+    "Cross-Source": ("🔗", "Wyscout divergence"),
+    "Player Intel": ("🧠", "Player deep-dive"),
+    "Watchlist":    ("📋", "Saved targets"),
 }
 WYSCOUT_DB_DIR = APP_DIR / "data" / "Wyscout DB"
 
@@ -3142,7 +3140,7 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
             st.dataframe(_shape, width="stretch", hide_index=True)
 
 
-def render_anomaly_workspace(data: pd.DataFrame) -> None:
+def render_deep_scan_workspace(data: pd.DataFrame) -> None:
     """Multi-method anomaly detection engine — surface hidden gems and statistical outliers."""
     import seaborn as sns
 
@@ -3575,6 +3573,800 @@ def render_anomaly_workspace(data: pd.DataFrame) -> None:
                 .configure(background="#080c14")
             )
             st.altair_chart(lg_chart, width="stretch")
+
+
+def _anomaly_engine(
+    pool: pd.DataFrame,
+    score_cols: list[str],
+    method: str = "Z-score (per position)",
+    threshold: float = 1.8,
+) -> pd.DataFrame:
+    """
+    Compute per-position anomaly signals for every player in pool.
+    Returns pool enriched with _z_*, _peak_z, _mean_z, _anomaly_breadth,
+    _anomaly_score, _anomaly_type, _best_metric columns.
+    """
+    label_map     = {v: k for k, v in PIZZA_METRICS.items()}
+    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in pool.columns else None
+    base_keep     = [c for c in pool.columns if not c.startswith("_z_")]
+
+    def _score_group(grp: pd.DataFrame) -> pd.DataFrame:
+        out = grp[base_keep].copy()
+        X   = grp[score_cols].values.astype(float)
+        n   = len(grp)
+        if "MAD" in method:
+            med    = np.nanmedian(X, axis=0)
+            mad    = np.nanmedian(np.abs(X - med), axis=0)
+            mad    = np.where(mad == 0, 1e-9, mad)
+            scores = 0.6745 * (X - med) / mad
+        elif "IQR" in method:
+            q1, q3 = np.nanpercentile(X, 25, axis=0), np.nanpercentile(X, 75, axis=0)
+            iqr     = np.where((q3 - q1) == 0, 1e-9, q3 - q1)
+            scores  = (X - (q3 + 1.5 * iqr)) / iqr
+        elif "Mahalanobis" in method and n >= len(score_cols) + 2:
+            mu  = np.nanmean(X, axis=0)
+            sig = np.nanstd(X, axis=0, ddof=0)
+            sig = np.where(sig == 0, 1e-9, sig)
+            scores = (X - mu) / sig
+            try:
+                inv_cov = np.linalg.pinv(np.cov(X.T))
+                diff    = X - mu
+                mahal   = np.sqrt(np.einsum("ij,jk,ik->i", diff, inv_cov, diff))
+                m_mu    = np.nanmean(mahal)
+                m_sig   = np.nanstd(mahal) or 1e-9
+                out["_mahal_z"] = (mahal - m_mu) / m_sig
+            except Exception:
+                pass
+        else:
+            mu  = np.nanmean(X, axis=0)
+            sig = np.nanstd(X, axis=0, ddof=0)
+            sig = np.where(sig == 0, 1e-9, sig)
+            scores = (X - mu) / sig
+        for i, col in enumerate(score_cols):
+            out[f"_z_{col}"] = scores[:, i]
+        return out
+
+    frames = [_score_group(g) for _, g in pool.groupby("PositionGroup")]
+    if not frames:
+        return pd.DataFrame()
+    zdf    = pd.concat(frames, ignore_index=True)
+    z_cols = [f"_z_{c}" for c in score_cols]
+
+    zdf["_peak_z"]          = zdf[z_cols].max(axis=1)
+    zdf["_mean_z"]          = zdf[z_cols].mean(axis=1)
+    zdf["_anomaly_breadth"] = (zdf[z_cols] >= threshold).sum(axis=1)
+    zdf["_best_z_col"]      = zdf[z_cols].idxmax(axis=1).str.replace("_z_", "", regex=False)
+    zdf["_best_metric"]     = zdf["_best_z_col"].map(label_map).fillna(zdf["_best_z_col"])
+
+    # Age efficiency bonus: young players get amplified signal
+    age_bonus = np.zeros(len(zdf))
+    if "AgeYears" in zdf.columns:
+        age_s = pd.to_numeric(zdf["AgeYears"], errors="coerce").fillna(99)
+        age_bonus = np.where(age_s <= 21, 0.25, np.where(age_s <= 23, 0.15, np.where(age_s <= 27, 0.05, 0.0)))
+
+    # Minutes efficiency bonus: high signal with limited sample
+    min_bonus = np.zeros(len(zdf))
+    if "MinutesPlayed" in zdf.columns:
+        mins = pd.to_numeric(zdf["MinutesPlayed"], errors="coerce").fillna(9999)
+        min_bonus = np.where(mins < 900, 0.20, np.where(mins < 1500, 0.10, 0.0))
+
+    # Hidden gem bonus: low composite but high specialist peak
+    gem_bonus = np.zeros(len(zdf))
+    if composite_col and composite_col in zdf.columns:
+        comp = pd.to_numeric(zdf[composite_col], errors="coerce").fillna(50)
+        gem_bonus = np.where(comp <= 30, 0.30, np.where(comp <= 45, 0.15, 0.0))
+
+    if "Mahalanobis" in method and "_mahal_z" in zdf.columns:
+        base_score = (
+            0.50 * zdf["_mahal_z"].clip(lower=0)
+            + 0.30 * zdf["_peak_z"].clip(lower=0)
+            + 0.20 * zdf["_anomaly_breadth"]
+        )
+    else:
+        base_score = (
+            0.45 * zdf["_peak_z"].clip(lower=0)
+            + 0.35 * zdf["_anomaly_breadth"]
+            + 0.20 * zdf["_mean_z"].clip(lower=0)
+        )
+    zdf["_anomaly_score"] = base_score * (1.0 + age_bonus + min_bonus + gem_bonus)
+
+    def _classify(row) -> str:
+        peak    = row["_peak_z"]
+        breadth = row["_anomaly_breadth"]
+        age     = pd.to_numeric(row.get("AgeYears"), errors="coerce") or 99
+        comp    = pd.to_numeric(row.get(composite_col), errors="coerce") if composite_col else 50
+        if pd.isna(comp):
+            comp = 50
+        if peak >= threshold and comp <= 40:
+            return "Hidden Gem"
+        if peak >= threshold * 1.5 and breadth <= 2:
+            return "Specialist Elite"
+        if breadth >= 4:
+            return "Multi-dimensional"
+        if peak >= threshold and age <= 23:
+            return "Age-adjusted Gem"
+        if breadth >= 2:
+            return "Consistent Overperformer"
+        return "Specialist Elite"
+
+    zdf["_anomaly_type"] = zdf.apply(_classify, axis=1)
+    return zdf
+
+
+_ANOMALY_TYPE_COLORS = {
+    "Hidden Gem":              "#00c7b7",
+    "Specialist Elite":        "#e76f51",
+    "Multi-dimensional":       "#f4a261",
+    "Age-adjusted Gem":        "#2a9d8f",
+    "Consistent Overperformer":"#457b9d",
+}
+
+
+@st.cache_data(show_spinner=False, ttl=120)
+def _run_anomaly_engine_cached(
+    data_hash: int,  # unused, forces cache key
+    pool_json: str,
+    score_cols_key: str,
+    method: str,
+    threshold: float,
+) -> pd.DataFrame:
+    pool       = pd.read_json(pool_json)
+    score_cols = score_cols_key.split("|")
+    return _anomaly_engine(pool, score_cols, method, threshold)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMAND workspace
+# ─────────────────────────────────────────────────────────────────────────────
+def render_command_workspace(data: pd.DataFrame) -> None:
+    """Anomaly landscape overview — quick intelligence across all positions & types."""
+    import seaborn as sns
+
+    score_cols = [v for v in PIZZA_METRICS.values() if v in data.columns]
+    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in data.columns else None
+
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>⚡</div>"
+            "<div><div class='sidebar-brand-title'>Command Centre</div>"
+            "<div class='sidebar-brand-meta'>Anomaly landscape overview</div></div></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='sbar-hdr'>Scope</div>", unsafe_allow_html=True)
+        min_minutes = st.slider("Min minutes", 0, 2000, 500, step=100, key="cmd_min_min")
+        age_bands   = {"All ages": None, "U23": 23, "U27": 27}
+        max_age     = age_bands[st.selectbox("Age band", list(age_bands.keys()), key="cmd_age")]
+        threshold   = st.slider("Anomaly threshold (z)", 1.0, 3.0, 1.8, step=0.1, key="cmd_thresh")
+
+    st.markdown(
+        "<div class='page-header'><div class='page-header-icon'>⚡</div>"
+        "<div><div class='page-header-title'>Anomaly Command Centre</div>"
+        "<div class='page-header-sub'>Live anomaly landscape — where are the outliers, what type, which leagues</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    pool = data.copy()
+    if "MinutesPlayed" in pool.columns:
+        pool = pool.loc[pool["MinutesPlayed"].fillna(0) >= min_minutes]
+    if max_age and "AgeYears" in pool.columns:
+        pool = pool.loc[pool["AgeYears"].fillna(99) <= max_age]
+
+    if pool.empty or not score_cols:
+        st.warning("Not enough data.")
+        return
+
+    zdf = _anomaly_engine(pool, score_cols, "Z-score (per position)", threshold)
+    anomalies = zdf.loc[zdf["_peak_z"] >= threshold].copy()
+
+    # ── KPIs ──────────────────────────────────────────────────────────────────
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        metric_card("Total anomalies", str(len(anomalies)), f"z ≥ {threshold:.1f}")
+    with c2:
+        n_gems = (anomalies["_anomaly_type"] == "Hidden Gem").sum()
+        metric_card("Hidden Gems", str(n_gems), "low composite, high signal")
+    with c3:
+        n_spec = (anomalies["_anomaly_type"] == "Specialist Elite").sum()
+        metric_card("Specialist Elite", str(n_spec), "extreme in 1–2 metrics")
+    with c4:
+        n_multi = (anomalies["_anomaly_type"] == "Multi-dimensional").sum()
+        metric_card("Multi-dimensional", str(n_multi), "4+ metrics above threshold")
+    with c5:
+        n_age = (anomalies["_anomaly_type"] == "Age-adjusted Gem").sum()
+        metric_card("Age-adjusted Gems", str(n_age), "≤23 with elite signal")
+
+    st.markdown("---")
+
+    # ── Position × anomaly type heatmap ───────────────────────────────────────
+    col_l, col_r = st.columns([3, 2])
+
+    with col_l:
+        pivot = (
+            anomalies.groupby(["PositionGroup", "_anomaly_type"])
+            .size()
+            .reset_index(name="Count")
+            .pivot(index="PositionGroup", columns="_anomaly_type", values="Count")
+            .fillna(0)
+        )
+        if not pivot.empty:
+            fig_piv, ax_piv = plt.subplots(figsize=(9, max(3, len(pivot) * 0.55)))
+            fig_piv.patch.set_facecolor("#080c14")
+            ax_piv.set_facecolor("#0f1623")
+            sns.heatmap(
+                pivot.astype(int), ax=ax_piv,
+                cmap="YlOrRd", linewidths=0.5, linecolor="#0f1623",
+                annot=True, fmt="d",
+                cbar_kws={"shrink": 0.6, "label": "count"},
+            )
+            ax_piv.tick_params(colors="#8fa3b1", labelsize=9)
+            ax_piv.set_xlabel("", color="#8fa3b1")
+            ax_piv.set_ylabel("", color="#8fa3b1")
+            ax_piv.set_title("Anomaly count — position × type", color="#8fa3b1", fontsize=11, pad=10)
+            plt.xticks(rotation=20, ha="right", color="#8fa3b1", fontsize=9)
+            plt.yticks(color="#8fa3b1", fontsize=9)
+            plt.tight_layout()
+            st.pyplot(fig_piv, clear_figure=True)
+
+    with col_r:
+        # Top leagues by anomaly density
+        if "BundleLabel" in anomalies.columns:
+            lg_counts = (
+                anomalies.groupby("BundleLabel")
+                .agg(n=("PlayerName", "count"), avg_score=("_anomaly_score", "mean"))
+                .reset_index().rename(columns={"BundleLabel": "League"})
+                .sort_values("n", ascending=False).head(12)
+            )
+            lg_bar = (
+                alt.Chart(lg_counts)
+                .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
+                .encode(
+                    y=alt.Y("League:N", sort="-x", title=None,
+                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=10)),
+                    x=alt.X("n:Q", title="Anomalies",
+                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                    color=alt.Color("avg_score:Q",
+                                    scale=alt.Scale(range=["#1e3a5f", "#e76f51"]),
+                                    legend=None),
+                    tooltip=["League:N", "n:Q", alt.Tooltip("avg_score:Q", format=".2f", title="Avg score")],
+                )
+                .properties(height=320,
+                            title=alt.TitleParams("Top leagues by anomaly count", color="#8fa3b1", fontSize=11))
+                .configure_view(fill="#0f1623", stroke=None)
+                .configure(background="#080c14")
+            )
+            st.altair_chart(lg_bar, width="stretch")
+
+    # ── Top 3 anomalies per type ───────────────────────────────────────────────
+    st.markdown("<div class='sbar-hdr' style='margin:1.2rem 0 .6rem'>Top picks by anomaly type</div>", unsafe_allow_html=True)
+    type_order = list(_ANOMALY_TYPE_COLORS.keys())
+    type_tabs  = st.tabs(type_order)
+
+    for tab, atype in zip(type_tabs, type_order):
+        with tab:
+            subset = anomalies.loc[anomalies["_anomaly_type"] == atype].sort_values("_anomaly_score", ascending=False).head(10)
+            if subset.empty:
+                st.caption("No players of this type in current filters.")
+                continue
+            show_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed", "_best_metric", "_anomaly_score", "_peak_z", "_anomaly_breadth"] if c in subset.columns]
+            disp = subset[show_cols].rename(columns={
+                "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
+                "BundleLabel": "League", "AgeYears": "Age", "MinutesPlayed": "Minutes",
+                "_best_metric": "Best Metric", "_anomaly_score": "Score",
+                "_peak_z": "Peak Z", "_anomaly_breadth": "Breadth",
+            }).round(2)
+            st.dataframe(disp, hide_index=True, height=min(400, 36 + 35 * len(disp)),
+                         column_config={
+                             "Score":   st.column_config.ProgressColumn("Score", min_value=0, max_value=15, format="%.2f"),
+                             "Peak Z":  st.column_config.NumberColumn("Peak Z", format="%.2f"),
+                             "Age":     st.column_config.NumberColumn("Age", format="%.1f"),
+                             "Minutes": st.column_config.NumberColumn("Minutes", format="%d"),
+                         })
+
+    # ── Score distribution by position ────────────────────────────────────────
+    if not anomalies.empty and "_anomaly_score" in anomalies.columns:
+        st.markdown("<div class='sbar-hdr' style='margin:1.2rem 0 .6rem'>Anomaly score distribution by position</div>", unsafe_allow_html=True)
+        dist_df = anomalies[["PositionGroup", "_anomaly_score"]].rename(
+            columns={"PositionGroup": "Position", "_anomaly_score": "Score"}
+        )
+        dist_chart = (
+            alt.Chart(dist_df)
+            .mark_boxplot(size=28, outliers=True)
+            .encode(
+                x=alt.X("Position:N", axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1")),
+                y=alt.Y("Score:Q", title="Anomaly score",
+                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                color=alt.Color("Position:N",
+                                scale=alt.Scale(domain=list(POSITION_COLORS.keys()),
+                                                range=list(POSITION_COLORS.values())),
+                                legend=None),
+            )
+            .properties(height=260)
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(dist_chart, width="stretch")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CROSS-SOURCE workspace
+# ─────────────────────────────────────────────────────────────────────────────
+def render_cross_source_workspace(data: pd.DataFrame) -> None:
+    """Wyscout vs FCHK divergence — find players the model misses or misprices."""
+    link_df  = _load_link_db()
+    ws_index = _load_wyscout_index()
+    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in data.columns else None
+    score_cols    = [v for v in PIZZA_METRICS.values() if v in data.columns]
+
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🔗</div>"
+            "<div><div class='sidebar-brand-title'>Cross-Source</div>"
+            "<div class='sidebar-brand-meta'>Wyscout ↔ FCHK divergence</div></div></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='sbar-hdr'>View</div>", unsafe_allow_html=True)
+        view = st.radio(
+            "Mode",
+            ["Model misses — matched but low FCHK", "Dark horses — Wyscout only", "Confidence audit"],
+            key="cs_view",
+        )
+        st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
+        conf_filter = st.multiselect("Match confidence", ["HIGH", "MEDIUM", "LOW"], default=["HIGH", "MEDIUM"], key="cs_conf")
+        min_age = st.slider("Min age", 15, 35, 17, key="cs_min_age")
+        max_age = st.slider("Max age", 15, 40, 28, key="cs_max_age")
+
+    st.markdown(
+        "<div class='page-header'><div class='page-header-icon'>🔗</div>"
+        "<div><div class='page-header-title'>Cross-Source Intelligence</div>"
+        "<div class='page-header-sub'>Wyscout database ↔ FCHK model — find divergences, dark horses, and mis-priced players</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    if link_df.empty:
+        st.warning("IMPECT_Wyscout_Link.csv not found. Run build_link_db.py first.")
+        return
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("Wyscout players", f"{len(ws_index):,}", "across 165 files")
+    with c2:
+        metric_card("Cross-matched", f"{len(link_df):,}", "FCHK ↔ Wyscout links")
+    with c3:
+        high_conf = (link_df["MatchConfidence"] == "HIGH").sum() if "MatchConfidence" in link_df.columns else 0
+        metric_card("High confidence", str(high_conf), "reliable matches")
+
+    if view == "Model misses — matched but low FCHK":
+        st.markdown("### Players in both databases where FCHK composite score is surprisingly low")
+        st.markdown(
+            "<div class='note-box'>These players have a confirmed Wyscout match (the model knows them) "
+            "but their FCHK composite score sits in the bottom half. "
+            "If they are playing in a strong Wyscout league, the model may be under-rating them.</div>",
+            unsafe_allow_html=True,
+        )
+
+        # Join link DB with FCHK data
+        if "IMPECT_Name" not in link_df.columns:
+            st.error("Link DB missing IMPECT_Name column.")
+            return
+
+        fchk_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed"] + score_cols
+        fchk_cols = [c for c in fchk_cols if c in data.columns]
+        fchk_slim = data[fchk_cols].copy()
+        fchk_slim["_norm"] = fchk_slim["PlayerName"].astype(str).str.lower().str.strip()
+
+        if "MatchConfidence" in link_df.columns and conf_filter:
+            link_sub = link_df.loc[link_df["MatchConfidence"].isin(conf_filter)].copy()
+        else:
+            link_sub = link_df.copy()
+
+        link_sub["_norm"] = link_sub["IMPECT_Name"].astype(str).str.lower().str.strip()
+        merged = link_sub.merge(fchk_slim, on="_norm", how="inner")
+
+        if "Wyscout_Age" in merged.columns:
+            merged = merged.loc[merged["Wyscout_Age"].fillna(99).between(min_age, max_age)]
+
+        if merged.empty:
+            st.info("No matched players found with current filters.")
+            return
+
+        if composite_col and composite_col in merged.columns:
+            # percentile rank within each position group
+            merged["_composite_pct"] = merged.groupby("PositionGroup")[composite_col].rank(pct=True) * 100
+            merged["_is_miss"] = merged["_composite_pct"] < 40
+            misses = merged.loc[merged["_is_miss"]].sort_values("_composite_pct")
+        else:
+            misses = merged.copy()
+
+        show_cols = [c for c in [
+            "Wyscout_Name", "Wyscout_Team", "Wyscout_File", "Wyscout_Age",
+            "MatchConfidence", "PositionGroup", composite_col, "_composite_pct",
+            "BundleLabel", "MinutesPlayed",
+        ] if c in misses.columns]
+        disp = misses[show_cols].rename(columns={
+            "Wyscout_Name": "Player (Wyscout)", "Wyscout_Team": "Wyscout Team",
+            "Wyscout_File": "Wyscout File", "Wyscout_Age": "Age",
+            "MatchConfidence": "Confidence", "PositionGroup": "Role",
+            composite_col: "FCHK Composite", "_composite_pct": "Composite %ile",
+            "BundleLabel": "FCHK League", "MinutesPlayed": "Minutes",
+        }).round(1)
+        st.dataframe(disp, hide_index=True, height=500)
+        st.download_button("Download CSV", disp.to_csv(index=False).encode(), "model_misses.csv", "text/csv", key="cs_dl1")
+
+    elif view == "Dark horses — Wyscout only":
+        st.markdown("### Players in Wyscout with no FCHK model entry")
+        st.markdown(
+            "<div class='note-box'>These players exist in the Wyscout database but have no match "
+            "in the FCHK model. Filter by country/position to find uncovered talent "
+            "the model has never evaluated.</div>",
+            unsafe_allow_html=True,
+        )
+
+        if ws_index.empty:
+            st.warning("Wyscout_Player_Index.csv not found. Run build_wyscout_index.py first.")
+            return
+
+        # Players in Wyscout index not in link DB
+        matched_ws_players = set()
+        if "Wyscout_Name" in link_df.columns:
+            matched_ws_players = set(link_df["Wyscout_Name"].astype(str).str.lower().str.strip())
+        ws_norm = ws_index.copy()
+        ws_norm["_norm"] = ws_norm["Player"].astype(str).str.lower().str.strip()
+        unmatched = ws_norm.loc[~ws_norm["_norm"].isin(matched_ws_players)].drop(columns=["_norm"])
+
+        # Filters
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            countries = sorted(unmatched["File"].str.replace(".xlsx", "", regex=False).str.split().str[0].dropna().unique())
+            sel_country = st.multiselect("Country/File", countries[:30], key="cs_country")
+        with col_f2:
+            ws_positions = sorted(unmatched["Position"].dropna().unique())
+            sel_pos = st.multiselect("Position", ws_positions, key="cs_pos")
+        with col_f3:
+            pass
+
+        filtered_ws = unmatched.copy()
+        if sel_country:
+            filtered_ws = filtered_ws.loc[filtered_ws["File"].str.split().str[0].isin(sel_country)]
+        if sel_pos:
+            filtered_ws = filtered_ws.loc[filtered_ws["Position"].isin(sel_pos)]
+        if "Age" in filtered_ws.columns:
+            filtered_ws = filtered_ws.loc[filtered_ws["Age"].fillna(99).between(min_age, max_age)]
+
+        metric_card("Uncovered players", f"{len(filtered_ws):,}", "not in FCHK model")
+        st.dataframe(filtered_ws.head(300), hide_index=True, height=520)
+        st.download_button("Download CSV", filtered_ws.to_csv(index=False).encode(), "dark_horses.csv", "text/csv", key="cs_dl2")
+
+    else:  # Confidence audit
+        st.markdown("### Match confidence distribution — how reliable is the cross-database linking?")
+        if "MatchConfidence" not in link_df.columns:
+            st.error("No MatchConfidence column in link DB.")
+            return
+
+        conf_counts = link_df["MatchConfidence"].value_counts().reset_index()
+        conf_counts.columns = ["Confidence", "Count"]
+        c_chart = (
+            alt.Chart(conf_counts)
+            .mark_bar(cornerRadiusTopRight=4)
+            .encode(
+                x=alt.X("Confidence:N", sort=["HIGH", "MEDIUM", "LOW", "NONE"],
+                        axis=alt.Axis(labelColor="#8fa3b1")),
+                y=alt.Y("Count:Q", axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
+                color=alt.Color("Confidence:N",
+                                scale=alt.Scale(domain=["HIGH", "MEDIUM", "LOW", "NONE"],
+                                                range=["#2a9d8f", "#f4a261", "#e76f51", "#637d96"]),
+                                legend=None),
+                tooltip=["Confidence:N", "Count:Q"],
+            )
+            .properties(height=260)
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(c_chart, width="stretch")
+
+        # Show by competition
+        if "IMPECT_Competition" in link_df.columns:
+            comp_conf = (
+                link_df.groupby(["IMPECT_Competition", "MatchConfidence"])
+                .size().reset_index(name="Count")
+                .pivot(index="IMPECT_Competition", columns="MatchConfidence", values="Count")
+                .fillna(0).astype(int)
+            )
+            comp_conf["Total"] = comp_conf.sum(axis=1)
+            if "HIGH" in comp_conf.columns:
+                comp_conf["High %"] = (comp_conf["HIGH"] / comp_conf["Total"] * 100).round(1)
+            st.dataframe(comp_conf.sort_values("Total", ascending=False), height=400)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLAYER INTEL workspace
+# ─────────────────────────────────────────────────────────────────────────────
+def render_player_intel_workspace(data: pd.DataFrame) -> None:
+    """Deep-dive on a single player's anomaly profile, pizza, Wyscout bars, and peers."""
+    import seaborn as sns
+
+    score_cols    = [v for v in PIZZA_METRICS.values() if v in data.columns]
+    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in data.columns else None
+    link_df       = _load_link_db()
+
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🧠</div>"
+            "<div><div class='sidebar-brand-title'>Player Intel</div>"
+            "<div class='sidebar-brand-meta'>Single-player anomaly deep-dive</div></div></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='sbar-hdr'>Select player</div>", unsafe_allow_html=True)
+        player_names = sorted(data["PlayerName"].dropna().astype(str).unique())
+        sel_name = st.selectbox("Player", player_names, key="pi_player")
+        threshold = st.slider("Anomaly threshold (z)", 1.0, 3.0, 1.8, step=0.1, key="pi_thresh")
+
+    st.markdown(
+        "<div class='page-header'><div class='page-header-icon'>🧠</div>"
+        "<div><div class='page-header-title'>Player Intelligence</div>"
+        "<div class='page-header-sub'>Deep anomaly profile — signals, peer comparisons, cross-source</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    player_rows = data.loc[data["PlayerName"].astype(str) == sel_name]
+    if player_rows.empty:
+        st.info("Select a player above.")
+        return
+    player_row = player_rows.iloc[0]
+    pos_group  = str(player_row.get("PositionGroup", ""))
+    pos_pool   = data.loc[data["PositionGroup"].astype(str) == pos_group].copy()
+
+    # Run engine on position pool
+    zdf = _anomaly_engine(pos_pool, score_cols, "Z-score (per position)", threshold)
+    player_anom = zdf.loc[zdf["PlayerName"].astype(str) == sel_name]
+    if player_anom.empty:
+        st.warning("Could not compute anomaly scores for this player.")
+        return
+    p_row = player_anom.iloc[0]
+
+    # ── Header KPIs ───────────────────────────────────────────────────────────
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        metric_card("Anomaly score", f"{p_row['_anomaly_score']:.2f}", "composite signal")
+    with k2:
+        metric_card("Peak z-score", f"{p_row['_peak_z']:.2f}", f"best: {p_row['_best_metric']}")
+    with k3:
+        metric_card("Type", p_row["_anomaly_type"], "anomaly classification")
+    with k4:
+        metric_card("Metric breadth", str(int(p_row["_anomaly_breadth"])), f"metrics above z {threshold:.1f}")
+
+    st.markdown("---")
+
+    tab_profile, tab_fingerprint, tab_peers, tab_cross = st.tabs(
+        ["Score profile", "Anomaly fingerprint", "Peer comparison", "Cross-source"]
+    )
+
+    # Score profile: pizza chart
+    with tab_profile:
+        try:
+            fig_pizza = render_player_pizza(pos_pool, player_row)
+            st.pyplot(fig_pizza, clear_figure=True)
+        except Exception as e:
+            st.caption(f"Pizza chart unavailable: {e}")
+
+        # Metric z-score bar chart
+        z_cols = [f"_z_{c}" for c in score_cols]
+        z_vals = [float(p_row.get(zc, 0)) for zc in z_cols]
+        label_map = {v: k for k, v in PIZZA_METRICS.items()}
+        z_labels  = [label_map.get(c, c) for c in score_cols]
+        z_bar_df  = pd.DataFrame({"Metric": z_labels, "Z-score": z_vals}).sort_values("Z-score", ascending=False)
+        z_bar_df["Color"] = z_bar_df["Z-score"].apply(
+            lambda v: "#00c7b7" if v >= threshold else ("#f4a261" if v >= 0 else "#637d96")
+        )
+        z_bar = (
+            alt.Chart(z_bar_df)
+            .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
+            .encode(
+                y=alt.Y("Metric:N", sort="-x", title=None,
+                        axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
+                x=alt.X("Z-score:Q", title="Z-score vs position peers",
+                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
+                color=alt.Color("Color:N", scale=None, legend=None),
+                tooltip=["Metric:N", alt.Tooltip("Z-score:Q", format=".2f")],
+            )
+            .properties(height=max(200, len(z_bar_df) * 26),
+                        title=alt.TitleParams(f"{sel_name} — z-scores vs {pos_group} peers", color="#8fa3b1", fontSize=11))
+            .configure_view(fill="#0f1623", stroke=None)
+            .configure(background="#080c14")
+        )
+        st.altair_chart(z_bar, width="stretch")
+
+    # Anomaly fingerprint: player row vs top 15 anomalies in position
+    with tab_fingerprint:
+        top_anom = zdf.loc[zdf["_peak_z"] >= threshold].sort_values("_anomaly_score", ascending=False).head(14)
+        highlight = zdf.loc[zdf["PlayerName"].astype(str) == sel_name]
+        combined  = pd.concat([highlight, top_anom]).drop_duplicates(subset=["PlayerName"]).head(15)
+        z_cols    = [f"_z_{c}" for c in score_cols]
+        hm_labels = combined["PlayerName"].fillna("?").astype(str).tolist()
+        hm_matrix = combined[z_cols].values.astype(float)
+        metric_ticks = [label_map.get(c.replace("_z_", ""), c.replace("_z_", "")) for c in z_cols]
+
+        fig_f, ax_f = plt.subplots(figsize=(max(8, len(z_cols) * 0.9), max(4, len(combined) * 0.42)))
+        fig_f.patch.set_facecolor("#080c14")
+        ax_f.set_facecolor("#0f1623")
+        sns.heatmap(
+            hm_matrix, ax=ax_f, cmap="RdYlGn", center=0, vmin=-2, vmax=4,
+            linewidths=0.4, linecolor="#0f1623",
+            xticklabels=metric_ticks, yticklabels=hm_labels,
+            annot=True, fmt=".1f",
+            cbar_kws={"label": "z-score", "shrink": 0.6},
+        )
+        ax_f.tick_params(colors="#8fa3b1", labelsize=9)
+        ax_f.set_title(f"Anomaly fingerprint — {sel_name} vs top {pos_group} outliers",
+                       color="#8fa3b1", fontsize=11, pad=10)
+        # Highlight selected player row
+        idx = hm_labels.index(sel_name) if sel_name in hm_labels else -1
+        if idx >= 0:
+            for x_edge in [0, len(z_cols)]:
+                ax_f.axhline(idx,     color="#00c7b7", linewidth=1.8, xmin=0, xmax=1)
+                ax_f.axhline(idx + 1, color="#00c7b7", linewidth=1.8, xmin=0, xmax=1)
+        plt.xticks(rotation=30, ha="right", color="#8fa3b1")
+        plt.yticks(color="#8fa3b1", fontsize=8)
+        plt.tight_layout()
+        st.pyplot(fig_f, clear_figure=True)
+
+    # Peer comparison: similar anomaly profiles
+    with tab_peers:
+        peers = zdf.loc[zdf["PlayerName"].astype(str) != sel_name].copy()
+        if not peers.empty and score_cols:
+            p_vec   = np.array([float(p_row.get(f"_z_{c}", 0)) for c in score_cols])
+            peer_mat = np.array([[float(r.get(f"_z_{c}", 0)) for c in score_cols] for _, r in peers.iterrows()])
+            norms = np.linalg.norm(peer_mat, axis=1, keepdims=True)
+            norms = np.where(norms == 0, 1e-9, norms)
+            p_norm = np.linalg.norm(p_vec) or 1e-9
+            cosims = (peer_mat @ p_vec) / (norms.ravel() * p_norm)
+            peers  = peers.copy()
+            peers["_similarity"] = cosims
+            top_peers = peers.sort_values("_similarity", ascending=False).head(10)
+            peer_disp_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel",
+                                           "AgeYears", "_anomaly_type", "_anomaly_score", "_similarity"] if c in top_peers.columns]
+            peer_disp = top_peers[peer_disp_cols].rename(columns={
+                "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
+                "BundleLabel": "League", "AgeYears": "Age",
+                "_anomaly_type": "Type", "_anomaly_score": "Score", "_similarity": "Similarity",
+            }).round(3)
+            st.caption(f"10 most similar anomaly profiles to {sel_name} in {pos_group}")
+            st.dataframe(peer_disp, hide_index=True, height=400)
+
+    # Cross-source: is this player in Wyscout?
+    with tab_cross:
+        if link_df.empty:
+            st.info("No cross-source link DB available.")
+        else:
+            norm_name = sel_name.lower().strip()
+            match = link_df.loc[link_df.get("IMPECT_Name", pd.Series(dtype=str)).astype(str).str.lower().str.strip() == norm_name]
+            if match.empty:
+                # Try Wyscout name
+                match = link_df.loc[link_df.get("Wyscout_Name", pd.Series(dtype=str)).astype(str).str.lower().str.strip().str.contains(norm_name.split()[-1] if norm_name else "", na=False)]
+
+            if match.empty:
+                st.info(f"{sel_name} has no confirmed Wyscout match in the link database.")
+                ws_index = _load_wyscout_index()
+                if not ws_index.empty:
+                    last_name = sel_name.split()[-1] if sel_name else ""
+                    fuzzy = ws_index.loc[ws_index["Player"].astype(str).str.contains(last_name, case=False, na=False)]
+                    if not fuzzy.empty:
+                        st.caption("Possible Wyscout candidates (name match only):")
+                        st.dataframe(fuzzy.head(10), hide_index=True)
+            else:
+                st.success(f"Found {len(match)} Wyscout link(s) for {sel_name}")
+                st.dataframe(match.T, use_container_width=True)
+
+                # Try to load actual Wyscout file for bars
+                ws_file_col = "Wyscout_File"
+                ws_pos_col  = "Wyscout_Position"
+                if ws_file_col in match.columns and ws_pos_col in match.columns:
+                    ws_file = str(match.iloc[0][ws_file_col])
+                    ws_pos  = str(match.iloc[0][ws_pos_col]).split(",")[0].strip()
+                    ws_path = WYSCOUT_DB_DIR / ws_file
+                    if ws_path.exists():
+                        with st.spinner("Loading Wyscout file…"):
+                            ws_df = _load_wyscout_file(ws_path)
+                        if not ws_df.empty:
+                            ws_name_col = "Wyscout_Name"
+                            ws_player_name = str(match.iloc[0].get(ws_name_col, ""))
+                            ws_row_match = ws_df.loc[ws_df["Player"].astype(str).str.strip() == ws_player_name.strip()]
+                            if ws_row_match.empty:
+                                # Try partial
+                                last = ws_player_name.split()[-1] if ws_player_name else ""
+                                ws_row_match = ws_df.loc[ws_df["Player"].astype(str).str.contains(last, case=False, na=False)]
+                            if not ws_row_match.empty:
+                                ws_row = ws_row_match.iloc[0]
+                                pos_map_rev = {}
+                                for pg, codes in WYSCOUT_POS_MAP.items():
+                                    for c in codes:
+                                        pos_map_rev[c] = pg
+                                mapped_pos = pos_map_rev.get(ws_pos, pos_group)
+                                ws_pool = ws_df.copy()
+                                fig_bars = _render_wyscout_bars(ws_row, ws_pool, mapped_pos, ws_player_name, str(match.iloc[0].get("Wyscout_Team", "")), ws_file)
+                                if fig_bars:
+                                    st.pyplot(fig_bars, clear_figure=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WATCHLIST workspace
+# ─────────────────────────────────────────────────────────────────────────────
+def render_watchlist_workspace(data: pd.DataFrame) -> None:
+    """Saved anomaly targets with priority flags, notes, and quick stats."""
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>📋</div>"
+            "<div><div class='sidebar-brand-title'>Watchlist</div>"
+            "<div class='sidebar-brand-meta'>Saved anomaly targets</div></div></div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        "<div class='page-header'><div class='page-header-icon'>📋</div>"
+        "<div><div class='page-header-title'>Anomaly Watchlist</div>"
+        "<div class='page-header-sub'>Saved targets from your anomaly scouting sessions</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    shortlist = st.session_state.get("shortlist_data", {})
+    if not shortlist:
+        st.info("Your watchlist is empty. Add players from Deep Scan or Player Intel.")
+        return
+
+    sl_rows = [
+        {"Player": name, "Priority": info.get("priority", "Watch"), "Notes": info.get("notes", ""), "Added": info.get("added", "")}
+        for name, info in shortlist.items()
+    ]
+    sl_df = pd.DataFrame(sl_rows)
+
+    # Enrich with FCHK scores
+    score_cols = [v for v in PIZZA_METRICS.values() if v in data.columns]
+    if score_cols and "PlayerName" in data.columns:
+        enriched = sl_df.merge(
+            data[["PlayerName"] + score_cols + ["PositionGroup", "BundleLabel", "AgeYears"]].rename(columns={"PlayerName": "Player"}),
+            on="Player", how="left",
+        )
+    else:
+        enriched = sl_df
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("On watchlist", str(len(enriched)), "saved players")
+    with c2:
+        prios = enriched["Priority"].value_counts().to_dict() if "Priority" in enriched.columns else {}
+        metric_card("Must Scout", str(prios.get("Must scout", 0)), "top priority")
+    with c3:
+        metric_card("Priority", str(prios.get("Priority", 0)), "second tier")
+
+    priority_order = ["Must scout", "Priority", "Shortlist", "Depth", "Watch"]
+    col_config = {}
+    for m in score_cols:
+        lbl = {v: k for k, v in PIZZA_METRICS.items()}.get(m, m)
+        if lbl in enriched.columns:
+            col_config[lbl] = st.column_config.ProgressColumn(lbl, min_value=0, max_value=100, format="%.0f")
+
+    disp_cols = [c for c in ["Player", "Priority", "PositionGroup", "BundleLabel", "AgeYears", "Notes", "Added"] if c in enriched.columns]
+    st.dataframe(enriched[disp_cols].sort_values("Priority", key=lambda s: s.map({p: i for i, p in enumerate(priority_order)}).fillna(99)), hide_index=True, height=500)
+
+    # Quick add
+    st.markdown("---")
+    ca, cb, cc = st.columns([3, 2, 1])
+    with ca:
+        new_name = st.text_input("Add player to watchlist", key="wl_add_name")
+    with cb:
+        new_prio = st.selectbox("Priority", priority_order, key="wl_add_prio")
+    with cc:
+        st.write("")
+        st.write("")
+        if st.button("Add", key="wl_add_btn") and new_name:
+            add_to_shortlist(new_name, new_prio)
+            st.rerun()
+
+    if st.button("Clear watchlist", key="wl_clear", type="secondary"):
+        clear_shortlist()
+        st.rerun()
+
+    csv_bytes = enriched.to_csv(index=False).encode()
+    st.download_button("Download watchlist CSV", csv_bytes, "watchlist.csv", "text/csv", key="wl_dl")
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
@@ -4196,35 +4988,40 @@ if "shortlist_data" not in st.session_state:
     st.session_state["shortlist_players"] = list(st.session_state["shortlist_data"].keys())
 
 if "active_workspace" not in st.session_state:
-    st.session_state["active_workspace"] = "Recruitment"
+    st.session_state["active_workspace"] = "Command"
 
 render_workspace_nav("main")
 
-active_workspace = st.session_state.get("active_workspace", "Recruitment")
+active_workspace = st.session_state.get("active_workspace", "Command")
 data = load_default_data()
 model_metadata = load_model_metadata()
+
+if active_workspace == "Command":
+    render_command_workspace(data)
+    st.stop()
+elif active_workspace == "Deep Scan":
+    render_deep_scan_workspace(data)
+    st.stop()
+elif active_workspace == "Cross-Source":
+    render_cross_source_workspace(data)
+    st.stop()
+elif active_workspace == "Player Intel":
+    render_player_intel_workspace(data)
+    st.stop()
+elif active_workspace == "Watchlist":
+    render_watchlist_workspace(data)
+    st.stop()
+
+# Legacy routing kept for any deep-linked pages
 _rec_file = _model_file("recruitment")
 _data_updated = "unknown"
 if _rec_file.exists():
     from datetime import datetime as _dt
     _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
-if active_workspace != "Recruitment":
-    if active_workspace == "Scouting":
-        render_scouting_workspace()
-    elif active_workspace == "Search":
-        render_search_workspace(data)
-    elif active_workspace == "Anomaly":
-        render_anomaly_workspace(data)
-    elif active_workspace == "Model":
-        render_model_workspace(data, model_metadata)
-    elif active_workspace == "Goalkeepers":
-        render_goalkeepers_workspace(data)
-    elif active_workspace == "Team":
-        render_team_workspace(data)
-    else:
-        st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="section-card">'
+if active_workspace not in ("Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist"):
+    st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="section-card">'
             f'<div class="metric-label">Coming next</div>'
             f'<div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>'
             f'<div class="metric-caption">This workspace is being built. Use the navigation above to switch between workspaces.</div>'
