@@ -3291,8 +3291,13 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
     def _classify(row) -> str:
         peak    = row["_peak_z"]
         breadth = row["_anomaly_breadth"]
-        age     = row.get("AgeYears", 99) or 99
-        comp    = (row.get(composite_col, 50) if composite_col else 50) or 50
+        age_raw = pd.to_numeric(row.get("AgeYears"), errors="coerce")
+        age     = float(age_raw) if pd.notna(age_raw) else 99.0
+        if composite_col and composite_col in row.index:
+            comp_raw = pd.to_numeric(row[composite_col], errors="coerce")
+            comp = float(comp_raw) if pd.notna(comp_raw) else 50.0
+        else:
+            comp = 50.0
         if peak >= threshold and comp <= 40:
             return "Hidden Gem"
         if peak >= threshold * 1.5 and breadth <= 2:
@@ -3673,10 +3678,13 @@ def _anomaly_engine(
     def _classify(row) -> str:
         peak    = row["_peak_z"]
         breadth = row["_anomaly_breadth"]
-        age     = pd.to_numeric(row.get("AgeYears"), errors="coerce") or 99
-        comp    = pd.to_numeric(row.get(composite_col), errors="coerce") if composite_col else 50
-        if pd.isna(comp):
-            comp = 50
+        age_raw = pd.to_numeric(row.get("AgeYears"), errors="coerce")
+        age     = float(age_raw) if pd.notna(age_raw) else 99.0
+        if composite_col and composite_col in row.index:
+            comp_raw = pd.to_numeric(row[composite_col], errors="coerce")
+            comp = float(comp_raw) if pd.notna(comp_raw) else 50.0
+        else:
+            comp = 50.0
         if peak >= threshold and comp <= 40:
             return "Hidden Gem"
         if peak >= threshold * 1.5 and breadth <= 2:
@@ -4276,11 +4284,7 @@ def render_player_intel_workspace(data: pd.DataFrame) -> None:
                                 ws_row_match = ws_df.loc[ws_df["Player"].astype(str).str.contains(last, case=False, na=False)]
                             if not ws_row_match.empty:
                                 ws_row = ws_row_match.iloc[0]
-                                pos_map_rev = {}
-                                for pg, codes in WYSCOUT_POS_MAP.items():
-                                    for c in codes:
-                                        pos_map_rev[c] = pg
-                                mapped_pos = pos_map_rev.get(ws_pos, pos_group)
+                                mapped_pos = WYSCOUT_POSITION_MAP.get(ws_pos, pos_group)
                                 ws_pool = ws_df.copy()
                                 fig_bars = _render_wyscout_bars(ws_row, ws_pool, mapped_pos, ws_player_name, str(match.iloc[0].get("Wyscout_Team", "")), ws_file)
                                 if fig_bars:
