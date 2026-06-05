@@ -3220,7 +3220,7 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
 
     # ── Per-position anomaly computation ─────────────────────────────────────
     def _score_group(grp: pd.DataFrame) -> pd.DataFrame:
-        keep = [c for c in base_cols + extra_cols + sel_score_cols if c in grp.columns]
+        keep = list(dict.fromkeys([c for c in base_cols + extra_cols + sel_score_cols if c in grp.columns]))
         out  = grp[keep].copy()
         X    = grp[sel_score_cols].values.astype(float)
         n    = len(grp)
