@@ -1423,6 +1423,16 @@ def metric_card(label: str, value: str, caption: str | None = None) -> None:
     )
 
 
+def _to_excel_bytes(sheets: dict[str, pd.DataFrame]) -> bytes:
+    """Serialise one or more DataFrames into a multi-sheet .xlsx BytesIO buffer."""
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for sheet_name, df in sheets.items():
+            safe_name = sheet_name[:31]  # Excel sheet name limit
+            df.to_excel(writer, sheet_name=safe_name, index=False)
+    return buf.getvalue()
+
+
 def _pdf_table(rows: list[list[str]], header_color: str = "#102a43") -> Table:
     table = Table(rows, repeatRows=1)
     table.setStyle(
@@ -3405,7 +3415,17 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
     with tab_rank:
         st.dataframe(display, width="stretch", hide_index=True, height=540, column_config=col_config)
         csv_bytes = display.to_csv(index=False).encode()
-        st.download_button("Download CSV", csv_bytes, "anomaly_scouting.csv", "text/csv", key="anom_dl")
+        _dl1, _dl2 = st.columns(2)
+        with _dl1:
+            st.download_button("Download CSV", csv_bytes, "anomaly_scouting.csv", "text/csv", key="anom_dl")
+        with _dl2:
+            st.download_button(
+                "Download Excel",
+                _to_excel_bytes({"Anomalies": display}),
+                "anomaly_scouting.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="anom_dl_xlsx",
+            )
 
     # Fingerprint heatmap tab
     with tab_heatmap:
@@ -4483,7 +4503,31 @@ def render_setpiece_workspace(_data: pd.DataFrame) -> None:
                 use_container_width=True,
             )
             csv_bytes = display_df.to_csv(index=False).encode()
-            st.download_button("Export CSV", csv_bytes, "sp_anomalies.csv", "text/csv", key="sp_dl_anom")
+            _sp_c1, _sp_c2, _sp_c3 = st.columns(3)
+            with _sp_c1:
+                st.download_button("Export CSV", csv_bytes, "sp_anomalies.csv", "text/csv", key="sp_dl_anom")
+            with _sp_c2:
+                st.download_button(
+                    "Export Excel",
+                    _to_excel_bytes({"SP Anomalies": display_df}),
+                    "sp_anomalies.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="sp_dl_anom_xlsx",
+                )
+            with _sp_c3:
+                # Multi-sheet: anomalies + role leaders combined
+                role_leaders_full = analyzer.top_players_by_role(ws_enriched, top_n=20)
+                full_sheets: dict[str, pd.DataFrame] = {"SP Anomalies": display_df}
+                for role, rdf in role_leaders_full.items():
+                    safe_role = role[:28]
+                    full_sheets[safe_role] = rdf.round(3)
+                st.download_button(
+                    "Export Full Report (Excel)",
+                    _to_excel_bytes(full_sheets),
+                    "sp_full_report.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="sp_dl_full_xlsx",
+                )
 
     # ── Tab 2: Role Leaders ───────────────────────────────────────────────────
     with tab_roles:
@@ -4760,7 +4804,17 @@ def render_watchlist_workspace(data: pd.DataFrame) -> None:
         st.rerun()
 
     csv_bytes = enriched.to_csv(index=False).encode()
-    st.download_button("Download watchlist CSV", csv_bytes, "watchlist.csv", "text/csv", key="wl_dl")
+    _wl_c1, _wl_c2 = st.columns(2)
+    with _wl_c1:
+        st.download_button("Download watchlist CSV", csv_bytes, "watchlist.csv", "text/csv", key="wl_dl")
+    with _wl_c2:
+        st.download_button(
+            "Download watchlist Excel",
+            _to_excel_bytes({"Watchlist": enriched}),
+            "watchlist.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="wl_dl_xlsx",
+        )
 
 
 def render_team_workspace(data: pd.DataFrame) -> None:
