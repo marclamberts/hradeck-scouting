@@ -244,6 +244,7 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
     print("Loading Wyscout data for set-piece analysis…")
     wyscout = load_wyscout(min_minutes)
     sp_sheets: dict[str, pd.DataFrame] = {}
+    wyscout_all_sheet: pd.DataFrame = pd.DataFrame()
 
     if not wyscout.empty:
         print(f"  → {len(wyscout):,} players across {wyscout['_League'].nunique()} leagues")
@@ -257,11 +258,42 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
         for role, df_role in role_leaders.items():
             sheet_name = f"SP {role}"[:31]
             sp_sheets[sheet_name] = df_role.round(3).reset_index(drop=True)
+
+        # Full Wyscout player table — key columns only to keep file size reasonable
+        WYSCOUT_KEY_COLS = [
+            "Player", "Team", "Position", "Age", "_League",
+            "Minutes played", "Matches played",
+            "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+            "Shots per 90", "Shots on target, %", "Key passes per 90",
+            "Passes per 90", "Accurate passes, %", "Progressive passes per 90",
+            "Dribbles per 90", "Successful dribbles, %",
+            "Successful defensive actions per 90", "Defensive duels won, %",
+            "Aerial duels per 90", "Aerial duels won, %",
+            "Crosses per 90", "Accurate crosses, %",
+            "Corners per 90", "Free kicks per 90",
+            "Direct free kicks per 90", "Direct free kicks on target, %",
+            "Head goals per 90", "Deep completed crosses per 90",
+            "Touches in box per 90", "Progressive runs per 90",
+            "Interceptions per 90", "Shots blocked per 90",
+            "Fouls per 90", "Duels won, %",
+            # SP role scores added by analyzer
+            "_sp_primary_role", "_sp_composite", "_sp_peak_z",
+        ]
+        keep_ws = [c for c in WYSCOUT_KEY_COLS if c in ws_enriched.columns]
+        wyscout_all_sheet = (
+            ws_enriched[keep_ws]
+            .rename(columns={"_League": "League", "_sp_primary_role": "SP Role",
+                              "_sp_composite": "SP Score", "_sp_peak_z": "SP Peak Z"})
+            .sort_values("Player" if "Player" in keep_ws else keep_ws[0])
+            .round(3)
+            .reset_index(drop=True)
+        )
     else:
         print("  [skip] No Wyscout data found.")
 
     # ── Assemble workbook ─────────────────────────────────────────────────────
     sheets: dict[str, pd.DataFrame] = {
+        "Wyscout All Players":    wyscout_all_sheet,
         "Anomaly Overview":       _display(zdf.sort_values("_anomaly_score", ascending=False), include_z=True),
         "Hidden Gems":            _display(hidden_gems),
         "Specialist Elite":       _display(specialists),

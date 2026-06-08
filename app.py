@@ -4468,12 +4468,13 @@ def render_setpiece_workspace(_data: pd.DataFrame) -> None:
 
     st.markdown("---")
 
-    tab_anomalies, tab_roles, tab_similarity, tab_zscores, tab_compare = st.tabs([
+    tab_anomalies, tab_roles, tab_similarity, tab_zscores, tab_compare, tab_all = st.tabs([
         "🚨 Anomaly Table",
         "🎭 Role Leaders",
         "🔗 Similarity Search",
         "📊 Z-Score Explorer",
         "⚖️ Player Comparison",
+        "📋 All Players",
     ])
 
     # ── Tab 1: Anomaly Table ──────────────────────────────────────────────────
@@ -4723,6 +4724,95 @@ def render_setpiece_workspace(_data: pd.DataFrame) -> None:
                         res = sim_eng_cmp.find_similar(single_row2, row1, method=mname, n=1, same_position=False)
                         sim_val = float(res["_similarity"].iloc[0]) if not res.empty else float("nan")
                         st.caption(f"{mname.title()} similarity: **{sim_val:.3f}**")
+
+    # ── Tab 6: All Wyscout Players ────────────────────────────────────────────
+    with tab_all:
+        name_col_all = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
+
+        # ── Filters ────────────────────────────────────────────────────────────
+        fa1, fa2, fa3, fa4 = st.columns(4)
+        with fa1:
+            league_opts = ["All"] + sorted(ws_enriched["_League"].dropna().astype(str).unique()) if "_League" in ws_enriched.columns else ["All"]
+            sel_league_all = st.selectbox("League", league_opts, key="sp_all_league")
+        with fa2:
+            pos_col_all = next((c for c in ["Position", "Pos"] if c in ws_enriched.columns), None)
+            pos_opts_all = ["All"] + sorted(ws_enriched[pos_col_all].dropna().astype(str).unique()) if pos_col_all else ["All"]
+            sel_pos_all = st.selectbox("Position", pos_opts_all, key="sp_all_pos")
+        with fa3:
+            age_col_all = next((c for c in ["Age"] if c in ws_enriched.columns), None)
+            if age_col_all:
+                age_vals = pd.to_numeric(ws_enriched[age_col_all], errors="coerce").dropna()
+                age_range = st.slider("Age range", int(age_vals.min()), int(age_vals.max()),
+                                      (int(age_vals.min()), int(age_vals.max())), key="sp_all_age")
+            else:
+                age_range = None
+        with fa4:
+            sp_role_opts = ["All"] + list(SET_PIECE_ROLES.keys())
+            sel_sp_role_all = st.selectbox("SP Role", sp_role_opts, key="sp_all_role")
+
+        # ── Search ─────────────────────────────────────────────────────────────
+        search_all = st.text_input("Search player or team", "", key="sp_all_search")
+
+        # ── Apply filters ──────────────────────────────────────────────────────
+        view = ws_enriched.copy()
+        if sel_league_all != "All" and "_League" in view.columns:
+            view = view.loc[view["_League"].astype(str) == sel_league_all]
+        if sel_pos_all != "All" and pos_col_all and pos_col_all in view.columns:
+            view = view.loc[view[pos_col_all].astype(str) == sel_pos_all]
+        if age_range and age_col_all and age_col_all in view.columns:
+            age_s = pd.to_numeric(view[age_col_all], errors="coerce")
+            view  = view.loc[age_s.between(age_range[0], age_range[1])]
+        if sel_sp_role_all != "All" and "_sp_primary_role" in view.columns:
+            view = view.loc[view["_sp_primary_role"] == sel_sp_role_all]
+        if search_all:
+            mask = pd.Series(False, index=view.index)
+            for col in ([name_col_all] if name_col_all else []) + (["Team"] if "Team" in view.columns else []):
+                mask |= view[col].astype(str).str.contains(search_all, case=False, na=False)
+            view = view.loc[mask]
+
+        st.caption(f"{len(view):,} players shown")
+
+        # ── Columns to display ─────────────────────────────────────────────────
+        WYSCOUT_TABLE_COLS = [
+            name_col_all, "Team", pos_col_all, "Age", "_League",
+            "Minutes played", "Goals per 90", "xG per 90",
+            "Assists per 90", "xA per 90", "Key passes per 90",
+            "Passes per 90", "Accurate passes, %", "Dribbles per 90",
+            "Successful defensive actions per 90", "Aerial duels won, %",
+            "Crosses per 90", "Corners per 90",
+            "_sp_primary_role", "_sp_composite", "_sp_peak_z",
+        ]
+        disp_cols = [c for c in WYSCOUT_TABLE_COLS if c and c in view.columns]
+        disp_view = (
+            view[disp_cols]
+            .rename(columns={
+                name_col_all: "Player", "_League": "League",
+                pos_col_all: "Position" if pos_col_all else "Position",
+                "_sp_primary_role": "SP Role", "_sp_composite": "SP Score",
+                "_sp_peak_z": "SP Peak Z",
+            })
+            .round(3)
+            .reset_index(drop=True)
+        )
+        st.dataframe(disp_view, hide_index=True, height=560, use_container_width=True)
+
+        # ── Export ─────────────────────────────────────────────────────────────
+        _all_c1, _all_c2 = st.columns(2)
+        with _all_c1:
+            st.download_button(
+                "Export filtered CSV",
+                disp_view.to_csv(index=False).encode(),
+                "wyscout_players.csv", "text/csv",
+                key="sp_all_dl_csv",
+            )
+        with _all_c2:
+            st.download_button(
+                "Export filtered Excel",
+                _to_excel_bytes({"Wyscout Players": disp_view}),
+                "wyscout_players.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="sp_all_dl_xlsx",
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
