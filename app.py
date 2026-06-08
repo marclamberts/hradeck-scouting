@@ -13,6 +13,17 @@ APP_DIR = Path(__file__).parent
 SHORTLIST_FILE = APP_DIR / "data" / "shortlist.json"
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/hradeck_scouting_matplotlib")
 
+from scouting_model import (
+    AnomalyEngine,
+    SimilarityEngine,
+    SetPieceAnalyzer,
+    SET_PIECE_DELIVERY,
+    SET_PIECE_AERIAL,
+    SET_PIECE_SHOOTING,
+    SET_PIECE_ALL,
+    SET_PIECE_ROLES,
+)
+
 import numpy as np
 import pandas as pd
 import altair as alt
@@ -1881,13 +1892,14 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-WORKSPACES = ["Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist"]
+WORKSPACES = ["Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist", "Set Piece"]
 _WORKSPACE_ICONS = {
     "Command":      ("⚡", "Anomaly landscape"),
     "Deep Scan":    ("🔬", "Multi-method detector"),
     "Cross-Source": ("🔗", "Wyscout divergence"),
     "Player Intel": ("🧠", "Player deep-dive"),
     "Watchlist":    ("📋", "Saved targets"),
+    "Set Piece":    ("🎯", "Set-piece scouting"),
 }
 WYSCOUT_DB_DIR = APP_DIR / "data" / "Wyscout DB"
 
@@ -4217,28 +4229,61 @@ def render_player_intel_workspace(data: pd.DataFrame) -> None:
         plt.tight_layout()
         st.pyplot(fig_f, clear_figure=True)
 
-    # Peer comparison: similar anomaly profiles
+    # Peer comparison: similar anomaly profiles — all three similarity methods
     with tab_peers:
         peers = zdf.loc[zdf["PlayerName"].astype(str) != sel_name].copy()
         if not peers.empty and score_cols:
-            p_vec   = np.array([float(p_row.get(f"_z_{c}", 0)) for c in score_cols])
-            peer_mat = np.array([[float(r.get(f"_z_{c}", 0)) for c in score_cols] for _, r in peers.iterrows()])
-            norms = np.linalg.norm(peer_mat, axis=1, keepdims=True)
-            norms = np.where(norms == 0, 1e-9, norms)
-            p_norm = np.linalg.norm(p_vec) or 1e-9
-            cosims = (peer_mat @ p_vec) / (norms.ravel() * p_norm)
-            peers  = peers.copy()
-            peers["_similarity"] = cosims
-            top_peers = peers.sort_values("_similarity", ascending=False).head(10)
-            peer_disp_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel",
-                                           "AgeYears", "_anomaly_type", "_anomaly_score", "_similarity"] if c in top_peers.columns]
-            peer_disp = top_peers[peer_disp_cols].rename(columns={
-                "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
-                "BundleLabel": "League", "AgeYears": "Age",
-                "_anomaly_type": "Type", "_anomaly_score": "Score", "_similarity": "Similarity",
-            }).round(3)
-            st.caption(f"10 most similar anomaly profiles to {sel_name} in {pos_group}")
-            st.dataframe(peer_disp, hide_index=True, height=400)
+            sim_method = st.radio(
+                "Similarity method",
+                ["Cosine", "Euclidean", "Pearson"],
+                horizontal=True,
+                key="pi_sim_method",
+            )
+            sim_features = [f"_z_{c}" for c in score_cols if f"_z_{c}" in peers.columns]
+            sim_eng = SimilarityEngine(sim_features)
+            target_sim_row = p_row.copy()
+            top_peers = sim_eng.find_similar(
+                peers,
+                target_sim_row,
+                method=sim_method.lower(),
+                n=10,
+                same_position=False,
+            )
+            if top_peers.empty:
+                st.info("Not enough peers for similarity search.")
+            else:
+                peer_disp_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel",
+                                               "AgeYears", "_anomaly_type", "_anomaly_score", "_similarity"] if c in top_peers.columns]
+                peer_disp = top_peers[peer_disp_cols].rename(columns={
+                    "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
+                    "BundleLabel": "League", "AgeYears": "Age",
+                    "_anomaly_type": "Type", "_anomaly_score": "Score", "_similarity": "Similarity",
+                }).round(3)
+                st.caption(f"10 most similar anomaly profiles to {sel_name} in {pos_group} — {sim_method} similarity")
+                st.dataframe(peer_disp, hide_index=True, height=400)
+
+            # Comparison across all three methods
+            with st.expander("Compare all three similarity methods side-by-side"):
+                col_cos, col_euc, col_pea = st.columns(3)
+                method_results = sim_eng.compare_methods(peers, p_row, n=8, same_position=False)
+                name_col_alias = "PlayerName"
+                for col_widget, (mname, mdf) in zip(
+                    [col_cos, col_euc, col_pea],
+                    method_results.items(),
+                ):
+                    with col_widget:
+                        st.caption(f"**{mname.title()}**")
+                        if mdf.empty:
+                            st.info("No results.")
+                        else:
+                            show_cols = [c for c in [name_col_alias, "TeamName", "AgeYears", "_similarity"] if c in mdf.columns]
+                            st.dataframe(
+                                mdf[show_cols].rename(columns={
+                                    name_col_alias: "Player", "TeamName": "Team",
+                                    "AgeYears": "Age", "_similarity": "Sim",
+                                }).round(3),
+                                hide_index=True, height=300,
+                            )
 
     # Cross-source: is this player in Wyscout?
     with tab_cross:
@@ -4289,6 +4334,351 @@ def render_player_intel_workspace(data: pd.DataFrame) -> None:
                                 fig_bars = _render_wyscout_bars(ws_row, ws_pool, mapped_pos, ws_player_name, str(match.iloc[0].get("Wyscout_Team", "")), ws_file)
                                 if fig_bars:
                                     st.pyplot(fig_bars, clear_figure=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SET PIECE workspace
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(show_spinner=False, ttl=600)
+def _load_all_wyscout_for_setpiece() -> pd.DataFrame:
+    """Load every Wyscout DB file into a single combined DataFrame."""
+    frames: list[pd.DataFrame] = []
+    ws_dir = APP_DIR / "data" / "Wyscout DB"
+    if not ws_dir.exists():
+        return pd.DataFrame()
+    for path in sorted(ws_dir.glob("*.xlsx")):
+        try:
+            df = _load_wyscout_file(path)
+            if not df.empty:
+                df["_League"] = path.stem
+                frames.append(df)
+        except Exception:
+            continue
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def render_setpiece_workspace(_data: pd.DataFrame) -> None:
+    """Set-piece scouting — z-score anomalies, role classification, and similarity search."""
+    import seaborn as sns
+
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🎯</div>"
+            "<div><div class='sidebar-brand-title'>Set Piece Scout</div>"
+            "<div class='sidebar-brand-meta'>Z-scores · roles · similarity</div></div></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='sbar-hdr'>Data source</div>", unsafe_allow_html=True)
+        sp_threshold = st.slider("Anomaly threshold (z)", 0.5, 3.0, 1.5, step=0.1, key="sp_thresh")
+        min_mins     = st.slider("Min minutes played", 0, 3000, 500, step=100, key="sp_min_min")
+
+        st.markdown("<div class='sbar-hdr'>Focus</div>", unsafe_allow_html=True)
+        role_filter = st.multiselect(
+            "Set-piece role",
+            list(SET_PIECE_ROLES.keys()),
+            default=list(SET_PIECE_ROLES.keys()),
+            key="sp_role_filter",
+        )
+        metric_group = st.radio(
+            "Metric group",
+            ["All", "Delivery", "Aerial", "Shooting"],
+            key="sp_metric_group",
+        )
+
+    st.markdown(
+        "<div class='page-header'><div class='page-header-icon'>🎯</div>"
+        "<div><div class='page-header-title'>Set-Piece Intelligence</div>"
+        "<div class='page-header-sub'>Z-score anomaly flagging · role classification · cosine / Euclidean / Pearson similarity</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Loading Wyscout data…"):
+        ws_all = _load_all_wyscout_for_setpiece()
+
+    if ws_all.empty:
+        st.error("No Wyscout data found in data/Wyscout DB/.")
+        return
+
+    # Filter by minutes
+    if "Minutes played" in ws_all.columns:
+        ws_all = ws_all.loc[pd.to_numeric(ws_all["Minutes played"], errors="coerce").fillna(0) >= min_mins]
+    elif "Minutes played" not in ws_all.columns:
+        pass
+
+    # Determine available set-piece metrics
+    metric_map = {
+        "All":      SET_PIECE_ALL,
+        "Delivery": SET_PIECE_DELIVERY,
+        "Aerial":   SET_PIECE_AERIAL,
+        "Shooting": SET_PIECE_SHOOTING,
+    }
+    selected_metrics = [m for m in metric_map[metric_group] if m in ws_all.columns]
+    if not selected_metrics:
+        st.warning("The selected Wyscout files do not contain any set-piece metrics.")
+        return
+
+    # Run set-piece analyzer
+    analyzer = SetPieceAnalyzer(threshold=sp_threshold)
+    with st.spinner("Computing set-piece z-scores…"):
+        ws_enriched = analyzer.fit_transform(ws_all)
+
+    anomaly_df = analyzer.anomaly_table(ws_enriched, top_n=200)
+
+    # Filter by role
+    if role_filter and "Primary Role" in anomaly_df.columns:
+        anomaly_df = anomaly_df.loc[anomaly_df["Primary Role"].isin(role_filter)]
+
+    # ── KPIs ──────────────────────────────────────────────────────────────────
+    k1, k2, k3, k4 = st.columns(4)
+    total_players  = len(ws_enriched)
+    total_anomalies = int(ws_enriched["_sp_is_anomaly"].sum()) if "_sp_is_anomaly" in ws_enriched.columns else 0
+    role_counts = ws_enriched["_sp_primary_role"].value_counts() if "_sp_primary_role" in ws_enriched.columns else pd.Series(dtype=int)
+
+    with k1:
+        metric_card("Players scanned", f"{total_players:,}", "after minutes filter")
+    with k2:
+        metric_card("Set-piece anomalies", str(total_anomalies), f"peak z ≥ {sp_threshold:.1f}")
+    with k3:
+        top_role = role_counts.idxmax() if not role_counts.empty else "—"
+        metric_card("Dominant role", top_role, "most common SP role")
+    with k4:
+        n_leagues = ws_enriched["_League"].nunique() if "_League" in ws_enriched.columns else 0
+        metric_card("Leagues loaded", str(n_leagues), "Wyscout files combined")
+
+    st.markdown("---")
+
+    tab_anomalies, tab_roles, tab_similarity, tab_zscores, tab_compare = st.tabs([
+        "🚨 Anomaly Table",
+        "🎭 Role Leaders",
+        "🔗 Similarity Search",
+        "📊 Z-Score Explorer",
+        "⚖️ Player Comparison",
+    ])
+
+    # ── Tab 1: Anomaly Table ──────────────────────────────────────────────────
+    with tab_anomalies:
+        st.markdown(
+            f"<div class='note-box'>Showing <b>{len(anomaly_df)}</b> set-piece anomalies "
+            f"(threshold z ≥ {sp_threshold:.1f}). Sorted by peak z-score.</div>",
+            unsafe_allow_html=True,
+        )
+        if anomaly_df.empty:
+            st.info("No anomalies at the current threshold. Lower the z cutoff in the sidebar.")
+        else:
+            # Colour Peak Z column
+            def _peak_z_color(val: float) -> str:
+                if val >= 2.5:  return "background-color:#7f1d1d; color:#fca5a5"
+                if val >= 1.8:  return "background-color:#78350f; color:#fcd34d"
+                return "background-color:#14532d; color:#86efac"
+
+            display_df = anomaly_df.copy()
+            numeric_cols = display_df.select_dtypes(include=[np.number]).columns
+            display_df[numeric_cols] = display_df[numeric_cols].round(3)
+
+            st.dataframe(
+                display_df,
+                hide_index=True,
+                height=min(600, 40 + len(display_df) * 36),
+                use_container_width=True,
+            )
+            csv_bytes = display_df.to_csv(index=False).encode()
+            st.download_button("Export CSV", csv_bytes, "sp_anomalies.csv", "text/csv", key="sp_dl_anom")
+
+    # ── Tab 2: Role Leaders ───────────────────────────────────────────────────
+    with tab_roles:
+        role_leaders = analyzer.top_players_by_role(ws_enriched, top_n=8)
+        if not role_leaders:
+            st.info("No role data available.")
+        else:
+            visible_roles = [r for r in role_filter if r in role_leaders]
+            if not visible_roles:
+                visible_roles = list(role_leaders.keys())
+            for i in range(0, len(visible_roles), 3):
+                cols = st.columns(min(3, len(visible_roles) - i))
+                for j, role in enumerate(visible_roles[i:i+3]):
+                    with cols[j]:
+                        st.markdown(f"**{role}**")
+                        df_role = role_leaders[role]
+                        role_col = f"_sp_role_{role}"
+                        show_cols = [c for c in ["Player", "Team", "Age", role_col] if c in df_role.columns]
+                        if show_cols:
+                            st.dataframe(
+                                df_role[show_cols].rename(columns={role_col: "Score"}).round(3),
+                                hide_index=True, height=280,
+                            )
+
+    # ── Tab 3: Similarity Search ──────────────────────────────────────────────
+    with tab_similarity:
+        name_col_ws = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
+        if not name_col_ws:
+            st.warning("No player name column found.")
+        else:
+            player_names_ws = sorted(ws_enriched[name_col_ws].dropna().astype(str).unique())
+            c_left, c_right = st.columns([2, 1])
+            with c_left:
+                sel_sp_player = st.selectbox("Select player", player_names_ws, key="sp_sim_player")
+            with c_right:
+                sim_method_sp = st.radio(
+                    "Method",
+                    ["Cosine", "Euclidean", "Pearson"],
+                    horizontal=True,
+                    key="sp_sim_method",
+                )
+
+            target_rows_sp = ws_enriched.loc[ws_enriched[name_col_ws].astype(str) == sel_sp_player]
+            if target_rows_sp.empty:
+                st.info("Player not found.")
+            else:
+                target_sp = target_rows_sp.iloc[0]
+                sp_sim_feats = [m for m in selected_metrics if m in ws_enriched.columns]
+                sim_eng_sp   = SimilarityEngine(sp_sim_feats)
+
+                n_results = st.slider("Results to show", 5, 30, 10, key="sp_n_sim")
+                results_sp = sim_eng_sp.find_similar(
+                    ws_enriched,
+                    target_sp,
+                    method=sim_method_sp.lower(),
+                    n=n_results,
+                    same_position=False,
+                )
+
+                if results_sp.empty:
+                    st.info("No similar players found.")
+                else:
+                    show_sp_cols = [c for c in [name_col_ws, "Team", "Position", "Age", "_League", "_sp_primary_role", "_similarity"] if c in results_sp.columns]
+                    st.caption(
+                        f"Top {n_results} most similar set-piece profiles to **{sel_sp_player}** "
+                        f"({sim_method_sp} similarity on {metric_group.lower()} metrics)"
+                    )
+                    st.dataframe(
+                        results_sp[show_sp_cols].rename(columns={
+                            name_col_ws: "Player", "_League": "League",
+                            "_sp_primary_role": "SP Role", "_similarity": "Similarity",
+                        }).round(3),
+                        hide_index=True, height=400,
+                    )
+
+                # Side-by-side method comparison
+                with st.expander("Compare all three methods"):
+                    all_methods = sim_eng_sp.compare_methods(ws_enriched, target_sp, n=8, same_position=False)
+                    c_c, c_e, c_p = st.columns(3)
+                    for col_w, (mname, mdf) in zip([c_c, c_e, c_p], all_methods.items()):
+                        with col_w:
+                            st.caption(f"**{mname.title()}**")
+                            if mdf.empty:
+                                st.info("No results.")
+                            else:
+                                scols = [c for c in [name_col_ws, "Team", "_similarity"] if c in mdf.columns]
+                                st.dataframe(
+                                    mdf[scols].rename(columns={name_col_ws: "Player", "_similarity": "Sim"}).round(3),
+                                    hide_index=True, height=280,
+                                )
+
+    # ── Tab 4: Z-Score Explorer ───────────────────────────────────────────────
+    with tab_zscores:
+        z_metric_options = [f"_spz_{m}" for m in selected_metrics if f"_spz_{m}" in ws_enriched.columns]
+        label_for_z = {f"_spz_{m}": m for m in selected_metrics}
+        if not z_metric_options:
+            st.info("No z-score columns available.")
+        else:
+            chosen_z = st.selectbox(
+                "Metric",
+                z_metric_options,
+                format_func=lambda c: label_for_z.get(c, c),
+                key="sp_z_metric",
+            )
+            col_data = pd.to_numeric(ws_enriched[chosen_z], errors="coerce").dropna()
+            fig_hist, ax_hist = plt.subplots(figsize=(9, 4), dpi=130)
+            fig_hist.patch.set_facecolor("#080c14")
+            ax_hist.set_facecolor("#0f1623")
+            ax_hist.hist(col_data, bins=35, color="#00c7b7", alpha=0.65, edgecolor="#080c14", linewidth=0.8)
+            ax_hist.axvline(sp_threshold, color="#f59e0b", linewidth=2, linestyle="--", label=f"Threshold z={sp_threshold:.1f}")
+            ax_hist.axvline(-sp_threshold, color="#f59e0b", linewidth=1.2, linestyle=":", alpha=0.6)
+            ax_hist.set_title(label_for_z.get(chosen_z, chosen_z), loc="left", fontsize=12, fontweight="bold", color="#e8edf3")
+            ax_hist.set_xlabel("Z-score", color="#8fa3b1")
+            ax_hist.set_ylabel("Players", color="#8fa3b1")
+            ax_hist.tick_params(colors="#8fa3b1")
+            for spine in ax_hist.spines.values():
+                spine.set_edgecolor("#1e2d3d")
+            ax_hist.grid(axis="y", color="#1e2d3d", linewidth=0.7, alpha=0.8)
+            ax_hist.spines[["top", "right"]].set_visible(False)
+            ax_hist.legend(frameon=True, facecolor="#141d2b", edgecolor="#1e2d3d", labelcolor="#e8edf3")
+            fig_hist.tight_layout()
+            st.pyplot(fig_hist, clear_figure=True)
+
+            # Top outliers for this metric
+            st.caption(f"Top 15 players by {label_for_z.get(chosen_z, chosen_z)}")
+            name_col_for_z = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
+            if name_col_for_z:
+                top_z_rows = (
+                    ws_enriched[[name_col_for_z, "Team", "Position", "Age", "_League", chosen_z] if "Team" in ws_enriched.columns
+                                 else [name_col_for_z, chosen_z]]
+                    .sort_values(chosen_z, ascending=False)
+                    .head(15)
+                    .round(3)
+                )
+                st.dataframe(top_z_rows.rename(columns={chosen_z: "Z-score"}), hide_index=True, height=360)
+
+    # ── Tab 5: Player Comparison ──────────────────────────────────────────────
+    with tab_compare:
+        name_col_cmp = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
+        if not name_col_cmp:
+            st.info("No player name column.")
+        else:
+            player_names_cmp = sorted(ws_enriched[name_col_cmp].dropna().astype(str).unique())
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                cmp_p1 = st.selectbox("Player A", player_names_cmp, key="sp_cmp_p1")
+            with cc2:
+                cmp_p2 = st.selectbox("Player B", player_names_cmp,
+                                       index=min(1, len(player_names_cmp) - 1), key="sp_cmp_p2")
+
+            r1 = ws_enriched.loc[ws_enriched[name_col_cmp].astype(str) == cmp_p1]
+            r2 = ws_enriched.loc[ws_enriched[name_col_cmp].astype(str) == cmp_p2]
+            if r1.empty or r2.empty:
+                st.info("Select two valid players above.")
+            else:
+                row1, row2 = r1.iloc[0], r2.iloc[0]
+                z_cols_cmp = [f"_spz_{m}" for m in selected_metrics if f"_spz_{m}" in ws_enriched.columns]
+                labels_cmp = [m for m in selected_metrics if f"_spz_{m}" in ws_enriched.columns]
+                v1 = [float(pd.to_numeric(row1.get(zc, 0), errors="coerce") or 0) for zc in z_cols_cmp]
+                v2 = [float(pd.to_numeric(row2.get(zc, 0), errors="coerce") or 0) for zc in z_cols_cmp]
+
+                cmp_df = pd.DataFrame({
+                    "Metric": labels_cmp,
+                    cmp_p1: v1,
+                    cmp_p2: v2,
+                }).set_index("Metric")
+
+                fig_cmp, ax_cmp = plt.subplots(figsize=(10, max(4, len(labels_cmp) * 0.38)), dpi=130)
+                fig_cmp.patch.set_facecolor("#080c14")
+                ax_cmp.set_facecolor("#0f1623")
+                y_pos = np.arange(len(labels_cmp))
+                bar_h = 0.38
+                bars1 = ax_cmp.barh(y_pos + bar_h / 2, v1, bar_h, color="#00c7b7", alpha=0.8, label=cmp_p1)
+                bars2 = ax_cmp.barh(y_pos - bar_h / 2, v2, bar_h, color="#f4a261", alpha=0.8, label=cmp_p2)
+                ax_cmp.set_yticks(y_pos)
+                ax_cmp.set_yticklabels(labels_cmp, color="#8fa3b1", fontsize=9)
+                ax_cmp.axvline(0, color="#8fa3b1", linewidth=0.8)
+                ax_cmp.axvline(sp_threshold, color="#f59e0b", linewidth=1.2, linestyle="--", alpha=0.6)
+                ax_cmp.set_xlabel("Z-score", color="#8fa3b1")
+                ax_cmp.set_title("Set-piece z-score comparison", loc="left", fontsize=11, color="#e8edf3")
+                ax_cmp.tick_params(colors="#8fa3b1", labelsize=9)
+                for spine in ax_cmp.spines.values():
+                    spine.set_edgecolor("#1e2d3d")
+                ax_cmp.legend(frameon=True, facecolor="#141d2b", edgecolor="#1e2d3d", labelcolor="#e8edf3", fontsize=9)
+                fig_cmp.tight_layout()
+                st.pyplot(fig_cmp, clear_figure=True)
+
+                # Similarity score between the two
+                if z_cols_cmp:
+                    sim_eng_cmp = SimilarityEngine(z_cols_cmp)
+                    single_row2 = pd.DataFrame([row2])
+                    for mname in ["cosine", "euclidean", "pearson"]:
+                        res = sim_eng_cmp.find_similar(single_row2, row1, method=mname, n=1, same_position=False)
+                        sim_val = float(res["_similarity"].iloc[0]) if not res.empty else float("nan")
+                        st.caption(f"{mname.title()} similarity: **{sim_val:.3f}**")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5015,6 +5405,9 @@ elif active_workspace == "Player Intel":
 elif active_workspace == "Watchlist":
     render_watchlist_workspace(data)
     st.stop()
+elif active_workspace == "Set Piece":
+    render_setpiece_workspace(data)
+    st.stop()
 
 # Legacy routing kept for any deep-linked pages
 _rec_file = _model_file("recruitment")
@@ -5022,7 +5415,7 @@ _data_updated = "unknown"
 if _rec_file.exists():
     from datetime import datetime as _dt
     _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
-if active_workspace not in ("Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist"):
+if active_workspace not in ("Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist", "Set Piece"):
     st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
     st.markdown(
         f'<div class="section-card">'
