@@ -2423,7 +2423,7 @@ def render_scouting_workspace() -> None:
                                     y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8b949e", gridColor="#21262d")),
                                 )
                                 .properties(height=220)
-                                .configure_view(fill="#161b22", stroke=None).configure(background="#0d1117")
+                                .configure_view(fill="#ffffff", stroke=None).configure(background="#f9f8f3")
                             )
                             st.altair_chart(_hist_chart, width="stretch")
                         with exp_right:
@@ -3266,7 +3266,7 @@ def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
                     tooltip=["PlayerName","PositionGroup",alt.Tooltip("CaseScore:Q",format=".1f"),alt.Tooltip("AgeResaleScore:Q",format=".1f"),"CostRisk"],
                 )
                 .properties(height=380, title=alt.TitleParams("Resale upside vs style fit", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#0f1623", stroke=None).configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None).configure(background="#f9f8f3")
                 .interactive()
             )
             st.altair_chart(case_chart, width="stretch")
@@ -3619,8 +3619,8 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
                         color="#8fa3b1", fontSize=11,
                     ),
                 )
-                .configure_view(fill="#0f1623", stroke=None)
-                .configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None)
+                .configure(background="#f9f8f3")
                 .interactive()
             )
             st.altair_chart(scatter, width="stretch")
@@ -3660,8 +3660,8 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
                 )
                 .properties(height=220,
                             title=alt.TitleParams("Anomaly type distribution", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#0f1623", stroke=None)
-                .configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None)
+                .configure(background="#f9f8f3")
             )
             st.altair_chart(type_chart, width="stretch")
 
@@ -3689,8 +3689,8 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
                 )
                 .properties(height=220,
                             title=alt.TitleParams("Metric driving most anomalies", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#0f1623", stroke=None)
-                .configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None)
+                .configure(background="#f9f8f3")
             )
             st.altair_chart(mc_chart, width="stretch")
 
@@ -3719,8 +3719,8 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
                 )
                 .properties(height=max(160, len(league_anom) * 26),
                             title=alt.TitleParams("Anomaly concentration by league", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#0f1623", stroke=None)
-                .configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None)
+                .configure(background="#f9f8f3")
             )
             st.altair_chart(lg_chart, width="stretch")
 
@@ -3984,8 +3984,8 @@ def render_command_workspace(data: pd.DataFrame) -> None:
                 )
                 .properties(height=320,
                             title=alt.TitleParams("Top leagues by anomaly count", color="#8fa3b1", fontSize=11))
-                .configure_view(fill="#0f1623", stroke=None)
-                .configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None)
+                .configure(background="#f9f8f3")
             )
             st.altair_chart(lg_bar, width="stretch")
 
@@ -4034,8 +4034,8 @@ def render_command_workspace(data: pd.DataFrame) -> None:
                                 legend=None),
             )
             .properties(height=260)
-            .configure_view(fill="#0f1623", stroke=None)
-            .configure(background="#080c14")
+            .configure_view(fill="#ffffff", stroke=None)
+            .configure(background="#f9f8f3")
         )
         st.altair_chart(dist_chart, width="stretch")
 
@@ -4211,8 +4211,8 @@ def render_cross_source_workspace(data: pd.DataFrame) -> None:
                 tooltip=["Confidence:N", "Count:Q"],
             )
             .properties(height=260)
-            .configure_view(fill="#0f1623", stroke=None)
-            .configure(background="#080c14")
+            .configure_view(fill="#ffffff", stroke=None)
+            .configure(background="#f9f8f3")
         )
         st.altair_chart(c_chart, width="stretch")
 
@@ -4323,8 +4323,8 @@ def render_player_intel_workspace(data: pd.DataFrame) -> None:
             )
             .properties(height=max(200, len(z_bar_df) * 26),
                         title=alt.TitleParams(f"{sel_name} — z-scores vs {pos_group} peers", color="#8fa3b1", fontSize=11))
-            .configure_view(fill="#0f1623", stroke=None)
-            .configure(background="#080c14")
+            .configure_view(fill="#ffffff", stroke=None)
+            .configure(background="#f9f8f3")
         )
         st.altair_chart(z_bar, width="stretch")
 
@@ -4355,10 +4355,10 @@ def render_player_intel_workspace(data: pd.DataFrame) -> None:
         idx = hm_labels.index(sel_name) if sel_name in hm_labels else -1
         if idx >= 0:
             for x_edge in [0, len(z_cols)]:
-                ax_f.axhline(idx,     color="#00c7b7", linewidth=1.8, xmin=0, xmax=1)
-                ax_f.axhline(idx + 1, color="#00c7b7", linewidth=1.8, xmin=0, xmax=1)
-        plt.xticks(rotation=30, ha="right", color="#8fa3b1")
-        plt.yticks(color="#8fa3b1", fontsize=8)
+                ax_f.axhline(idx,     color="#1478b0", linewidth=1.8, xmin=0, xmax=1)
+                ax_f.axhline(idx + 1, color="#1478b0", linewidth=1.8, xmin=0, xmax=1)
+        plt.xticks(rotation=30, ha="right", color="#888888")
+        plt.yticks(color="#888888", fontsize=8)
         plt.tight_layout()
         st.pyplot(fig_f, clear_figure=True)
 
@@ -5263,20 +5263,20 @@ def render_setpiece_workspace(_data: pd.DataFrame) -> None:
             )
             col_data = pd.to_numeric(ws_enriched[chosen_z], errors="coerce").dropna()
             fig_hist, ax_hist = plt.subplots(figsize=(9, 4), dpi=130)
-            fig_hist.patch.set_facecolor("#080c14")
-            ax_hist.set_facecolor("#0f1623")
-            ax_hist.hist(col_data, bins=35, color="#00c7b7", alpha=0.65, edgecolor="#080c14", linewidth=0.8)
-            ax_hist.axvline(sp_threshold, color="#f59e0b", linewidth=2, linestyle="--", label=f"Threshold z={sp_threshold:.1f}")
-            ax_hist.axvline(-sp_threshold, color="#f59e0b", linewidth=1.2, linestyle=":", alpha=0.6)
-            ax_hist.set_title(label_for_z.get(chosen_z, chosen_z), loc="left", fontsize=12, fontweight="bold", color="#e8edf3")
-            ax_hist.set_xlabel("Z-score", color="#8fa3b1")
-            ax_hist.set_ylabel("Players", color="#8fa3b1")
-            ax_hist.tick_params(colors="#8fa3b1")
+            fig_hist.patch.set_facecolor("#f9f8f3")
+            ax_hist.set_facecolor("#ffffff")
+            ax_hist.hist(col_data, bins=35, color="#1478b0", alpha=0.65, edgecolor="#f9f8f3", linewidth=0.8)
+            ax_hist.axvline(sp_threshold, color="#ee3a27", linewidth=2, linestyle="--", label=f"Threshold z={sp_threshold:.1f}")
+            ax_hist.axvline(-sp_threshold, color="#ee3a27", linewidth=1.2, linestyle=":", alpha=0.6)
+            ax_hist.set_title(label_for_z.get(chosen_z, chosen_z), loc="left", fontsize=12, fontweight="bold", color="#1a1a1a")
+            ax_hist.set_xlabel("Z-score", color="#888888")
+            ax_hist.set_ylabel("Players", color="#888888")
+            ax_hist.tick_params(colors="#888888")
             for spine in ax_hist.spines.values():
-                spine.set_edgecolor("#1e2d3d")
-            ax_hist.grid(axis="y", color="#1e2d3d", linewidth=0.7, alpha=0.8)
+                spine.set_edgecolor("#cccccc")
+            ax_hist.grid(axis="y", color="#eeede8", linewidth=0.7, alpha=0.8)
             ax_hist.spines[["top", "right"]].set_visible(False)
-            ax_hist.legend(frameon=True, facecolor="#141d2b", edgecolor="#1e2d3d", labelcolor="#e8edf3")
+            ax_hist.legend(frameon=True, facecolor="#ffffff", edgecolor="#cccccc", labelcolor="#1a1a1a")
             fig_hist.tight_layout()
             st.pyplot(fig_hist, clear_figure=True)
 
@@ -5325,22 +5325,22 @@ def render_setpiece_workspace(_data: pd.DataFrame) -> None:
                 }).set_index("Metric")
 
                 fig_cmp, ax_cmp = plt.subplots(figsize=(10, max(4, len(labels_cmp) * 0.38)), dpi=130)
-                fig_cmp.patch.set_facecolor("#080c14")
-                ax_cmp.set_facecolor("#0f1623")
+                fig_cmp.patch.set_facecolor("#f9f8f3")
+                ax_cmp.set_facecolor("#ffffff")
                 y_pos = np.arange(len(labels_cmp))
                 bar_h = 0.38
-                bars1 = ax_cmp.barh(y_pos + bar_h / 2, v1, bar_h, color="#00c7b7", alpha=0.8, label=cmp_p1)
+                bars1 = ax_cmp.barh(y_pos + bar_h / 2, v1, bar_h, color="#1478b0", alpha=0.8, label=cmp_p1)
                 bars2 = ax_cmp.barh(y_pos - bar_h / 2, v2, bar_h, color="#f4a261", alpha=0.8, label=cmp_p2)
                 ax_cmp.set_yticks(y_pos)
-                ax_cmp.set_yticklabels(labels_cmp, color="#8fa3b1", fontsize=9)
-                ax_cmp.axvline(0, color="#8fa3b1", linewidth=0.8)
-                ax_cmp.axvline(sp_threshold, color="#f59e0b", linewidth=1.2, linestyle="--", alpha=0.6)
-                ax_cmp.set_xlabel("Z-score", color="#8fa3b1")
-                ax_cmp.set_title("Set-piece z-score comparison", loc="left", fontsize=11, color="#e8edf3")
-                ax_cmp.tick_params(colors="#8fa3b1", labelsize=9)
+                ax_cmp.set_yticklabels(labels_cmp, color="#888888", fontsize=9)
+                ax_cmp.axvline(0, color="#888888", linewidth=0.8)
+                ax_cmp.axvline(sp_threshold, color="#ee3a27", linewidth=1.2, linestyle="--", alpha=0.6)
+                ax_cmp.set_xlabel("Z-score", color="#888888")
+                ax_cmp.set_title("Set-piece z-score comparison", loc="left", fontsize=11, color="#1a1a1a")
+                ax_cmp.tick_params(colors="#888888", labelsize=9)
                 for spine in ax_cmp.spines.values():
-                    spine.set_edgecolor("#1e2d3d")
-                ax_cmp.legend(frameon=True, facecolor="#141d2b", edgecolor="#1e2d3d", labelcolor="#e8edf3", fontsize=9)
+                    spine.set_edgecolor("#cccccc")
+                ax_cmp.legend(frameon=True, facecolor="#ffffff", edgecolor="#cccccc", labelcolor="#1a1a1a", fontsize=9)
                 fig_cmp.tight_layout()
                 st.pyplot(fig_cmp, clear_figure=True)
 
@@ -6740,8 +6740,8 @@ with player_tab:
         _age_chart = (
             (_age_base + _age_trend + _age_highlight + _age_label)
             .properties(height=260, title=alt.TitleParams(f"{player['PositionGroup']} age–quality curve (all leagues)", color="#8fa3b1", fontSize=11))
-            .configure_view(fill="#0f1623", stroke=None)
-            .configure(background="#080c14")
+            .configure_view(fill="#ffffff", stroke=None)
+            .configure(background="#f9f8f3")
         )
         st.altair_chart(_age_chart, width="stretch")
 
@@ -6849,8 +6849,8 @@ with hradec_tab:
                     ],
                 )
                 .properties(height=240, title=alt.TitleParams("Avg Hradec fit by position", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#0f1623", stroke=None)
-                .configure(background="#080c14")
+                .configure_view(fill="#ffffff", stroke=None)
+                .configure(background="#f9f8f3")
             )
             st.altair_chart(_need_chart, width="stretch")
 
@@ -6930,8 +6930,8 @@ with intel_tab:
                 ],
             )
             .properties(height=max(320, len(top30) * 20))
-            .configure_view(fill="#0f1623", stroke=None)
-            .configure(background="#080c14")
+            .configure_view(fill="#ffffff", stroke=None)
+            .configure(background="#f9f8f3")
         )
         st.altair_chart(bar_chart, width="stretch")
 
@@ -7011,8 +7011,8 @@ with compare_tab:
                 tooltip=["PlayerName", "Metric", alt.Tooltip("Score:Q", format=".1f")],
             )
             .properties(height=420)
-            .configure_view(fill="#0f1623", stroke=None)
-            .configure(background="#080c14")
+            .configure_view(fill="#ffffff", stroke=None)
+            .configure(background="#f9f8f3")
         )
         st.altair_chart(compare_chart, width="stretch")
 
