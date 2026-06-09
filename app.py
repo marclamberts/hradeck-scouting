@@ -24,6 +24,12 @@ from scouting_model import (
     SET_PIECE_ROLES,
 )
 from monte_carlo import PlayerProjection, BatchProjector, METRIC_TYPE_MAP
+from wyscout_model import (
+    build_wyscout_dashboard_data,
+    available_leagues as wyscout_available_leagues,
+    PROJECTION_METRICS as WYSCOUT_PROJ_METRICS,
+    ALL_SCORE_COLS as WYSCOUT_SCORE_COLS,
+)
 
 import numpy as np
 import pandas as pd
@@ -1927,7 +1933,9 @@ def enter_scouting_workspace() -> None:
 
 
 def render_workspace_nav(location: str = "top") -> None:
-    active = st.session_state.get("active_workspace", "Recruitment")
+    active = st.session_state.get("active_workspace", "Command")
+
+    # ── Top bar: brand + workspace buttons ───────────────────────────────────
     brand_col, *nav_col_list = st.columns([3] + [1] * len(WORKSPACES), gap="small")
     with brand_col:
         st.markdown(
@@ -1950,6 +1958,109 @@ def render_workspace_nav(location: str = "top") -> None:
                 on_click=set_workspace,
                 args=(section,),
             )
+
+    # ── Data source strip ────────────────────────────────────────────────────
+    src_col, league_col, info_col = st.columns([2, 5, 3], gap="small")
+    with src_col:
+        current_src = st.session_state.get("data_source", "IMPECT")
+        new_src = st.radio(
+            "Data source",
+            ["IMPECT", "Wyscout"],
+            index=0 if current_src == "IMPECT" else 1,
+            horizontal=True,
+            key=f"ds_radio_{location}",
+            label_visibility="collapsed",
+        )
+        if new_src != current_src:
+            st.session_state["data_source"] = new_src
+            # Clear cached Wyscout data when switching
+            st.session_state.pop("ws_dashboard_data", None)
+            st.rerun()
+
+    with league_col:
+        if st.session_state.get("data_source") == "Wyscout":
+            all_leagues = wyscout_available_leagues()
+            prev_sel = st.session_state.get("ws_selected_leagues", all_leagues)
+            sel_leagues = st.multiselect(
+                "Leagues",
+                all_leagues,
+                default=prev_sel,
+                key=f"ws_leagues_{location}",
+                placeholder="All leagues",
+                label_visibility="collapsed",
+            )
+            if sel_leagues != st.session_state.get("ws_selected_leagues"):
+                st.session_state["ws_selected_leagues"] = sel_leagues
+                st.session_state.pop("ws_dashboard_data", None)
+        else:
+            st.markdown(
+                "<div style='padding:8px 0;font-size:.7rem;color:#888;font-style:italic'>"
+                "IMPECT model data — recruitment scores across 16 European leagues</div>",
+                unsafe_allow_html=True,
+            )
+
+    with info_col:
+        src = st.session_state.get("data_source", "IMPECT")
+        mins_filter = st.session_state.get("ws_min_minutes", 400)
+        if src == "Wyscout":
+            n_leagues = len(st.session_state.get("ws_selected_leagues") or wyscout_available_leagues())
+            st.markdown(
+                f"<div style='padding:8px 0;font-size:.7rem;color:#888;font-style:italic'>"
+                f"Wyscout DB · {n_leagues} leagues selected · min {mins_filter} min</div>",
+                unsafe_allow_html=True,
+            )
+
+
+@st.cache_data(show_spinner=False, ttl=600)
+def _load_wyscout_scored(leagues_key: tuple[str, ...] | None, min_minutes: int) -> pd.DataFrame:
+    """Cached Wyscout load + full model scoring."""
+    leagues = list(leagues_key) if leagues_key else None
+    return build_wyscout_dashboard_data(min_minutes=min_minutes, leagues=leagues)
+
+
+def get_active_data() -> tuple[pd.DataFrame, str]:
+    """
+    Return (data, source) where source is 'IMPECT' or 'Wyscout'.
+    Handles caching and league filtering for the Wyscout path.
+    """
+    src = st.session_state.get("data_source", "IMPECT")
+    if src == "Wyscout":
+        sel = st.session_state.get("ws_selected_leagues") or None
+        leagues_key = tuple(sorted(sel)) if sel else None
+        min_min = st.session_state.get("ws_min_minutes", 400)
+        cache_key = ("ws_dashboard_data", leagues_key, min_min)
+        if st.session_state.get("ws_cache_key") != cache_key:
+            with st.spinner("Building Wyscout model — scoring leagues…"):
+                df = _load_wyscout_scored(leagues_key, min_min)
+            st.session_state["ws_dashboard_data"] = df
+            st.session_state["ws_cache_key"] = cache_key
+        return st.session_state["ws_dashboard_data"], "Wyscout"
+    return load_default_data(), "IMPECT"
+
+
+def active_score_cols(df: pd.DataFrame, source: str) -> list[str]:
+    """Return the score columns relevant for the active data source."""
+    if source == "Wyscout":
+        candidates = WYSCOUT_SCORE_COLS
+    else:
+        candidates = [
+            "DecisionScore", "ValueRecruitmentScore", "CompositeRecruitmentScore",
+            "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
+            "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
+            "ASA_GoalsAddedScore", "AgeResaleScore", "PerformanceReliabilityScore",
+        ]
+    return [c for c in candidates if c in df.columns]
+
+
+def active_proj_metrics(df: pd.DataFrame, source: str) -> list[str]:
+    """Return projection-suitable metric columns for the active data source."""
+    if source == "Wyscout":
+        return [m for m in WYSCOUT_PROJ_METRICS if m in df.columns]
+    return [m for m in [
+        "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
+        "PressingScore", "BallSecurityScore", "ExpectedThreatScore", "ASA_GoalsAddedScore",
+        "DecisionScore", "ValueRecruitmentScore",
+    ] if m in df.columns]
 
 
 BALANCED_WEIGHTS = {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1}
@@ -4549,10 +4660,10 @@ def _fte_metric_bars(proj: PlayerProjection) -> "plt.Figure":
     return fig
 
 
-def render_projections_workspace(data: pd.DataFrame) -> None:
+def render_projections_workspace(data: pd.DataFrame, source: str = "IMPECT") -> None:
     """3-season Monte Carlo player projection — FiveThirtyEight-style fan charts."""
 
-    score_cols_proj = [m for m in PROJ_METRICS_IMPECT if m in data.columns]
+    score_cols_proj = active_proj_metrics(data, source)
 
     with st.sidebar:
         st.markdown(
@@ -6068,7 +6179,7 @@ if "active_workspace" not in st.session_state:
 render_workspace_nav("main")
 
 active_workspace = st.session_state.get("active_workspace", "Command")
-data = load_default_data()
+data, _active_source = get_active_data()
 model_metadata = load_model_metadata()
 
 if active_workspace == "Command":
@@ -6084,7 +6195,7 @@ elif active_workspace == "Player Intel":
     render_player_intel_workspace(data)
     st.stop()
 elif active_workspace == "Projections":
-    render_projections_workspace(data)
+    render_projections_workspace(data, source=_active_source)
     st.stop()
 elif active_workspace == "Watchlist":
     render_watchlist_workspace(data)
