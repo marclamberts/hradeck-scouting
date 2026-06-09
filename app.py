@@ -952,8 +952,8 @@ def _render_wyscout_bars(
     n = len(metrics)
     fig_h = max(4.0, n * 0.56 + 1.4)
     fig, ax = plt.subplots(figsize=(7.2, fig_h), dpi=130)
-    fig.patch.set_facecolor("#0d1117")
-    ax.set_facecolor("#0d1117")
+    fig.patch.set_facecolor("#f9f8f3")
+    ax.set_facecolor("#ffffff")
 
     pcts: list[float | None] = []
     raw_strs: list[str] = []
@@ -973,34 +973,34 @@ def _render_wyscout_bars(
     y_pos = list(range(n - 1, -1, -1))
 
     for y, m, pct, raw in zip(y_pos, metrics, pcts, raw_strs):
-        ax.barh(y, 100, height=0.62, color="#161b22", zorder=1)
+        ax.barh(y, 100, height=0.62, color="#eeede8", zorder=1)
         if pct is not None:
             clr = "#0d9e7d" if pct >= 67 else ("#f4a261" if pct >= 34 else "#e76f51")
             ax.barh(y, pct, height=0.62, color=clr, zorder=2, alpha=0.88)
             x_txt = max(pct - 1.5, 2.0)
             ha = "right" if pct > 8 else "left"
             ax.text(x_txt, y, f"{pct:.0f}", va="center", ha=ha,
-                    fontsize=8, color="#ffffff", fontweight="bold", zorder=3)
-        ax.text(102, y, raw, va="center", ha="left", fontsize=7.5, color="#8b949e", zorder=3)
+                    fontsize=8, color="#1a1a1a", fontweight="bold", zorder=3)
+        ax.text(102, y, raw, va="center", ha="left", fontsize=7.5, color="#888888", zorder=3)
 
-    ax.axvline(50, color="#30363d", linewidth=1.2, linestyle="--", zorder=3)
+    ax.axvline(50, color="#cccccc", linewidth=1.2, linestyle="--", zorder=3)
     ax.set_yticks(list(range(n)))
-    ax.set_yticklabels([m for m in reversed(metrics)], fontsize=8, color="#c9d1d9")
+    ax.set_yticklabels([m for m in reversed(metrics)], fontsize=8, color="#1a1a1a")
     ax.set_xlim(0, 116)
     ax.set_ylim(-0.5, n - 0.5)
     ax.set_xticks([0, 25, 50, 75, 100])
-    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=7, color="#6e7681")
-    ax.tick_params(axis="x", length=3, color="#30363d")
+    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=7, color="#888888")
+    ax.tick_params(axis="x", length=3, color="#cccccc")
     ax.tick_params(axis="y", length=0)
     for sp in ax.spines.values():
         sp.set_visible(False)
-    ax.grid(axis="x", color="#21262d", linewidth=0.5, zorder=0)
+    ax.grid(axis="x", color="#eeede8", linewidth=0.5, zorder=0)
 
     pool_n = len(pos_pool)
     fig.text(0.02, 0.98, f"Wyscout · {ws_file.replace('.xlsx','')}", ha="left", va="top",
-             fontsize=10, fontweight="bold", color="#e6edf3")
+             fontsize=10, fontweight="bold", color="#1a1a1a")
     fig.text(0.02, 0.945, f"{pos_group} · percentile vs {pool_n} position peers · 50 = average",
-             ha="left", va="top", fontsize=8, color="#8b949e")
+             ha="left", va="top", fontsize=8, color="#888888")
     plt.tight_layout(rect=[0, 0, 1, 0.93])
     return fig
 
@@ -1342,22 +1342,22 @@ def render_player_pizza(reference_df: pd.DataFrame, row: pd.Series):
 
 def render_score_distribution(df: pd.DataFrame, metric: str, highlight: float | None = None):
     fig, ax = plt.subplots(figsize=(9, 4.8), dpi=150)
-    fig.patch.set_facecolor("#080c14")
-    ax.set_facecolor("#0f1623")
+    fig.patch.set_facecolor("#f9f8f3")
+    ax.set_facecolor("#ffffff")
     values = pd.to_numeric(df[metric], errors="coerce").dropna()
-    ax.hist(values, bins=28, color="#00d4a8", alpha=0.65, edgecolor="#080c14", linewidth=0.8)
-    ax.axvline(values.median(), color="#8fa3b1", linewidth=1.8, linestyle="--", label=f"Median {values.median():.1f}")
+    ax.hist(values, bins=28, color="#1478b0", alpha=0.65, edgecolor="#f9f8f3", linewidth=0.8)
+    ax.axvline(values.median(), color="#888888", linewidth=1.8, linestyle="--", label=f"Median {values.median():.1f}")
     if highlight is not None:
-        ax.axvline(highlight, color="#f59e0b", linewidth=2.5, label=f"Selected {highlight:.1f}")
-    ax.set_title(f"{metric} distribution", loc="left", fontsize=13, fontweight="bold", color="#e8edf3")
-    ax.set_xlabel("Score", color="#8fa3b1", fontsize=9)
-    ax.set_ylabel("Players", color="#8fa3b1", fontsize=9)
-    ax.tick_params(colors="#8fa3b1")
+        ax.axvline(highlight, color="#ee3a27", linewidth=2.5, label=f"Selected {highlight:.1f}")
+    ax.set_title(f"{metric} distribution", loc="left", fontsize=13, fontweight="bold", color="#1a1a1a")
+    ax.set_xlabel("Score", color="#888888", fontsize=9)
+    ax.set_ylabel("Players", color="#888888", fontsize=9)
+    ax.tick_params(colors="#888888")
     for spine in ax.spines.values():
-        spine.set_edgecolor("#1e2d3d")
-    ax.grid(axis="y", color="#1e2d3d", linewidth=0.7, alpha=0.8)
+        spine.set_edgecolor("#cccccc")
+    ax.grid(axis="y", color="#eeede8", linewidth=0.7, alpha=0.8)
     ax.spines[["top", "right"]].set_visible(False)
-    legend = ax.legend(frameon=True, facecolor="#141d2b", edgecolor="#1e2d3d", labelcolor="#e8edf3", fontsize=9)
+    legend = ax.legend(frameon=True, facecolor="#ffffff", edgecolor="#cccccc", labelcolor="#1a1a1a", fontsize=9)
     fig.tight_layout()
     return fig
 
@@ -1373,22 +1373,22 @@ def render_league_heatmap(df: pd.DataFrame, metric: str):
         top_leagues = df.groupby("BundleLabel")["PlayerName"].count().sort_values(ascending=False).head(18).index
         pivot = pivot.loc[pivot.index.intersection(top_leagues)]
     fig, ax = plt.subplots(figsize=(10, max(4.5, len(pivot) * 0.34)), dpi=150)
-    fig.patch.set_facecolor("#080c14")
-    ax.set_facecolor("#0f1623")
+    fig.patch.set_facecolor("#f9f8f3")
+    ax.set_facecolor("#ffffff")
     im = ax.imshow(pivot.fillna(np.nan), cmap="YlGnBu", aspect="auto", vmin=20, vmax=75)
-    ax.set_xticks(range(len(pivot.columns)), labels=pivot.columns, fontsize=9, fontweight="bold", color="#e8edf3")
-    ax.set_yticks(range(len(pivot.index)), labels=pivot.index, fontsize=8, color="#8fa3b1")
-    ax.tick_params(colors="#8fa3b1")
-    ax.set_title(f"League depth | median {metric}", loc="left", fontsize=13, fontweight="bold", color="#e8edf3")
+    ax.set_xticks(range(len(pivot.columns)), labels=pivot.columns, fontsize=9, fontweight="bold", color="#1a1a1a")
+    ax.set_yticks(range(len(pivot.index)), labels=pivot.index, fontsize=8, color="#888888")
+    ax.tick_params(colors="#888888")
+    ax.set_title(f"League depth | median {metric}", loc="left", fontsize=13, fontweight="bold", color="#1a1a1a")
     for i in range(len(pivot.index)):
         for j in range(len(pivot.columns)):
             val = pivot.iloc[i, j]
             if pd.notna(val):
-                ax.text(j, i, f"{val:.0f}", ha="center", va="center", fontsize=7, color="#080c14", fontweight="bold")
+                ax.text(j, i, f"{val:.0f}", ha="center", va="center", fontsize=7, color="#1a1a1a", fontweight="bold")
     ax.spines[:].set_visible(False)
     cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
     cbar.outline.set_visible(False)
-    cbar.ax.tick_params(colors="#8fa3b1")
+    cbar.ax.tick_params(colors="#888888")
     fig.tight_layout()
     return fig
 
@@ -3549,25 +3549,25 @@ def render_deep_scan_workspace(data: pd.DataFrame) -> None:
         metric_ticks = [label_map.get(c.replace("_z_", ""), c.replace("_z_", "")) for c in z_cols]
 
         fig_h, ax_h = plt.subplots(figsize=(max(8, len(z_cols) * 0.95), max(5, hm_n * 0.38)))
-        fig_h.patch.set_facecolor("#080c14")
-        ax_h.set_facecolor("#0f1623")
+        fig_h.patch.set_facecolor("#f9f8f3")
+        ax_h.set_facecolor("#ffffff")
         sns.heatmap(
             hm_matrix, ax=ax_h,
             cmap="RdYlGn", center=0, vmin=-2, vmax=4,
-            linewidths=0.4, linecolor="#0f1623",
+            linewidths=0.4, linecolor="#ffffff",
             xticklabels=metric_ticks, yticklabels=hm_labels,
             annot=(hm_n <= 20), fmt=".1f" if hm_n <= 20 else "",
             cbar_kws={"label": "anomaly signal (z)", "shrink": 0.6},
         )
-        ax_h.tick_params(colors="#8fa3b1", labelsize=9)
+        ax_h.tick_params(colors="#888888", labelsize=9)
         ax_h.set_title(
             f"Anomaly fingerprint — top {hm_n} players × {len(z_cols)} metrics",
-            color="#8fa3b1", fontsize=11, pad=12,
+            color="#888888", fontsize=11, pad=12,
         )
         for spine in ax_h.spines.values():
-            spine.set_edgecolor("#1e2d3d")
-        plt.xticks(rotation=35, ha="right", color="#8fa3b1")
-        plt.yticks(color="#8fa3b1", fontsize=8)
+            spine.set_edgecolor("#cccccc")
+        plt.xticks(rotation=35, ha="right", color="#888888")
+        plt.yticks(color="#888888", fontsize=8)
         plt.tight_layout()
         st.pyplot(fig_h, clear_figure=True)
         st.markdown(
@@ -3943,20 +3943,20 @@ def render_command_workspace(data: pd.DataFrame) -> None:
         )
         if not pivot.empty:
             fig_piv, ax_piv = plt.subplots(figsize=(9, max(3, len(pivot) * 0.55)))
-            fig_piv.patch.set_facecolor("#080c14")
-            ax_piv.set_facecolor("#0f1623")
+            fig_piv.patch.set_facecolor("#f9f8f3")
+            ax_piv.set_facecolor("#ffffff")
             sns.heatmap(
                 pivot.astype(int), ax=ax_piv,
-                cmap="YlOrRd", linewidths=0.5, linecolor="#0f1623",
+                cmap="YlOrRd", linewidths=0.5, linecolor="#ffffff",
                 annot=True, fmt="d",
                 cbar_kws={"shrink": 0.6, "label": "count"},
             )
-            ax_piv.tick_params(colors="#8fa3b1", labelsize=9)
-            ax_piv.set_xlabel("", color="#8fa3b1")
-            ax_piv.set_ylabel("", color="#8fa3b1")
-            ax_piv.set_title("Anomaly count — position × type", color="#8fa3b1", fontsize=11, pad=10)
-            plt.xticks(rotation=20, ha="right", color="#8fa3b1", fontsize=9)
-            plt.yticks(color="#8fa3b1", fontsize=9)
+            ax_piv.tick_params(colors="#888888", labelsize=9)
+            ax_piv.set_xlabel("", color="#888888")
+            ax_piv.set_ylabel("", color="#888888")
+            ax_piv.set_title("Anomaly count — position × type", color="#888888", fontsize=11, pad=10)
+            plt.xticks(rotation=20, ha="right", color="#888888", fontsize=9)
+            plt.yticks(color="#888888", fontsize=9)
             plt.tight_layout()
             st.pyplot(fig_piv, clear_figure=True)
 
@@ -4339,18 +4339,18 @@ def render_player_intel_workspace(data: pd.DataFrame) -> None:
         metric_ticks = [label_map.get(c.replace("_z_", ""), c.replace("_z_", "")) for c in z_cols]
 
         fig_f, ax_f = plt.subplots(figsize=(max(8, len(z_cols) * 0.9), max(4, len(combined) * 0.42)))
-        fig_f.patch.set_facecolor("#080c14")
-        ax_f.set_facecolor("#0f1623")
+        fig_f.patch.set_facecolor("#f9f8f3")
+        ax_f.set_facecolor("#ffffff")
         sns.heatmap(
             hm_matrix, ax=ax_f, cmap="RdYlGn", center=0, vmin=-2, vmax=4,
-            linewidths=0.4, linecolor="#0f1623",
+            linewidths=0.4, linecolor="#ffffff",
             xticklabels=metric_ticks, yticklabels=hm_labels,
             annot=True, fmt=".1f",
             cbar_kws={"label": "z-score", "shrink": 0.6},
         )
-        ax_f.tick_params(colors="#8fa3b1", labelsize=9)
+        ax_f.tick_params(colors="#888888", labelsize=9)
         ax_f.set_title(f"Anomaly fingerprint — {sel_name} vs top {pos_group} outliers",
-                       color="#8fa3b1", fontsize=11, pad=10)
+                       color="#888888", fontsize=11, pad=10)
         # Highlight selected player row
         idx = hm_labels.index(sel_name) if sel_name in hm_labels else -1
         if idx >= 0:
@@ -5867,7 +5867,7 @@ st.markdown(
         min-height: 36px !important; gap: 3px !important;
     }
     .stMultiSelect [data-baseweb="select"] > div:first-child:focus-within {
-        border-color: rgba(0,199,183,.5) !important;
+        border-color: rgba(20,120,176,.5) !important;
         box-shadow: 0 0 0 3px var(--teal-dim) !important;
     }
     .stMultiSelect [data-baseweb="tag"] {
@@ -5891,7 +5891,7 @@ st.markdown(
         min-height: 36px !important;
     }
     .stSelectbox [data-baseweb="select"] > div:first-child:focus-within {
-        border-color: rgba(0,199,183,.5) !important;
+        border-color: rgba(20,120,176,.5) !important;
         box-shadow: 0 0 0 3px var(--teal-dim) !important;
     }
     [data-baseweb="popover"] { z-index: 9999 !important; }
@@ -5974,7 +5974,7 @@ st.markdown(
     }
     [data-testid="stSegmentedControl"] label:has(input:checked) {
         background: var(--teal-dim) !important; color: var(--teal-hi) !important;
-        border: 1px solid rgba(0,199,183,.25) !important;
+        border: 1px solid rgba(20,120,176,.25) !important;
     }
     [data-testid="stSegmentedControl"] input { display: none !important; }
 
@@ -6007,11 +6007,11 @@ st.markdown(
     }
     .stButton > button[kind="primary"] {
         background: var(--teal-dim) !important;
-        border-color: rgba(0,199,183,.4) !important;
+        border-color: rgba(20,120,176,.4) !important;
         color: var(--teal-hi) !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
-        border-color: rgba(0,199,183,.5) !important;
+        border-color: rgba(20,120,176,.5) !important;
         color: var(--teal-hi) !important;
         background: var(--teal-dim) !important;
     }
@@ -6058,7 +6058,7 @@ st.markdown(
     }
     div[data-testid="stTabs"] button[aria-selected="true"] {
         color: var(--ink) !important; font-weight: 700 !important;
-        border-bottom: 2px solid var(--teal) !important;
+        border-bottom: 2px solid var(--fte-red) !important;
     }
     div[data-testid="stTabs"] button:hover { color: var(--ink) !important; }
     div[data-testid="stTabsContent"] { padding-top: 16px !important; }
@@ -6137,7 +6137,7 @@ st.markdown(
         color: var(--faint); border-radius: 99px; padding: 2px 10px;
         font-size: .61rem; font-weight: 600; letter-spacing: .01em;
     }
-    .pill.teal  { background: var(--teal-dim); border-color: rgba(0,199,183,.25); color: var(--teal-hi); }
+    .pill.teal  { background: var(--teal-dim); border-color: rgba(20,120,176,.25); color: var(--teal-hi); }
     .pill.amber { background: rgba(240,160,42,.08); border-color: rgba(240,160,42,.25); color: var(--amber); }
     .pill.red   { background: rgba(247,88,96,.08); border-color: rgba(247,88,96,.25); color: var(--red); }
 
