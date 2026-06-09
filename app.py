@@ -23,6 +23,7 @@ from scouting_model import (
     SET_PIECE_ALL,
     SET_PIECE_ROLES,
 )
+from monte_carlo import PlayerProjection, BatchProjector, METRIC_TYPE_MAP
 
 import numpy as np
 import pandas as pd
@@ -1902,12 +1903,13 @@ def set_quick_mode(mode: str) -> None:
         reset_filters()
 
 
-WORKSPACES = ["Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist", "Set Piece"]
+WORKSPACES = ["Command", "Deep Scan", "Cross-Source", "Player Intel", "Projections", "Watchlist", "Set Piece"]
 _WORKSPACE_ICONS = {
     "Command":      ("⚡", "Anomaly landscape"),
     "Deep Scan":    ("🔬", "Multi-method detector"),
     "Cross-Source": ("🔗", "Wyscout divergence"),
     "Player Intel": ("🧠", "Player deep-dive"),
+    "Projections":  ("📈", "3-season Monte Carlo"),
     "Watchlist":    ("📋", "Saved targets"),
     "Set Piece":    ("🎯", "Set-piece scouting"),
 }
@@ -4378,6 +4380,521 @@ def _load_all_wyscout_for_setpiece() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PROJECTIONS workspace
+# ─────────────────────────────────────────────────────────────────────────────
+
+FTE_PALETTE = {
+    "band_outer": "#d8eaf7",   # 10-90 band
+    "band_inner": "#a0cce8",   # 25-75 band
+    "median":     "#1478b0",   # median line
+    "breakout":   "#3fb34f",
+    "expected":   "#1a1a1a",
+    "decline":    "#ee3a27",
+    "now":        "#888888",
+}
+
+PROJ_METRICS_IMPECT = [
+    "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
+    "PressingScore", "BallSecurityScore", "ExpectedThreatScore", "ASA_GoalsAddedScore",
+    "DecisionScore", "ValueRecruitmentScore",
+]
+
+PROJ_METRICS_WYSCOUT = [
+    "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+    "Key passes per 90", "Progressive passes per 90", "Dribbles per 90",
+    "Successful defensive actions per 90", "Aerial duels won, %",
+]
+
+
+def _fte_fan_chart(
+    proj: PlayerProjection,
+    metric: str | None = None,
+) -> "plt.Figure":
+    """
+    FiveThirtyEight-style fan chart.
+    If metric is None, uses composite score (normalised to 100 = current).
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.lines import Line2D
+
+    if metric and metric in proj.percentiles:
+        bands = {}
+        current_val = proj.metrics[metric]
+        for pct in [10, 25, 50, 75, 90]:
+            vals = [current_val] + proj.percentiles[metric][pct]
+            bands[pct] = vals
+        y_label = metric
+        y_now   = current_val
+    else:
+        cb = proj.composite_bands()
+        if cb.empty:
+            return plt.figure()
+        bands = {pct: cb[f"P{pct}"].tolist() for pct in [10, 25, 50, 75, 90]}
+        y_label = "Relative performance (Now = 100)"
+        y_now   = 100.0
+
+    x = list(range(proj.n_seasons + 1))
+    x_labels = ["Now"] + [f"Season {t+1}" for t in range(proj.n_seasons)]
+
+    fig, ax = plt.subplots(figsize=(9, 5), dpi=130)
+    fig.patch.set_facecolor("#f9f8f3")
+    ax.set_facecolor("#f9f8f3")
+
+    # Bands
+    ax.fill_between(x, bands[10], bands[90], color=FTE_PALETTE["band_outer"], alpha=0.9, label="10–90th pct")
+    ax.fill_between(x, bands[25], bands[75], color=FTE_PALETTE["band_inner"], alpha=0.9, label="25–75th pct")
+    ax.plot(x, bands[50], color=FTE_PALETTE["median"], linewidth=2.5, label="Median", zorder=5)
+
+    # Scenario lines
+    if proj.composite_trajectories is not None and metric is None:
+        final = proj.composite_trajectories[:, -1]
+        for scenario, pct, color, ls in [
+            ("Breakout", 90, FTE_PALETTE["breakout"], "--"),
+            ("Decline",  10, FTE_PALETTE["decline"],  ":"),
+        ]:
+            sim_idx = np.argmin(np.abs(final - np.percentile(final, pct)))
+            traj = [100.0] + proj.composite_trajectories[sim_idx, :].tolist()
+            ax.plot(x, traj, color=color, linewidth=1.4, linestyle=ls, alpha=0.85, label=scenario)
+
+    # "Now" marker
+    ax.scatter([0], [y_now], color=FTE_PALETTE["now"], s=60, zorder=10, clip_on=False)
+
+    # Vertical gridlines at each season
+    for xi in x[1:]:
+        ax.axvline(xi, color="#cccccc", linewidth=0.7, zorder=0)
+
+    # FTE style
+    ax.set_xticks(x)
+    ax.set_xticklabels(x_labels, fontsize=10, color="#444444")
+    ax.tick_params(axis="y", colors="#888888", labelsize=9)
+    ax.tick_params(axis="x", length=0)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    ax.spines["bottom"].set_color("#cccccc")
+    ax.yaxis.grid(True, color="#cccccc", linewidth=0.6, zorder=0)
+    ax.set_axisbelow(True)
+    ax.set_ylabel(y_label, fontsize=9, color="#888888")
+
+    # Title block
+    fig.text(
+        0.11, 0.97,
+        f"{proj.player_name}  ·  {proj.position}  ·  Age {proj.current_age:.0f}",
+        ha="left", va="top", fontsize=13, fontweight="900", color="#1a1a1a",
+        transform=fig.transFigure,
+    )
+    fig.text(
+        0.11, 0.91,
+        f"Monte Carlo projection — {proj.n_simulations:,} simulations  ·  {proj.n_seasons} seasons",
+        ha="left", va="top", fontsize=9, color="#888888", style="italic",
+        transform=fig.transFigure,
+    )
+
+    legend_handles = [
+        mpatches.Patch(color=FTE_PALETTE["band_outer"], label="10–90th percentile"),
+        mpatches.Patch(color=FTE_PALETTE["band_inner"], label="25–75th percentile"),
+        Line2D([0], [0], color=FTE_PALETTE["median"],   linewidth=2,   label="Median"),
+        Line2D([0], [0], color=FTE_PALETTE["breakout"], linewidth=1.4, linestyle="--", label="Breakout (90th)"),
+        Line2D([0], [0], color=FTE_PALETTE["decline"],  linewidth=1.4, linestyle=":",  label="Decline (10th)"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="upper right", frameon=True,
+        facecolor="#ffffff", edgecolor="#cccccc", fontsize=8.5,
+        labelcolor="#444444",
+    )
+
+    fig.subplots_adjust(top=0.83, left=0.11, right=0.96, bottom=0.1)
+    return fig
+
+
+def _fte_metric_bars(proj: PlayerProjection) -> "plt.Figure":
+    """Horizontal bar chart: per-metric P10/P50/P90 for season 1 vs season 3."""
+    import matplotlib.pyplot as plt
+
+    metrics   = [m for m in proj.metrics if m in proj.percentiles]
+    if not metrics:
+        return plt.figure()
+
+    fig, axes = plt.subplots(1, proj.n_seasons, figsize=(4 * proj.n_seasons, max(4, len(metrics) * 0.45)), dpi=120, sharey=True)
+    if proj.n_seasons == 1:
+        axes = [axes]
+    fig.patch.set_facecolor("#f9f8f3")
+
+    for t, ax in enumerate(axes):
+        ax.set_facecolor("#f9f8f3")
+        current_vals = np.array([proj.metrics[m] for m in metrics])
+        p10 = np.array([proj.percentiles[m][10][t] for m in metrics])
+        p50 = np.array([proj.percentiles[m][50][t] for m in metrics])
+        p90 = np.array([proj.percentiles[m][90][t] for m in metrics])
+        y   = np.arange(len(metrics))
+
+        ax.barh(y, p90 - p10, left=p10, height=0.5, color=FTE_PALETTE["band_outer"], zorder=2)
+        ax.barh(y, p50 - p10, left=p10, height=0.5, color=FTE_PALETTE["band_inner"], alpha=0.7, zorder=3)
+        ax.scatter(p50, y, color=FTE_PALETTE["median"], s=28, zorder=5)
+        ax.scatter(current_vals, y, color=FTE_PALETTE["now"], s=18, marker="D", zorder=4, label="Current" if t == 0 else "")
+        ax.axvline(0, color="#cccccc", linewidth=0.7)
+
+        ax.set_yticks(y)
+        ax.set_yticklabels([m[:28] for m in metrics], fontsize=8, color="#444444")
+        ax.set_title(f"Season {t+1}", fontsize=10, fontweight="700", color="#1a1a1a", pad=8)
+        ax.tick_params(axis="x", colors="#888888", labelsize=8)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.spines[["left", "bottom"]].set_color("#cccccc")
+        ax.yaxis.grid(False)
+        ax.xaxis.grid(True, color="#cccccc", linewidth=0.5, zorder=0)
+        ax.set_axisbelow(True)
+
+    fig.suptitle("Per-metric projection bands (blue marker = median, ◆ = current)", fontsize=9, color="#888888", style="italic", y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_projections_workspace(data: pd.DataFrame) -> None:
+    """3-season Monte Carlo player projection — FiveThirtyEight-style fan charts."""
+
+    score_cols_proj = [m for m in PROJ_METRICS_IMPECT if m in data.columns]
+
+    with st.sidebar:
+        st.markdown(
+            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>📈</div>"
+            "<div><div class='sidebar-brand-title'>Projections</div>"
+            "<div class='sidebar-brand-meta'>Monte Carlo · 3 seasons</div></div></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='sbar-hdr'>Player</div>", unsafe_allow_html=True)
+        player_names_proj = sorted(data["PlayerName"].dropna().astype(str).unique())
+        sel_proj_player   = st.selectbox("Select player", player_names_proj, key="proj_player")
+
+        st.markdown("<div class='sbar-hdr'>Simulation</div>", unsafe_allow_html=True)
+        n_sims    = st.select_slider("Simulations", [500, 1000, 2500, 5000], value=1000, key="proj_n_sims")
+        n_seasons = st.slider("Seasons to project", 1, 5, 3, key="proj_n_seasons")
+
+        st.markdown("<div class='sbar-hdr'>Metrics</div>", unsafe_allow_html=True)
+        proj_metric_opts = score_cols_proj if score_cols_proj else ["(no scores available)"]
+        sel_proj_metrics = st.multiselect("Metrics", proj_metric_opts, default=proj_metric_opts[:6], key="proj_metrics")
+
+    st.markdown(
+        "<div class='page-header'>"
+        "<div class='page-header-title'>Player Projections</div>"
+        "<div class='page-header-sub'>Monte Carlo simulation — position-specific age curves, regression to mean, uncertainty bands</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    player_rows = data.loc[data["PlayerName"].astype(str) == sel_proj_player]
+    if player_rows.empty:
+        st.info("Select a player in the sidebar.")
+        return
+    player_row = player_rows.iloc[0]
+    pos        = str(player_row.get("PositionGroup", "CM"))
+    age_raw    = pd.to_numeric(player_row.get("AgeYears"), errors="coerce")
+    age        = float(age_raw) if pd.notna(age_raw) else 25.0
+    mins       = float(pd.to_numeric(player_row.get("MinutesPlayed", 900), errors="coerce") or 900)
+
+    metric_vals: dict[str, float] = {}
+    for m in (sel_proj_metrics or score_cols_proj):
+        v = pd.to_numeric(player_row.get(m), errors="coerce")
+        if pd.notna(v) and float(v) > 0:
+            metric_vals[m] = float(v)
+
+    if not metric_vals:
+        st.warning("No valid metric values for this player. Try a different metric selection.")
+        return
+
+    with st.spinner(f"Running {n_sims:,} simulations…"):
+        proj = PlayerProjection(
+            player_name=sel_proj_player,
+            team=str(player_row.get("TeamName", "")),
+            position=pos,
+            current_age=age,
+            metrics=metric_vals,
+            minutes=mins,
+            n_seasons=n_seasons,
+            n_simulations=n_sims,
+        )
+        proj.run()
+
+    if proj.composite_trajectories is None:
+        st.warning("Simulation produced no output.")
+        return
+
+    # ── KPI strip ─────────────────────────────────────────────────────────────
+    cb = proj.composite_bands()
+    k_cols = st.columns(4 + n_seasons)
+    with k_cols[0]:
+        metric_card("Player", sel_proj_player, f"{pos} · Age {age:.0f}")
+    with k_cols[1]:
+        metric_card("Team", str(player_row.get("TeamName", "—")), str(player_row.get("BundleLabel", "")))
+    with k_cols[2]:
+        metric_card("Minutes", f"{mins:,.0f}", "this season")
+    with k_cols[3]:
+        metric_card("Metrics modelled", str(len(metric_vals)), "in simulation")
+    for t in range(n_seasons):
+        with k_cols[4 + t]:
+            row_t = cb.iloc[t + 1] if len(cb) > t + 1 else None
+            if row_t is not None:
+                p50 = row_t["P50"]
+                delta = p50 - 100
+                sign  = "▲" if delta >= 0 else "▼"
+                color = "#3fb34f" if delta >= 0 else "#ee3a27"
+                st.markdown(
+                    f"<div class='metric-card'>"
+                    f"<div class='metric-label'>Season {t+1} median</div>"
+                    f"<div class='metric-value'>{p50:.1f}</div>"
+                    f"<div class='metric-caption' style='color:{color}'>{sign} {abs(delta):.1f}% vs now</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown("---")
+
+    tab_fan, tab_scenarios, tab_metrics, tab_similarity, tab_batch = st.tabs([
+        "📈 Fan Chart",
+        "🎯 Scenarios",
+        "📊 Per-Metric Bands",
+        "👥 Similar Trajectories",
+        "🏆 League Rankings",
+    ])
+
+    # ── Tab 1: Fan chart ───────────────────────────────────────────────────────
+    with tab_fan:
+        metric_choice = st.selectbox(
+            "View metric (or composite)",
+            ["Composite (all metrics)"] + list(metric_vals.keys()),
+            key="proj_fan_metric",
+        )
+        chosen = None if metric_choice.startswith("Composite") else metric_choice
+        fig_fan = _fte_fan_chart(proj, chosen)
+        st.pyplot(fig_fan, clear_figure=True)
+
+        # Probability callouts
+        st.markdown("---")
+        p_cols = st.columns(3)
+        comp_final = proj.composite_trajectories[:, -1]
+        with p_cols[0]:
+            prob_up = float((comp_final >= 100).mean() * 100)
+            st.markdown(
+                f"<div class='metric-card positive'>"
+                f"<div class='metric-label'>Probability of improvement</div>"
+                f"<div class='metric-value'>{prob_up:.0f}%</div>"
+                f"<div class='metric-caption'>vs current level by Season {n_seasons}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        with p_cols[1]:
+            prob_strong = float((comp_final >= 110).mean() * 100)
+            st.markdown(
+                f"<div class='metric-card info'>"
+                f"<div class='metric-label'>Probability of breakout (+10%)</div>"
+                f"<div class='metric-value'>{prob_strong:.0f}%</div>"
+                f"<div class='metric-caption'>composite ≥ 110 by Season {n_seasons}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        with p_cols[2]:
+            prob_decline = float((comp_final <= 85).mean() * 100)
+            st.markdown(
+                f"<div class='metric-card highlight'>"
+                f"<div class='metric-label'>Probability of significant decline</div>"
+                f"<div class='metric-value'>{prob_decline:.0f}%</div>"
+                f"<div class='metric-caption'>composite ≤ 85 by Season {n_seasons}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+    # ── Tab 2: Scenarios ───────────────────────────────────────────────────────
+    with tab_scenarios:
+        sc_df = proj.scenario_table()
+        if not sc_df.empty:
+            import matplotlib.pyplot as plt
+            fig_sc, ax_sc = plt.subplots(figsize=(9, 4.5), dpi=120)
+            fig_sc.patch.set_facecolor("#f9f8f3")
+            ax_sc.set_facecolor("#f9f8f3")
+            x_sc = list(range(n_seasons + 1))
+            x_labels_sc = ["Now"] + [f"Season {t+1}" for t in range(n_seasons)]
+            colors_sc = {
+                "Breakout":   FTE_PALETTE["breakout"],
+                "Optimistic": "#90c090",
+                "Expected":   FTE_PALETTE["expected"],
+                "Cautious":   "#c0a060",
+                "Decline":    FTE_PALETTE["decline"],
+            }
+            lws = {"Breakout": 2.0, "Optimistic": 1.4, "Expected": 2.5, "Cautious": 1.4, "Decline": 2.0}
+            lss = {"Breakout": "--", "Optimistic": ":", "Expected": "-", "Cautious": ":", "Decline": "--"}
+            for _, sc_row in sc_df.iterrows():
+                label = sc_row["Scenario"]
+                vals  = [sc_row["Now"]] + [sc_row[f"Season {t+1}"] for t in range(n_seasons)]
+                ax_sc.plot(x_sc, vals, color=colors_sc.get(label, "#888"), linewidth=lws.get(label, 1.4),
+                           linestyle=lss.get(label, "-"), label=label, marker="o", markersize=5)
+            ax_sc.axhline(100, color="#cccccc", linewidth=0.8, linestyle="--")
+            ax_sc.set_xticks(x_sc)
+            ax_sc.set_xticklabels(x_labels_sc, fontsize=10, color="#444")
+            ax_sc.tick_params(axis="y", colors="#888", labelsize=9)
+            ax_sc.spines[["top", "right", "left"]].set_visible(False)
+            ax_sc.spines["bottom"].set_color("#ccc")
+            ax_sc.yaxis.grid(True, color="#ccc", linewidth=0.6)
+            ax_sc.set_axisbelow(True)
+            ax_sc.set_ylabel("Relative performance (Now = 100)", fontsize=9, color="#888")
+            ax_sc.legend(frameon=True, facecolor="#fff", edgecolor="#ccc", fontsize=9, labelcolor="#444")
+            ax_sc.set_title(f"Scenario trajectories — {sel_proj_player}", fontsize=11, fontweight="800", color="#1a1a1a", loc="left")
+            fig_sc.tight_layout()
+            st.pyplot(fig_sc, clear_figure=True)
+
+            st.caption("Scenario table")
+            numeric_scenario_cols = [c for c in sc_df.columns if c != "Scenario"]
+            sc_styled = sc_df.copy()
+            sc_styled[numeric_scenario_cols] = sc_styled[numeric_scenario_cols].round(1)
+            st.dataframe(sc_styled, hide_index=True, use_container_width=True)
+
+            # Download
+            st.download_button(
+                "Export scenarios Excel",
+                _to_excel_bytes({"Scenarios": sc_df, "Metric Summary": proj.summary_table()}),
+                f"{sel_proj_player.replace(' ', '_')}_projection.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="proj_dl_xlsx",
+            )
+
+    # ── Tab 3: Per-metric bands ────────────────────────────────────────────────
+    with tab_metrics:
+        fig_bars = _fte_metric_bars(proj)
+        st.pyplot(fig_bars, clear_figure=True)
+        st.caption("Metric summary table (P10 / median / P90 per season)")
+        st.dataframe(proj.summary_table(), hide_index=True, use_container_width=True)
+
+    # ── Tab 4: Similar trajectories ────────────────────────────────────────────
+    with tab_similarity:
+        sim_method_proj = st.radio(
+            "Similarity method", ["Cosine", "Euclidean", "Pearson"],
+            horizontal=True, key="proj_sim_method",
+        )
+        pos_pool = data.loc[data["PositionGroup"].astype(str) == pos].copy()
+        if not pos_pool.empty and sel_proj_metrics:
+            feats_sim = [m for m in sel_proj_metrics if m in pos_pool.columns]
+            if feats_sim:
+                sim_eng_proj = SimilarityEngine(feats_sim)
+                similar_proj = sim_eng_proj.find_similar(
+                    pos_pool, player_row, method=sim_method_proj.lower(), n=12, same_position=True,
+                )
+                if not similar_proj.empty:
+                    st.markdown(
+                        f"<div class='note-box'>Players with the most similar <strong>current profile</strong> to "
+                        f"<strong>{sel_proj_player}</strong> among {pos} peers — "
+                        f"{sim_method_proj} similarity on {len(feats_sim)} metrics.</div>",
+                        unsafe_allow_html=True,
+                    )
+                    disp_sim_cols = [c for c in ["PlayerName", "TeamName", "BundleLabel", "AgeYears",
+                                                  "_similarity"] + feats_sim[:4] if c in similar_proj.columns]
+                    st.dataframe(
+                        similar_proj[disp_sim_cols]
+                        .rename(columns={"PlayerName": "Player", "TeamName": "Team",
+                                         "BundleLabel": "League", "AgeYears": "Age",
+                                         "_similarity": "Similarity"})
+                        .round(3),
+                        hide_index=True, height=420,
+                    )
+
+                    # Run MC for top 3 similar and compare fan chart
+                    with st.expander("Compare fan charts — you + top 3 similar players"):
+                        top3 = similar_proj.head(3)
+                        all_players_comp = [player_row] + [top3.iloc[i] for i in range(len(top3))]
+                        comp_projs = []
+                        for comp_row in all_players_comp:
+                            comp_metric_vals = {m: float(pd.to_numeric(comp_row.get(m), errors="coerce") or 0)
+                                                for m in metric_vals if pd.to_numeric(comp_row.get(m), errors="coerce") > 0}
+                            if not comp_metric_vals:
+                                continue
+                            comp_age = float(pd.to_numeric(comp_row.get("AgeYears"), errors="coerce") or 25)
+                            cp = PlayerProjection(
+                                player_name=str(comp_row.get("PlayerName", "?")),
+                                team=str(comp_row.get("TeamName", "")),
+                                position=str(comp_row.get("PositionGroup", pos)),
+                                current_age=comp_age,
+                                metrics=comp_metric_vals,
+                                minutes=float(pd.to_numeric(comp_row.get("MinutesPlayed", 900), errors="coerce") or 900),
+                                n_seasons=n_seasons, n_simulations=500,
+                            )
+                            cp.run()
+                            comp_projs.append(cp)
+
+                        if comp_projs:
+                            import matplotlib.pyplot as plt
+                            fig_comp, ax_comp = plt.subplots(figsize=(10, 5), dpi=120)
+                            fig_comp.patch.set_facecolor("#f9f8f3")
+                            ax_comp.set_facecolor("#f9f8f3")
+                            colors_comp = [FTE_PALETTE["median"], FTE_PALETTE["breakout"],
+                                           FTE_PALETTE["decline"], "#9e56b6"]
+                            x_comp = list(range(n_seasons + 1))
+                            x_lbl  = ["Now"] + [f"S{t+1}" for t in range(n_seasons)]
+                            for ci, cp in enumerate(comp_projs):
+                                if cp.composite_trajectories is None:
+                                    continue
+                                cb_cp = cp.composite_bands()
+                                if cb_cp.empty:
+                                    continue
+                                med = cb_cp["P50"].tolist()
+                                p10 = cb_cp["P10"].tolist()
+                                p90 = cb_cp["P90"].tolist()
+                                c   = colors_comp[ci % len(colors_comp)]
+                                ax_comp.fill_between(x_comp, p10, p90, color=c, alpha=0.10)
+                                ax_comp.plot(x_comp, med, color=c, linewidth=2.0 if ci == 0 else 1.4,
+                                             label=f"{cp.player_name} (Age {cp.current_age:.0f})",
+                                             marker="o", markersize=4)
+                            ax_comp.axhline(100, color="#ccc", linewidth=0.7, linestyle="--")
+                            ax_comp.set_xticks(x_comp)
+                            ax_comp.set_xticklabels(x_lbl, fontsize=10, color="#444")
+                            ax_comp.tick_params(axis="y", colors="#888", labelsize=9)
+                            ax_comp.spines[["top", "right", "left"]].set_visible(False)
+                            ax_comp.spines["bottom"].set_color("#ccc")
+                            ax_comp.yaxis.grid(True, color="#ccc", linewidth=0.6)
+                            ax_comp.set_axisbelow(True)
+                            ax_comp.set_ylabel("Relative performance (Now = 100)", fontsize=9, color="#888")
+                            ax_comp.legend(frameon=True, facecolor="#fff", edgecolor="#ccc", fontsize=9, labelcolor="#444")
+                            ax_comp.set_title("Projected trajectories — median comparison", fontsize=11, fontweight="800", color="#1a1a1a", loc="left")
+                            fig_comp.tight_layout()
+                            st.pyplot(fig_comp, clear_figure=True)
+
+    # ── Tab 5: League rankings ─────────────────────────────────────────────────
+    with tab_batch:
+        st.markdown(
+            "<div class='note-box'>Batch-project all players in the same position group. "
+            "Shows projected composite P50 (median) for each season alongside current scores. "
+            "Capped at 300 players for performance.</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("Run league-wide projections", key="proj_batch_run"):
+            pos_pool_batch = data.loc[
+                (data["PositionGroup"].astype(str) == pos) &
+                (pd.to_numeric(data.get("MinutesPlayed", pd.Series(dtype=float)), errors="coerce").fillna(0) >= 400)
+            ].copy()
+            if pos_pool_batch.empty:
+                st.warning("No players found for this position.")
+            else:
+                with st.spinner(f"Projecting {min(len(pos_pool_batch), 300)} {pos} players…"):
+                    batcher = BatchProjector(
+                        metrics=[m for m in (sel_proj_metrics or score_cols_proj) if m in pos_pool_batch.columns],
+                        n_simulations=500,
+                        n_seasons=n_seasons,
+                    )
+                    batch_df = batcher.batch_summary(pos_pool_batch, top_n=300)
+                if batch_df.empty:
+                    st.warning("Batch projection produced no output.")
+                else:
+                    # Highlight the selected player
+                    st.caption(f"{len(batch_df)} {pos} players projected  ·  sorted by Season {n_seasons} median")
+                    sort_col = f"S{n_seasons} P50"
+                    if sort_col in batch_df.columns:
+                        batch_df = batch_df.sort_values(sort_col, ascending=False)
+                    st.dataframe(batch_df, hide_index=True, height=520, use_container_width=True)
+                    st.download_button(
+                        "Export batch projections Excel",
+                        _to_excel_bytes({f"{pos} Projections": batch_df}),
+                        f"{pos}_batch_projections.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="proj_batch_dl",
+                    )
+
+
 def render_setpiece_workspace(_data: pd.DataFrame) -> None:
     """Set-piece scouting — z-score anomalies, role classification, and similarity search."""
     import seaborn as sns
@@ -5076,38 +5593,53 @@ st.markdown(
     """
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atlas+Grotesk:wght@400;500;700;900&family=Bitter:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-    /* ── DESIGN TOKENS ───────────────────────────────────────── */
+    /* ── DESIGN TOKENS — FiveThirtyEight-inspired ───────────────── */
     :root {
-        --teal:      #00c7b7;
-        --teal-hi:   #1ad9ca;
-        --teal-dim:  rgba(0,199,183,.1);
-        --teal-glow: rgba(0,199,183,.18);
-        --ink:       #eef2fa;
-        --muted:     #7c88a0;
-        --faint:     #4e5870;
-        --border:    rgba(255,255,255,.06);
-        --border-hi: rgba(255,255,255,.1);
-        --surface:   #171f32;
-        --raised:    #1d2540;
-        --bg:        #0f1422;
-        --nav-bg:    #090e1c;
-        --amber:     #f0a02a;
-        --red:       #f75860;
-        --green:     #3bd39f;
-        --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
-        --shadow:    0 4px 16px rgba(0,0,0,.45);
-        --radius:    10px;
-        --radius-sm: 7px;
+        --fte-red:    #ee3a27;
+        --fte-blue:   #1478b0;
+        --fte-orange: #f68f26;
+        --fte-green:  #3fb34f;
+        --fte-purple: #9e56b6;
+        --fte-gray1:  #1a1a1a;
+        --fte-gray2:  #444444;
+        --fte-gray3:  #888888;
+        --fte-gray4:  #cccccc;
+        --fte-gray5:  #eeede8;
+        --fte-bg:     #f9f8f3;
+        --fte-white:  #ffffff;
+
+        /* Keep backward-compat tokens pointing to new palette */
+        --teal:      #1478b0;
+        --teal-hi:   #1889c6;
+        --teal-dim:  rgba(20,120,176,.08);
+        --teal-glow: rgba(20,120,176,.14);
+        --ink:       #1a1a1a;
+        --muted:     #888888;
+        --faint:     #aaaaaa;
+        --border:    rgba(0,0,0,.10);
+        --border-hi: rgba(0,0,0,.18);
+        --surface:   #ffffff;
+        --raised:    #f2f1ec;
+        --bg:        #f9f8f3;
+        --nav-bg:    #1a1a1a;
+        --amber:     #f68f26;
+        --red:       #ee3a27;
+        --green:     #3fb34f;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,.10);
+        --shadow:    0 4px 16px rgba(0,0,0,.12);
+        --radius:    4px;
+        --radius-sm: 3px;
         --radius-pill: 999px;
     }
 
     /* ── RESET & BASE ────────────────────────────────────────── */
     html, body, .stApp {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        background: var(--bg) !important;
-        color: var(--ink) !important;
+        background: var(--fte-bg) !important;
+        color: var(--fte-gray1) !important;
         -webkit-font-smoothing: antialiased !important;
     }
     header[data-testid="stHeader"],
@@ -5127,14 +5659,14 @@ st.markdown(
     h1, h2, h3 { font-family: 'Inter', sans-serif !important; }
     h2 { font-size: .6rem !important; font-weight: 700 !important;
          text-transform: uppercase; letter-spacing: .15em;
-         color: var(--faint) !important; border-bottom: 1px solid var(--border) !important;
+         color: var(--fte-gray3) !important; border-bottom: 2px solid var(--fte-gray1) !important;
          padding-bottom: 5px; margin-bottom: 10px !important; }
-    h3 { font-size: .82rem !important; font-weight: 700 !important; color: var(--ink) !important; margin-bottom: 5px !important; }
+    h3 { font-size: .82rem !important; font-weight: 700 !important; color: var(--fte-gray1) !important; margin-bottom: 5px !important; }
 
-    /* ── TOP NAV ─────────────────────────────────────────────── */
+    /* ── TOP NAV — FTE dark bar ──────────────────────────────── */
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
-        background: var(--nav-bg) !important;
-        border-bottom: 1px solid var(--border) !important;
+        background: #1a1a1a !important;
+        border-bottom: 3px solid var(--fte-red) !important;
         border-radius: 0 !important;
         margin-left: -2rem !important; margin-right: -2rem !important;
         margin-top: 0 !important; margin-bottom: 0 !important;
@@ -5147,73 +5679,72 @@ st.markdown(
         align-items: center !important; justify-content: center !important;
         width: 100% !important; height: 48px !important; padding: 0 8px !important;
         font-family: 'Inter', sans-serif !important;
-        font-size: .72rem !important; font-weight: 500 !important;
-        color: var(--faint) !important; letter-spacing: .01em !important;
-        border-bottom: 2px solid transparent !important;
+        font-size: .7rem !important; font-weight: 500 !important;
+        color: #aaaaaa !important; letter-spacing: .04em !important;
+        text-transform: uppercase !important;
+        border-bottom: 3px solid transparent !important;
         transition: color .12s, border-color .12s !important;
         user-select: none !important; white-space: nowrap !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
-        color: var(--ink) !important; font-weight: 600 !important;
-        border-bottom-color: var(--teal) !important;
+        color: #ffffff !important; font-weight: 700 !important;
+        border-bottom-color: var(--fte-red) !important;
     }
     [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
-        color: var(--ink) !important;
+        color: #ffffff !important;
     }
     .app-nav-brand { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 4px; }
     .app-nav-emoji { font-size: 1.25rem; line-height: 1; }
-    .app-nav-name  { font-size: .8rem; font-weight: 800; color: var(--ink); letter-spacing: -.01em; }
-    .app-nav-tagline { font-size: .56rem; color: var(--faint); margin-top: 1px; }
+    .app-nav-name  { font-size: .85rem; font-weight: 900; color: #ffffff; letter-spacing: -.01em; text-transform: uppercase; }
+    .app-nav-tagline { font-size: .55rem; color: #888888; margin-top: 1px; text-transform: uppercase; letter-spacing: .06em; }
 
-    /* ── PAGE HEADER ─────────────────────────────────────────── */
+    /* ── PAGE HEADER — editorial style ───────────────────────── */
     .page-header {
-        display: flex; align-items: center; gap: 14px;
-        padding: 24px 0 20px; border-bottom: 1px solid var(--border);
-        margin-bottom: 24px;
+        display: flex; align-items: flex-start; gap: 0;
+        padding: 32px 0 16px; border-bottom: 3px solid var(--fte-gray1);
+        margin-bottom: 28px; flex-direction: column;
     }
-    .page-header-icon {
-        font-size: 1.5rem; line-height: 1; flex-shrink: 0;
-        width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-        background: var(--surface); border-radius: var(--radius);
-        border: 1px solid var(--border-hi);
+    .page-header-icon { display: none; }
+    .page-header-title  {
+        font-size: 2rem; font-weight: 900; color: var(--fte-gray1);
+        letter-spacing: -.04em; line-height: 1.1;
+        border-left: 5px solid var(--fte-red); padding-left: 12px;
     }
-    .page-header-title  { font-size: 1.15rem; font-weight: 800; color: var(--ink); letter-spacing: -.02em; line-height: 1.1; }
-    .page-header-sub    { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+    .page-header-sub    { font-size: .75rem; color: var(--fte-gray3); margin-top: 6px; padding-left: 17px; font-style: italic; }
 
-    /* ── SIDEBAR ─────────────────────────────────────────────── */
+    /* ── SIDEBAR — light with FTE accent ────────────────────── */
     section[data-testid="stSidebar"] {
-        background: var(--nav-bg) !important;
-        border-right: 1px solid var(--border) !important;
+        background: #ffffff !important;
+        border-right: 2px solid var(--fte-gray1) !important;
     }
     section[data-testid="stSidebar"] .block-container {
         padding-top: 1.5rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
-    /* Sidebar widget labels — hide Streamlit's default labels; we use sbar-hdr instead */
     section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
-        font-size: .62rem !important; font-weight: 600 !important;
-        color: var(--faint) !important; text-transform: uppercase !important;
+        font-size: .62rem !important; font-weight: 700 !important;
+        color: var(--fte-gray2) !important; text-transform: uppercase !important;
         letter-spacing: .1em !important; margin-bottom: 2px !important;
     }
     .sidebar-brand {
         display: flex; align-items: center; gap: 9px;
-        padding: 0 0 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+        padding: 0 0 16px 0; border-bottom: 2px solid var(--fte-gray1); margin-bottom: 14px;
     }
     .sidebar-brand-icon  { font-size: 1.25rem; flex-shrink: 0; }
-    .sidebar-brand-title { color: var(--ink) !important; font-size: .8rem; font-weight: 700; }
-    .sidebar-brand-meta  { color: var(--teal) !important; font-size: .57rem; font-weight: 600;
+    .sidebar-brand-title { color: var(--fte-gray1) !important; font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+    .sidebar-brand-meta  { color: var(--fte-red) !important; font-size: .57rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: .08em; margin-top: 1px; }
     .sbar-hdr {
-        color: var(--faint); font-size: .52rem; font-weight: 700;
+        color: var(--fte-gray3); font-size: .52rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: .18em;
         margin: 18px 0 4px; padding-bottom: 5px;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--fte-gray4);
     }
     .sbar-active-bar {
-        background: var(--teal-dim); border: 1px solid rgba(0,199,183,.2);
-        border-radius: 5px; padding: 6px 10px;
-        font-size: .62rem; font-weight: 600; color: var(--teal-hi);
+        background: rgba(238,58,39,.07); border: 1px solid rgba(238,58,39,.25);
+        border-radius: 2px; padding: 6px 10px;
+        font-size: .62rem; font-weight: 600; color: var(--fte-red);
         margin: 8px 0; display: flex; align-items: center; gap: 6px;
     }
 
@@ -5453,34 +5984,40 @@ st.markdown(
         font-size: .73rem !important;
     }
 
-    /* ── CUSTOM HTML COMPONENTS ──────────────────────────────── */
+    /* ── CUSTOM HTML COMPONENTS — FTE editorial ─────────────── */
     .metric-card {
-        background: var(--surface); border: 1px solid var(--border);
-        border-top: 2px solid var(--teal); border-radius: var(--radius);
+        background: #ffffff; border: 1px solid var(--fte-gray4);
+        border-top: 4px solid var(--fte-gray1); border-radius: 0;
         padding: 14px 16px;
     }
-    .metric-label   { color: var(--faint); font-size: .56rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
-    .metric-value   { color: var(--ink); font-size: 1.3rem; font-weight: 800; line-height: 1.1; margin: 4px 0 2px; }
-    .metric-caption { color: var(--muted); font-size: .65rem; }
+    .metric-label   { color: var(--fte-gray3); font-size: .56rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
+    .metric-value   { color: var(--fte-gray1); font-size: 1.5rem; font-weight: 900; line-height: 1.1; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+    .metric-caption { color: var(--fte-gray3); font-size: .65rem; }
+    .metric-card.highlight { border-top-color: var(--fte-red); }
+    .metric-card.positive  { border-top-color: var(--fte-green); }
+    .metric-card.info      { border-top-color: var(--fte-blue); }
 
     .note-box {
-        background: var(--surface); border: 1px solid var(--border);
-        border-left: 2px solid var(--teal);
-        border-radius: 0 var(--radius) var(--radius) 0;
-        padding: 10px 14px; font-size: .74rem; color: var(--muted);
+        background: #fff9f0; border: 1px solid #f0c080;
+        border-left: 4px solid var(--fte-orange);
+        border-radius: 0; padding: 10px 14px; font-size: .74rem; color: var(--fte-gray2);
         line-height: 1.6; margin: 4px 0;
     }
     .section-card {
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: var(--radius); padding: 16px 20px;
+        background: #ffffff; border: 1px solid var(--fte-gray4);
+        border-radius: 0; padding: 16px 20px;
+        border-left: 4px solid var(--fte-gray1);
     }
     .profile-card {
-        background: var(--surface); border: 1px solid var(--border);
-        border-left: 2px solid var(--teal);
-        border-radius: 0 var(--radius) var(--radius) 0;
-        padding: 16px 20px; margin-bottom: 12px;
+        background: #ffffff; border: 1px solid var(--fte-gray4);
+        border-left: 4px solid var(--fte-red);
+        border-radius: 0; padding: 16px 20px; margin-bottom: 12px;
     }
-    .profile-name { color: var(--ink); font-size: 1.1rem; font-weight: 800; letter-spacing: -.01em; }
+    .profile-name { color: var(--fte-gray1); font-size: 1.1rem; font-weight: 900; letter-spacing: -.02em; }
+    /* FTE-style projection band labels */
+    .proj-label-breakout  { color: var(--fte-green);  font-weight: 700; }
+    .proj-label-expected  { color: var(--fte-gray1);  font-weight: 700; }
+    .proj-label-decline   { color: var(--fte-red);    font-weight: 700; }
     .profile-meta { color: var(--muted); font-size: .71rem; margin-top: 3px; margin-bottom: 8px; }
 
     .pill-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
@@ -5546,6 +6083,9 @@ elif active_workspace == "Cross-Source":
 elif active_workspace == "Player Intel":
     render_player_intel_workspace(data)
     st.stop()
+elif active_workspace == "Projections":
+    render_projections_workspace(data)
+    st.stop()
 elif active_workspace == "Watchlist":
     render_watchlist_workspace(data)
     st.stop()
@@ -5559,7 +6099,7 @@ _data_updated = "unknown"
 if _rec_file.exists():
     from datetime import datetime as _dt
     _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
-if active_workspace not in ("Command", "Deep Scan", "Cross-Source", "Player Intel", "Watchlist", "Set Piece"):
+if active_workspace not in ("Command", "Deep Scan", "Cross-Source", "Player Intel", "Projections", "Watchlist", "Set Piece"):
     st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
     st.markdown(
         f'<div class="section-card">'
