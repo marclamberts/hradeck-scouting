@@ -1,375 +1,53 @@
+"""
+Anomaly Platform — Pure z-score outlier intelligence from Wyscout per-90 data.
+
+Pages:
+  ⚡ Anomaly Hub      — global landscape overview
+  🔍 Explorer         — filterable anomaly table
+  👤 Player Profile   — individual z-score deep dive
+  🔗 Similarity       — cosine / Pearson / Euclidean search
+  ⚽ Set Pieces       — delivery, aerial & role anomalies
+  📥 Export           — download Excel anomaly report
+"""
 from __future__ import annotations
 
 import os
-from html import escape
 from io import BytesIO
 from pathlib import Path
-from textwrap import shorten
 
-import json
-from datetime import date as _date
+import numpy as np
+import pandas as pd
+import altair as alt
+import matplotlib
+import matplotlib.pyplot as plt
+import streamlit as st
 
 APP_DIR = Path(__file__).parent
-SHORTLIST_FILE = APP_DIR / "data" / "shortlist.json"
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/hradeck_scouting_matplotlib")
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/anomaly_platform_matplotlib")
+matplotlib.use("Agg")
 
 from scouting_model import (
     AnomalyEngine,
     SimilarityEngine,
     SetPieceAnalyzer,
-    SET_PIECE_DELIVERY,
-    SET_PIECE_AERIAL,
-    SET_PIECE_SHOOTING,
-    SET_PIECE_ALL,
     SET_PIECE_ROLES,
 )
-from monte_carlo import PlayerProjection, BatchProjector, METRIC_TYPE_MAP
 from wyscout_model import (
-    build_wyscout_dashboard_data,
+    load_wyscout_raw,
     available_leagues as wyscout_available_leagues,
-    PROJECTION_METRICS as WYSCOUT_PROJ_METRICS,
-    ALL_SCORE_COLS as WYSCOUT_SCORE_COLS,
 )
 
-import numpy as np
-import pandas as pd
-import altair as alt
-import matplotlib.pyplot as plt
-import streamlit as st
-from mplsoccer import PyPizza
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import landscape, letter
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-
-DEFAULT_MODEL_OUTPUT_DIR = APP_DIR / "data"
-MODEL_OUTPUT_FILES = {
-    "recruitment": "FCHK Model V3 - Recruitment Scores.xlsx",
-    "player_scores": "FCHK Model V3 - Player Scores.xlsx",
-    "player_styles": "FCHK Model V3 - Player Styles.xlsx",
-    "smart_club": "FCHK Model V3 - Smart Club Closeness.xlsx",
-    "loaded_leagues": "FCHK Model V3 - Loaded Leagues.xlsx",
-    "model_input": "FCHK Model V3 - Model Input.xlsx",
-    "summary": "FCHK Model V3 - Summary.xlsx",
-    "exports": "FCHK Model V3 Scores.xlsx",
-}
-MODEL_SHEETS = {
-    "recruitment": "Recruitment Scores",
-    "player_scores": "Player Scores",
-    "player_styles": "Player Styles",
-    "smart_club": "Smart Club Closeness",
-    "loaded_leagues": "Loaded Leagues",
-    "model_input": "Model Input",
-    "summary": "Summary",
-    "exports": "Export Files",
-}
-SCORE_COLUMNS = [
-    "DecisionScore",
-    "ValueRecruitmentScore",
-    "CompositeRecruitmentScore",
-    "ScoringThreatScore",
-    "CreativeProgressionScore",
-    "DefensiveDisruptionScore",
-    "PressingScore",
-    "BallSecurityScore",
-    "ExpectedThreatScore",
-    "ASA_GoalsAddedScore",
-    "AgeResaleScore",
-    "PerformanceReliabilityScore",
-]
-CORE_COLUMNS = [
-    "PlayerName",
-    "TeamName",
-    "PositionGroup",
-    "BundleLabel",
-    "AgeYears",
-    "MinutesPlayed",
-    "MatchesPlayed",
-    "ScoutFitScore",
-    "Archetype",
-    "SuccessProbability",
-    "DecisionScore",
-    "CompositeRecruitmentScore",
-    "ValueRecruitmentScore",
-    "PerformanceReliabilityScore",
-    "SecurityRisk_per90",
-]
-POSITION_COLORS = {
-    "GK": "#667085",
-    "CB": "#2f5f98",
-    "FB": "#00a6a6",
-    "DM": "#6b8e23",
-    "CM": "#2f855a",
-    "AM": "#d97706",
-    "W": "#e76f51",
-    "ST": "#c2410c",
-}
-
-POSITION_PROFILES: dict[str, list[str]] = {
-    "ST": ["Goalscoring striker", "Target striker", "Dynamic striker", "Second striker"],
-    "W":  ["Inside forward", "Wide winger", "Pressing winger", "Creative winger"],
-    "AM": ["Classic playmaker", "Shadow striker", "Deep creator", "Press orchestrator"],
-    "CM": ["Box-to-box", "Progressive carrier", "Press-resistant pivot", "Defensive CM"],
-    "DM": ["Defensive shield", "Regista", "Press trigger", "Holding pivot"],
-    "FB": ["Attacking fullback", "Defensive fullback", "Inverted fullback", "Wing-back"],
-    "CB": ["Ball-playing CB", "Aggressive stopper", "Libero / sweeper", "Aerial specialist"],
-    "GK": ["Sweeper keeper", "Shot-stopper", "Commanding GK", "Ball-playing GK"],
-}
-# Column weights per profile — mirrors the logic in assign_player_profiles
-PROFILE_WEIGHTS: dict[str, dict[str, dict[str, float]]] = {
-    "ST": {
-        "Goalscoring striker": {"ScoringThreatScore": 2.0, "ExpectedThreatScore": 1.5},
-        "Target striker":      {"DefensiveDisruptionScore": 2.0, "ScoringThreatScore": 1.0},
-        "Dynamic striker":     {"PressingScore": 2.0, "CreativeProgressionScore": 1.0},
-        "Second striker":      {"CreativeProgressionScore": 2.0, "ExpectedThreatScore": 1.0},
-    },
-    "W": {
-        "Inside forward":  {"ScoringThreatScore": 2.0, "ExpectedThreatScore": 1.5},
-        "Wide winger":     {"CreativeProgressionScore": 1.5, "PressingScore": 1.0},
-        "Pressing winger": {"PressingScore": 2.0, "DefensiveDisruptionScore": 1.0},
-        "Creative winger": {"CreativeProgressionScore": 2.0, "DecisionScore": 1.0},
-    },
-    "AM": {
-        "Classic playmaker":  {"CreativeProgressionScore": 2.0, "DecisionScore": 1.5},
-        "Shadow striker":     {"ScoringThreatScore": 2.0, "ExpectedThreatScore": 1.5},
-        "Deep creator":       {"BallSecurityScore": 2.0, "CreativeProgressionScore": 1.0},
-        "Press orchestrator": {"PressingScore": 2.0, "CreativeProgressionScore": 1.0},
-    },
-    "CM": {
-        "Box-to-box":            {"PressingScore": 1.0, "ExpectedThreatScore": 1.0, "DefensiveDisruptionScore": 1.0},
-        "Progressive carrier":   {"CreativeProgressionScore": 2.0, "DecisionScore": 1.0},
-        "Press-resistant pivot": {"BallSecurityScore": 2.0, "CreativeProgressionScore": 1.0},
-        "Defensive CM":          {"DefensiveDisruptionScore": 2.0, "PressingScore": 1.0},
-    },
-    "DM": {
-        "Defensive shield": {"DefensiveDisruptionScore": 2.0, "BallSecurityScore": 1.5},
-        "Regista":          {"CreativeProgressionScore": 2.0, "BallSecurityScore": 1.0, "DecisionScore": 1.0},
-        "Press trigger":    {"PressingScore": 2.0, "DefensiveDisruptionScore": 1.0},
-        "Holding pivot":    {"BallSecurityScore": 2.0, "PerformanceReliabilityScore": 1.0},
-    },
-    "FB": {
-        "Attacking fullback":  {"CreativeProgressionScore": 2.0, "ExpectedThreatScore": 1.5},
-        "Defensive fullback":  {"DefensiveDisruptionScore": 2.0, "BallSecurityScore": 1.5},
-        "Inverted fullback":   {"CreativeProgressionScore": 1.5, "BallSecurityScore": 1.5},
-        "Wing-back":           {"ExpectedThreatScore": 1.5, "PressingScore": 1.5},
-    },
-    "CB": {
-        "Ball-playing CB":    {"CreativeProgressionScore": 2.0, "BallSecurityScore": 1.5},
-        "Aggressive stopper": {"DefensiveDisruptionScore": 2.0, "PressingScore": 1.5},
-        "Libero / sweeper":   {"CreativeProgressionScore": 1.5, "DefensiveDisruptionScore": 1.0},
-        "Aerial specialist":  {"DefensiveDisruptionScore": 3.0},
-    },
-    "GK": {
-        "Sweeper keeper":   {"DecisionScore": 2.0, "PressingScore": 1.0},
-        "Shot-stopper":     {"PerformanceReliabilityScore": 2.0, "BallSecurityScore": 1.0},
-        "Commanding GK":    {"DefensiveDisruptionScore": 2.0, "BallSecurityScore": 1.0},
-        "Ball-playing GK":  {"CreativeProgressionScore": 2.0, "BallSecurityScore": 1.0},
-    },
-}
-
-# Maps raw Wyscout position codes → PROFILE_WEIGHTS position group keys
-WYSCOUT_POSITION_MAP: dict[str, str] = {
-    "CF": "ST", "SS": "ST",
-    "LW": "W",  "RW": "W", "LWF": "W", "RWF": "W", "WF": "W",
-    "AMF": "AM", "LAMF": "AM", "RAMF": "AM",
-    "CMF": "CM", "LCM": "CM", "RCM": "CM", "LCMF": "CM", "RCMF": "CM",
-    "DMF": "DM", "LDM": "DM", "RDM": "DM", "LDMF": "DM", "RDMF": "DM",
-    "LB": "FB",  "RB": "FB", "LWB": "FB", "RWB": "FB",
-    "CB": "CB",  "LCB": "CB", "RCB": "CB",
-    "GK": "GK",
-}
-
-# Profile weights using actual Wyscout column names
-WYSCOUT_PROFILE_WEIGHTS: dict[str, dict[str, dict[str, float]]] = {
-    "ST": {
-        "Goalscoring striker": {
-            "Non-penalty goals per 90": 2.0,
-            "xG per 90": 1.5,
-            "Shots on target, %": 1.0,
-        },
-        "Target striker": {
-            "Aerial duels won, %": 2.0,
-            "Duels won, %": 1.0,
-            "Non-penalty goals per 90": 1.0,
-        },
-        "Dynamic striker": {
-            "Progressive runs per 90": 2.0,
-            "Successful dribbles, %": 1.5,
-            "Dribbles per 90": 1.0,
-        },
-        "Second striker": {
-            "Key passes per 90": 2.0,
-            "xA per 90": 2.0,
-            "Touches in box per 90": 1.0,
-        },
-    },
-    "W": {
-        "Inside forward": {
-            "Non-penalty goals per 90": 2.0,
-            "xG per 90": 1.5,
-            "Touches in box per 90": 1.0,
-        },
-        "Wide winger": {
-            "Crosses per 90": 1.5,
-            "Accurate crosses, %": 1.0,
-            "Progressive runs per 90": 1.5,
-            "Dribbles per 90": 1.0,
-        },
-        "Pressing winger": {
-            "Successful defensive actions per 90": 2.0,
-            "Defensive duels per 90": 1.0,
-            "Dribbles per 90": 0.5,
-        },
-        "Creative winger": {
-            "Key passes per 90": 2.0,
-            "xA per 90": 2.0,
-            "Smart passes per 90": 1.0,
-        },
-    },
-    "AM": {
-        "Classic playmaker": {
-            "Key passes per 90": 2.0,
-            "Accurate smart passes, %": 1.5,
-            "Smart passes per 90": 1.5,
-        },
-        "Shadow striker": {
-            "Non-penalty goals per 90": 2.0,
-            "xG per 90": 1.5,
-            "Touches in box per 90": 1.0,
-        },
-        "Deep creator": {
-            "Accurate passes, %": 2.0,
-            "Key passes per 90": 1.5,
-            "Progressive passes per 90": 1.0,
-        },
-        "Press orchestrator": {
-            "Successful defensive actions per 90": 2.0,
-            "Dribbles per 90": 1.0,
-            "Key passes per 90": 1.0,
-        },
-    },
-    "CM": {
-        "Box-to-box": {
-            "Successful defensive actions per 90": 1.0,
-            "Progressive runs per 90": 1.0,
-            "xA per 90": 0.5,
-            "Passes per 90": 0.5,
-        },
-        "Progressive carrier": {
-            "Progressive runs per 90": 2.0,
-            "Accurate forward passes, %": 1.0,
-            "Dribbles per 90": 1.0,
-        },
-        "Press-resistant pivot": {
-            "Accurate passes, %": 2.0,
-            "Accurate short / medium passes, %": 1.5,
-            "Passes per 90": 1.0,
-        },
-        "Defensive CM": {
-            "Successful defensive actions per 90": 2.0,
-            "Defensive duels won, %": 1.5,
-            "Interceptions per 90": 1.0,
-        },
-    },
-    "DM": {
-        "Defensive shield": {
-            "Successful defensive actions per 90": 2.0,
-            "Defensive duels won, %": 1.5,
-            "Interceptions per 90": 1.0,
-        },
-        "Regista": {
-            "Progressive passes per 90": 2.0,
-            "Accurate passes, %": 1.5,
-            "Key passes per 90": 1.0,
-        },
-        "Press trigger": {
-            "Successful defensive actions per 90": 2.0,
-            "Defensive duels per 90": 1.5,
-            "Interceptions per 90": 1.0,
-        },
-        "Holding pivot": {
-            "Accurate passes, %": 2.0,
-            "Defensive duels won, %": 1.5,
-            "Passes per 90": 1.0,
-        },
-    },
-    "FB": {
-        "Attacking fullback": {
-            "Crosses per 90": 2.0,
-            "xA per 90": 1.5,
-            "Progressive runs per 90": 1.0,
-        },
-        "Defensive fullback": {
-            "Successful defensive actions per 90": 2.0,
-            "Defensive duels won, %": 1.5,
-            "Aerial duels won, %": 1.0,
-        },
-        "Inverted fullback": {
-            "Accurate passes, %": 1.5,
-            "Progressive passes per 90": 1.5,
-            "Key passes per 90": 1.0,
-        },
-        "Wing-back": {
-            "Crosses per 90": 1.5,
-            "Successful defensive actions per 90": 1.5,
-            "Progressive runs per 90": 1.0,
-        },
-    },
-    "CB": {
-        "Ball-playing CB": {
-            "Accurate forward passes, %": 2.0,
-            "Progressive passes per 90": 1.5,
-            "Accurate passes, %": 1.0,
-        },
-        "Aggressive stopper": {
-            "Successful defensive actions per 90": 2.0,
-            "Defensive duels won, %": 1.5,
-            "Aerial duels won, %": 1.0,
-        },
-        "Libero / sweeper": {
-            "Accurate passes, %": 1.5,
-            "Successful defensive actions per 90": 1.5,
-            "Interceptions per 90": 1.0,
-        },
-        "Aerial specialist": {
-            "Aerial duels won, %": 3.0,
-            "Aerial duels per 90": 1.0,
-        },
-    },
-    "GK": {
-        "Sweeper keeper": {
-            "Exits per 90": 2.0,
-            "Save rate, %": 1.0,
-            "Accurate passes, %": 1.0,
-        },
-        "Shot-stopper": {
-            "Save rate, %": 2.0,
-            "Prevented goals per 90": 2.0,
-        },
-        "Commanding GK": {
-            "Aerial duels per 90.1": 2.0,
-            "Save rate, %": 1.0,
-            "Exits per 90": 1.0,
-        },
-        "Ball-playing GK": {
-            "Accurate long passes, %": 2.0,
-            "Passes per 90": 1.0,
-            "Save rate, %": 1.0,
-        },
-    },
-}
-
-# Position-specific Wyscout metric sets shown in the player profile bar chart
-WYSCOUT_POS_METRICS: dict[str, list[str]] = {
+# ── Position-specific anomaly metric catalogue ────────────────────────────────
+POSITION_METRICS: dict[str, list[str]] = {
     "ST": [
-        "Non-penalty goals per 90", "xG per 90", "Shots per 90", "Shots on target, %",
-        "Goal conversion, %", "Touches in box per 90", "Aerial duels won, %",
-        "Dribbles per 90", "Successful dribbles, %", "Progressive runs per 90",
-        "xA per 90", "Duels won, %",
+        "Goals per 90", "Non-penalty goals per 90", "xG per 90",
+        "Shots per 90", "Shots on target, %", "Goal conversion, %",
+        "Touches in box per 90", "Aerial duels won, %",
+        "Dribbles per 90", "Successful dribbles, %",
+        "Progressive runs per 90", "xA per 90",
     ],
     "W": [
-        "Non-penalty goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+        "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
         "Key passes per 90", "Dribbles per 90", "Successful dribbles, %",
         "Crosses per 90", "Accurate crosses, %",
         "Progressive runs per 90", "Touches in box per 90",
@@ -378,30 +56,32 @@ WYSCOUT_POS_METRICS: dict[str, list[str]] = {
     "AM": [
         "Key passes per 90", "xA per 90", "Assists per 90",
         "Smart passes per 90", "Accurate smart passes, %",
-        "Non-penalty goals per 90", "xG per 90", "Touches in box per 90",
+        "Goals per 90", "xG per 90", "Touches in box per 90",
         "Dribbles per 90", "Progressive passes per 90",
         "Through passes per 90", "Successful dribbles, %",
     ],
     "CM": [
-        "Passes per 90", "Accurate passes, %", "Forward passes per 90",
-        "Accurate forward passes, %", "Progressive passes per 90",
-        "Key passes per 90", "xA per 90", "Progressive runs per 90",
+        "Passes per 90", "Accurate passes, %",
+        "Forward passes per 90", "Accurate forward passes, %",
+        "Progressive passes per 90", "Key passes per 90",
+        "xA per 90", "Progressive runs per 90",
         "Successful defensive actions per 90", "Defensive duels won, %",
         "Interceptions per 90", "Duels won, %",
     ],
     "DM": [
         "Successful defensive actions per 90", "Defensive duels per 90",
-        "Defensive duels won, %", "Interceptions per 90", "PAdj Interceptions",
-        "Aerial duels won, %", "Duels won, %",
-        "Passes per 90", "Accurate passes, %", "Progressive passes per 90",
-        "Key passes per 90", "Fouls per 90",
+        "Defensive duels won, %", "Interceptions per 90",
+        "PAdj Interceptions", "Aerial duels won, %", "Duels won, %",
+        "Passes per 90", "Accurate passes, %",
+        "Progressive passes per 90", "Key passes per 90", "Fouls per 90",
     ],
     "FB": [
         "Crosses per 90", "Accurate crosses, %",
         "xA per 90", "Assists per 90", "Key passes per 90",
         "Progressive runs per 90", "Dribbles per 90",
         "Successful defensive actions per 90", "Defensive duels won, %",
-        "Aerial duels won, %", "Accurate passes, %", "Progressive passes per 90",
+        "Aerial duels won, %", "Accurate passes, %",
+        "Progressive passes per 90",
     ],
     "CB": [
         "Successful defensive actions per 90", "Defensive duels per 90",
@@ -418,6654 +98,940 @@ WYSCOUT_POS_METRICS: dict[str, list[str]] = {
         "Back passes received as GK per 90",
     ],
 }
-# Metrics where lower raw value = better performance → invert percentile for display
-WYSCOUT_LOWER_IS_BETTER: frozenset[str] = frozenset({
-    "Conceded goals per 90", "Fouls per 90",
-    "Yellow cards per 90", "Red cards per 90",
-})
 
-TIER_COLORS = {
-    "Must scout": "#e76f51",
-    "Priority": "#f4a261",
-    "Shortlist": "#2a9d8f",
-    "Depth": "#457b9d",
-    "Watch": "#8d99ae",
-}
-RISK_COLORS = {
-    "Low": "#2a9d8f",
-    "Moderate": "#e9c46a",
-    "Elevated": "#f4a261",
-    "High": "#e76f51",
-}
-ROLE_SCORE_WEIGHTS = {
-    "GK": {"CompositeRecruitmentScore": 2.0, "DecisionScore": 2.5, "PerformanceReliabilityScore": 2.5, "BallSecurityScore": 1.5, "SecurityRisk_per90": -1.5},
-    "CB": {"CompositeRecruitmentScore": 2.2, "DecisionScore": 2.0, "DefensiveDisruptionScore": 2.5, "BallSecurityScore": 1.4, "PerformanceReliabilityScore": 1.8, "SecurityRisk_per90": -1.3},
-    "FB": {"CompositeRecruitmentScore": 2.0, "CreativeProgressionScore": 2.0, "DefensiveDisruptionScore": 1.8, "PressingScore": 1.4, "ExpectedThreatScore": 1.3, "SecurityRisk_per90": -1.0},
-    "DM": {"CompositeRecruitmentScore": 2.0, "DefensiveDisruptionScore": 2.2, "BallSecurityScore": 2.0, "CreativeProgressionScore": 1.6, "PerformanceReliabilityScore": 1.6, "SecurityRisk_per90": -1.2},
-    "CM": {"CompositeRecruitmentScore": 2.2, "CreativeProgressionScore": 2.4, "BallSecurityScore": 1.8, "ExpectedThreatScore": 1.4, "DecisionScore": 1.6, "SecurityRisk_per90": -1.0},
-    "AM": {"CompositeRecruitmentScore": 2.0, "CreativeProgressionScore": 2.8, "ExpectedThreatScore": 2.0, "ScoringThreatScore": 1.4, "ValueRecruitmentScore": 1.4, "SecurityRisk_per90": -0.8},
-    "W": {"CompositeRecruitmentScore": 1.8, "ScoringThreatScore": 2.4, "ExpectedThreatScore": 2.2, "CreativeProgressionScore": 1.8, "PressingScore": 1.2, "SecurityRisk_per90": -0.8},
-    "ST": {"CompositeRecruitmentScore": 2.0, "ScoringThreatScore": 3.0, "ExpectedThreatScore": 2.2, "DecisionScore": 1.4, "SuccessProbability": 1.6, "SecurityRisk_per90": -0.7},
-}
-PIZZA_METRICS = {
-    "Decision": "DecisionScore",
-    "Value": "ValueRecruitmentScore",
-    "Composite": "CompositeRecruitmentScore",
-    "Scoring": "ScoringThreatScore",
-    "Creation": "CreativeProgressionScore",
-    "Defense": "DefensiveDisruptionScore",
-    "Pressing": "PressingScore",
-    "Security": "BallSecurityScore",
-    "xThreat": "ExpectedThreatScore",
-    "G+": "ASA_GoalsAddedScore",
-    "Resale": "AgeResaleScore",
-    "Reliability": "PerformanceReliabilityScore",
-}
-PIZZA_CATEGORY_COLORS = {
-    "Decision": "#457b9d",
-    "Value": "#2a9d8f",
-    "Composite": "#2a9d8f",
-    "Scoring": "#e76f51",
-    "Creation": "#f4a261",
-    "Defense": "#2f5f98",
-    "Pressing": "#6b8e23",
-    "Security": "#667085",
-    "xThreat": "#e76f51",
-    "G+": "#457b9d",
-    "Resale": "#f4a261",
-    "Reliability": "#102a43",
-}
-EUROPE_COUNTRY_COORDS = {
-    "Albania": (41.1533, 20.1683),
-    "Andorra": (42.5063, 1.5218),
-    "Armenia": (40.0691, 45.0382),
-    "Austria": (47.5162, 14.5501),
-    "Azerbaijan": (40.1431, 47.5769),
-    "Belarus": (53.7098, 27.9534),
-    "Belgium": (50.5039, 4.4699),
-    "Bosnia and Herzegovina": (43.9159, 17.6791),
-    "Bulgaria": (42.7339, 25.4858),
-    "Croatia": (45.1000, 15.2000),
-    "Cyprus": (35.1264, 33.4299),
-    "Czech Republic": (49.8175, 15.4730),
-    "Czechia": (49.8175, 15.4730),
-    "Denmark": (56.2639, 9.5018),
-    "England": (52.3555, -1.1743),
-    "Estonia": (58.5953, 25.0136),
-    "Faroe Islands": (61.8926, -6.9118),
-    "Finland": (61.9241, 25.7482),
-    "France": (46.2276, 2.2137),
-    "Georgia": (42.3154, 43.3569),
-    "Germany": (51.1657, 10.4515),
-    "Gibraltar": (36.1408, -5.3536),
-    "Greece": (39.0742, 21.8243),
-    "Hungary": (47.1625, 19.5033),
-    "Iceland": (64.9631, -19.0208),
-    "Ireland": (53.1424, -7.6921),
-    "Israel": (31.0461, 34.8516),
-    "Italy": (41.8719, 12.5674),
-    "Kazakhstan": (48.0196, 66.9237),
-    "Kosovo": (42.6026, 20.9030),
-    "Latvia": (56.8796, 24.6032),
-    "Liechtenstein": (47.1660, 9.5554),
-    "Lithuania": (55.1694, 23.8813),
-    "Luxembourg": (49.8153, 6.1296),
-    "Malta": (35.9375, 14.3754),
-    "Moldova": (47.4116, 28.3699),
-    "Montenegro": (42.7087, 19.3744),
-    "Netherlands": (52.1326, 5.2913),
-    "North Macedonia": (41.6086, 21.7453),
-    "Northern Ireland": (54.7877, -6.4923),
-    "Norway": (60.4720, 8.4689),
-    "Poland": (51.9194, 19.1451),
-    "Portugal": (39.3999, -8.2245),
-    "Romania": (45.9432, 24.9668),
-    "Russia": (55.7558, 37.6173),
-    "San Marino": (43.9424, 12.4578),
-    "Scotland": (56.4907, -4.2026),
-    "Serbia": (44.0165, 21.0059),
-    "Slovakia": (48.6690, 19.6990),
-    "Slovenia": (46.1512, 14.9955),
-    "Spain": (40.4637, -3.7492),
-    "Sweden": (60.1282, 18.6435),
-    "Switzerland": (46.8182, 8.2275),
-    "Turkey": (38.9637, 35.2433),
-    "Türkiye": (38.9637, 35.2433),
-    "Ukraine": (48.3794, 31.1656),
-    "Wales": (52.1307, -3.7837),
+SIMILARITY_FEATURES = [
+    "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+    "Key passes per 90", "Passes per 90", "Accurate passes, %",
+    "Dribbles per 90", "Successful dribbles, %",
+    "Successful defensive actions per 90", "Defensive duels won, %",
+    "Aerial duels won, %", "Progressive passes per 90",
+    "Progressive runs per 90", "Touches in box per 90",
+]
+
+ANOMALY_COLORS: dict[str, str] = {
+    "Hidden Gem":               "#00c7b7",
+    "Specialist Elite":         "#e76f51",
+    "Multi-dimensional":        "#f4a261",
+    "Age-adjusted Gem":         "#2a9d8f",
+    "Consistent Overperformer": "#457b9d",
 }
 
+POSITION_ORDER = ["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"]
+POSITION_COLORS = {
+    "GK": "#667085", "CB": "#2f5f98", "FB": "#00a6a6",
+    "DM": "#6b8e23", "CM": "#2f855a", "AM": "#d97706",
+    "W":  "#e76f51", "ST": "#c2410c",
+}
 
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="FCHK Scouting",
-    page_icon="",
+    page_title="Anomaly Platform",
+    page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-
-def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-    text_columns = {
-        "PlayerName",
-        "TeamName",
-        "PositionGroup",
-        "BundleLabel",
-        "LeagueLabel",
-        "CountryLabel",
-        "TierLabel",
-        "PrimaryPlayerStyle",
-        "SecondaryPlayerStyle",
-        "PlayerStyleSummary",
-        "PlayerStyleDrivers",
-        "ClosestArchetype",
-        "WhyThisClubStyle",
-        "SmartClubTop3",
-        "SmartClubClosenessTier",
-    }
-    for col in df.columns:
-        if col not in text_columns:
-            converted = pd.to_numeric(df[col], errors="coerce")
-            if converted.notna().any():
-                df[col] = converted
-    return df
-
-
-def _model_file(name: str) -> Path:
-    return DEFAULT_MODEL_OUTPUT_DIR / MODEL_OUTPUT_FILES[name]
-
-
-def _read_model_output(name: str) -> pd.DataFrame:
-    return _clean_columns(pd.read_excel(_model_file(name), sheet_name=MODEL_SHEETS[name]))
-
-
-def _merge_missing_columns(base: pd.DataFrame, other: pd.DataFrame) -> pd.DataFrame:
-    keys = [col for col in ["PlayerName", "TeamName", "PositionGroup"] if col in base.columns and col in other.columns]
-    if not keys:
-        return base
-    add_cols = [col for col in other.columns if col not in base.columns and col not in keys]
-    if not add_cols:
-        return base
-    return base.merge(other[keys + add_cols].drop_duplicates(keys), on=keys, how="left")
-
-
-def normalize_model_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    aliases = {
-        "BundleLabel": ["BundleLabel", "LeagueLabel", "LeagueSlug"],
-        "MatchesPlayed": ["MatchesPlayed", "matches"],
-        "ScoringThreatScore": ["ScoringThreatScore", "AttackingScore", "UnderlyingThreatScore", "BoxThreatScore"],
-        "CreativeProgressionScore": ["CreativeProgressionScore", "CreationScore", "CreativeAMScore"],
-        "DefensiveDisruptionScore": ["DefensiveDisruptionScore", "DefendingScore", "BallWinningDMScore"],
-        "PressingScore": ["PressingScore", "PressTransitionScore", "PressingForwardScore"],
-        "ExpectedThreatScore": ["ExpectedThreatScore", "xThreatScore"],
-        "ASA_GoalsAddedScore": ["ASA_GoalsAddedScore", "GoalsAddedScore"],
-        "PerformanceReliabilityScore": ["PerformanceReliabilityScore", "ReliabilityScore", "SampleConfidence"],
-        "SecurityRisk_per90": ["SecurityRisk_per90", "CriticalBallLosses_per90", "Losses_evt_per90", "BallLosses_per90"],
-        "OwnHalfLosses_per90": ["OwnHalfLosses_per90", "Losses_evt_per90", "BallLosses_per90"],
-        "DangerOwnHalfLosses_per90": ["DangerOwnHalfLosses_per90", "CriticalBallLosses_per90"],
-        "xG_per90": ["xG_per90", "xG_model_per90", "xG_evt_per90"],
-        "xA_per90": ["xA_per90"],
-        "KeyPasses_per90": ["KeyPasses_per90"],
-        "ProgressivePasses_per90": ["ProgressivePasses_per90"],
-        "PressingDuelsWon_per90": ["PressingDuelsWon_per90"],
-        "CounterpressRecovs_per90": ["CounterpressRecovs_per90"],
-        "Imp_BypassedOpp_per90": ["Imp_BypassedOpp_per90", "BypassedOpp_per90"],
-        "Imp_BypassedDef_per90": ["Imp_BypassedDef_per90", "BypassedDef_per90"],
-        "Imp_BallWin_per90": ["Imp_BallWin_per90", "BallWins_per90"],
-        "Imp_BallLoss_per90": ["Imp_BallLoss_per90", "BallLosses_per90", "Losses_evt_per90"],
-    }
-    for target, candidates in aliases.items():
-        if target not in df:
-            for candidate in candidates:
-                if candidate in df:
-                    df[target] = df[candidate]
-                    break
-    if "BundleLabel" in df:
-        bundle = df["BundleLabel"].fillna("").astype(str)
-        if "CountryLabel" in df:
-            country = df["CountryLabel"].fillna("").astype(str)
-            bundle = np.where(country.ne(""), bundle + " · " + country, bundle)
-        if "TierLabel" in df:
-            tier = df["TierLabel"].fillna("").astype(str)
-            bundle = np.where(tier.ne(""), pd.Series(bundle, index=df.index) + " · " + tier, bundle)
-        df["BundleLabel"] = pd.Series(bundle, index=df.index).replace("", "Unknown league")
-    if "IsU23Target" not in df and "AgeYears" in df:
-        df["IsU23Target"] = safe_col(df, "AgeYears").le(23)
-    return df
+st.markdown("""
+<style>
+html, body, [data-testid="stApp"],
+[data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    background-color: #0c0f18 !important;
+    color: #dde2f0 !important;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+[data-testid="stSidebar"] {
+    background-color: #080b12 !important;
+    border-right: 1px solid #151b28 !important;
+}
+[data-testid="stSidebar"] * { color: #b8c2d8 !important; }
+[data-testid="stSidebar"] label {
+    font-size: 0.68rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #3a4258 !important;
+}
+.main .block-container {
+    padding: 1.6rem 2.2rem !important;
+    max-width: 100% !important;
+}
+#MainMenu, footer, header,
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"] { display: none !important; }
+.page-title {
+    font-size: 1.85rem;
+    font-weight: 800;
+    border-left: 4px solid #ee3a27;
+    padding-left: 12px;
+    margin-bottom: 2px;
+    color: #eef2ff;
+    line-height: 1.2;
+}
+.page-sub {
+    font-size: 0.8rem;
+    color: #4a5470;
+    padding-left: 16px;
+    margin-bottom: 20px;
+}
+.kpi-card {
+    background: #111520;
+    border-radius: 8px;
+    padding: 14px 18px;
+    text-align: center;
+    border: 1px solid #1a1f2e;
+}
+.kpi-num  { font-size: 2rem; font-weight: 800; color: #ee3a27; line-height: 1; }
+.kpi-label { font-size: 0.65rem; color: #4a5470; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 4px; }
+.type-card {
+    background: #111520;
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+    border-top: 3px solid;
+    border-left: 1px solid #1a1f2e;
+    border-right: 1px solid #1a1f2e;
+    border-bottom: 1px solid #1a1f2e;
+}
+.player-card {
+    background: #111520;
+    border-radius: 10px;
+    padding: 20px 24px;
+    border: 1px solid #1a1f2e;
+    margin-bottom: 16px;
+}
+.player-name { font-size: 1.4rem; font-weight: 800; color: #eef2ff; }
+.player-meta { font-size: 0.82rem; color: #6a7390; margin-top: 4px; }
+.section-divider {
+    border: none;
+    border-top: 1px solid #1a1f2e;
+    margin: 24px 0;
+}
+div[data-testid="stDataFrame"] {
+    border: 1px solid #1a1f2e !important;
+    border-radius: 6px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
-@st.cache_data(show_spinner=False)
-def load_default_data() -> pd.DataFrame:
-    required_file = _model_file("recruitment")
-    if not required_file.exists():
-        st.error(f"Missing required model output: {required_file}")
-        st.stop()
+# ── Data loaders (cached) ─────────────────────────────────────────────────────
 
-    df = _read_model_output("recruitment")
-    for name in ["player_scores", "player_styles", "smart_club"]:
-        if _model_file(name).exists():
-            df = _merge_missing_columns(df, _read_model_output(name))
-    return normalize_model_columns(df)
-
-
-@st.cache_data(show_spinner=False)
-def load_model_metadata() -> dict[str, pd.DataFrame]:
-    metadata: dict[str, pd.DataFrame] = {}
-    for name in MODEL_OUTPUT_FILES:
-        if _model_file(name).exists():
-            metadata[name] = _read_model_output(name)
-    return metadata
-
-
-def file_inventory_frame(metadata: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    rows = []
-    for name, file_name in MODEL_OUTPUT_FILES.items():
-        path = _model_file(name)
-        frame = metadata.get(name)
-        rows.append(
-            {
-                "File": file_name,
-                "Purpose": name.replace("_", " ").title(),
-                "Status": "Loaded" if frame is not None else "Missing",
-                "Rows": 0 if frame is None else len(frame),
-                "Columns": 0 if frame is None else len(frame.columns),
-                "Sheet": MODEL_SHEETS[name],
-                "Path": str(path),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def coverage_summary_frame(df: pd.DataFrame) -> pd.DataFrame:
-    checks = {
-        "Player identity": ["PlayerName", "TeamName", "PositionGroup"],
-        "League context": ["LeagueLabel", "CountryLabel", "TierLabel", "SeasonLabel"],
-        "Core recruitment scores": ["DecisionScore", "ValueRecruitmentScore", "CompositeRecruitmentScore", "SuccessProbability"],
-        "Style profile": ["PrimaryPlayerStyle", "SecondaryPlayerStyle", "PlayerStyleSummary", "ClosestArchetype"],
-        "Smart club fit": ["SmartClubScore", "SmartClubTop3", "SmartClubClosenessTier"],
-        "Performance value": ["GoalsAddedScore", "RAPMScore", "PVScore", "xThreatScore", "ActionValueScore"],
-        "Per-90 event detail": ["xG_model_per90", "xA_per90", "Shots_per90", "ProgressivePasses_per90", "CriticalBallLosses_per90"],
-        "Risk and confidence": ["SampleConfidence", "ConfidenceBand", "DataCoverageScore", "MinutesRiskFlag", "DataCoverageFlag"],
-        "Scouting workflow": ["VideoReviewed", "LiveReviewed", "ScoutGrade", "ScoutFitGrade", "ModelScoutAgreement"],
-    }
-    rows = []
-    for area, cols in checks.items():
-        present = [c for c in cols if c in df.columns]
-        populated = 0.0
-        if present:
-            populated = float(df[present].notna().mean().mean() * 100)
-        rows.append(
-            {
-                "Area": area,
-                "Columns present": f"{len(present)}/{len(cols)}",
-                "Population": populated,
-                "Available columns": ", ".join(present) if present else "None",
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def top_missing_columns(df: pd.DataFrame, limit: int = 15) -> pd.DataFrame:
-    missing = df.isna().mean().sort_values(ascending=False).head(limit).reset_index()
-    missing.columns = ["Column", "Missing share"]
-    missing["Missing share"] = missing["Missing share"] * 100
-    return missing
-
-
-def country_name_series(df: pd.DataFrame) -> pd.Series:
-    if "CountryLabel" in df.columns:
-        country = df["CountryLabel"].fillna("").astype(str).str.strip()
-    else:
-        country = pd.Series("", index=df.index)
-    if country.eq("").all() and "BundleLabel" in df.columns:
-        country = df["BundleLabel"].fillna("").astype(str).str.split(" · ").str[-1].str.strip()
-    aliases = {
-        "UK": "England",
-        "United Kingdom": "England",
-        "Czech Rep.": "Czechia",
-        "Czech Republic": "Czechia",
-        "Turkiye": "Türkiye",
-        "Macedonia": "North Macedonia",
-        "Bosnia": "Bosnia and Herzegovina",
-    }
-    return country.replace(aliases)
-
-
-def european_market_map_frame(df: pd.DataFrame, metric: str = "ScoutFitScore") -> pd.DataFrame:
-    if df.empty or metric not in df.columns:
-        return pd.DataFrame()
-    working = df.copy()
-    working["Country"] = country_name_series(working)
-    working = working.loc[working["Country"].isin(EUROPE_COUNTRY_COORDS)].copy()
-    if working.empty:
-        return pd.DataFrame()
-    market = (
-        working.groupby("Country")
-        .agg(
-            Players=("PlayerName", "count"),
-            MedianScore=(metric, "median"),
-            TopScore=(metric, "max"),
-            HighQuality=("QualityTier", lambda x: x.isin(["High quality", "Elite"]).sum()),
-            MedianAge=("AgeYears", "median"),
-        )
-        .round(1)
-        .reset_index()
-    )
-    market["HighQualityShare"] = np.where(market["Players"].gt(0), market["HighQuality"] / market["Players"] * 100, 0).round(1)
-    market["lat"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][0])
-    market["lon"] = market["Country"].map(lambda c: EUROPE_COUNTRY_COORDS[c][1])
-    market["GoScore"] = (market["MedianScore"] * 0.65 + market["HighQualityShare"] * 0.25 + np.minimum(market["Players"], 80) * 0.10).round(1)
-    market["Recommendation"] = pd.cut(
-        market["GoScore"],
-        bins=[-np.inf, 42, 52, 62, np.inf],
-        labels=["Monitor", "Watch trip", "Scout next", "Go now"],
-    ).astype(str)
-    return market.sort_values("GoScore", ascending=False)
-
-
-def safe_col(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
-    if col in df:
-        return pd.to_numeric(df[col], errors="coerce").fillna(default)
-    return pd.Series(default, index=df.index)
-
-
-def assign_archetypes(df: pd.DataFrame) -> pd.Series:
-    attack = safe_col(df, "ScoringThreatScore") + safe_col(df, "ExpectedThreatScore")
-    creation = safe_col(df, "CreativeProgressionScore") + safe_col(df, "KeyPasses_per90", 50)
-    progression = safe_col(df, "ProgressivePasses_per90") + safe_col(df, "PassesToFinalThird_per90")
-    defense = safe_col(df, "DefensiveDisruptionScore") + safe_col(df, "Imp_BallWin_per90", 50)
-    press = safe_col(df, "PressingScore") + safe_col(df, "CounterpressRecovs_per90", 50)
-    security = safe_col(df, "BallSecurityScore") - safe_col(df, "SecurityRisk_per90")
-    value = safe_col(df, "ValueRecruitmentScore") + safe_col(df, "AgeResaleScore")
-    position = df.get("PositionGroup", pd.Series("", index=df.index)).fillna("").astype(str)
-
-    labels = np.select(
-        [
-            position.eq("GK"),
-            attack.ge(135),
-            creation.ge(120),
-            progression.ge(65) & position.isin(["CM", "DM", "FB"]),
-            defense.ge(120) & position.isin(["CB", "DM", "FB"]),
-            press.ge(105),
-            security.ge(62),
-            value.ge(125),
-        ],
-        [
-            "Shot-stopping GK",
-            "Final-third finisher",
-            "Chance creator",
-            "Progressive carrier/passer",
-            "Defensive disruptor",
-            "Pressing catalyst",
-            "Secure connector",
-            "Value upside play",
-        ],
-        default="Balanced profile",
-    )
-    return pd.Series(labels, index=df.index)
-
-
-def assign_player_profiles(df: pd.DataFrame) -> pd.Series:
-    pos         = df.get("PositionGroup", pd.Series("", index=df.index)).fillna("").astype(str)
-    scoring     = safe_col(df, "ScoringThreatScore")
-    expected    = safe_col(df, "ExpectedThreatScore")
-    creative    = safe_col(df, "CreativeProgressionScore")
-    defense     = safe_col(df, "DefensiveDisruptionScore")
-    press       = safe_col(df, "PressingScore")
-    security    = safe_col(df, "BallSecurityScore")
-    decision    = safe_col(df, "DecisionScore")
-    reliability = safe_col(df, "PerformanceReliabilityScore")
-
-    _spec: dict[str, dict[str, pd.Series]] = {
-        "ST": {
-            "Goalscoring striker": scoring  * 2   + expected  * 1.5,
-            "Target striker":      defense  * 2   + scoring   * 1.0,
-            "Dynamic striker":     press    * 2   + creative  * 1.0,
-            "Second striker":      creative * 2   + expected  * 1.0,
-        },
-        "W": {
-            "Inside forward":  scoring  * 2   + expected  * 1.5,
-            "Wide winger":     creative * 1.5 + press     * 1.0,
-            "Pressing winger": press    * 2   + defense   * 1.0,
-            "Creative winger": creative * 2   + decision  * 1.0,
-        },
-        "AM": {
-            "Classic playmaker":  creative * 2   + decision  * 1.5,
-            "Shadow striker":     scoring  * 2   + expected  * 1.5,
-            "Deep creator":       security * 2   + creative  * 1.0,
-            "Press orchestrator": press    * 2   + creative  * 1.0,
-        },
-        "CM": {
-            "Box-to-box":            press    * 1.0 + expected * 1.0 + defense * 1.0,
-            "Progressive carrier":   creative * 2   + decision * 1.0,
-            "Press-resistant pivot": security * 2   + creative * 1.0,
-            "Defensive CM":          defense  * 2   + press    * 1.0,
-        },
-        "DM": {
-            "Defensive shield": defense  * 2   + security   * 1.5,
-            "Regista":          creative * 2   + security   * 1.0 + decision * 1.0,
-            "Press trigger":    press    * 2   + defense    * 1.0,
-            "Holding pivot":    security * 2   + reliability * 1.0,
-        },
-        "FB": {
-            "Attacking fullback":  creative * 2   + expected  * 1.5,
-            "Defensive fullback":  defense  * 2   + security  * 1.5,
-            "Inverted fullback":   creative * 1.5 + security  * 1.5,
-            "Wing-back":           expected * 1.5 + press     * 1.5,
-        },
-        "CB": {
-            "Ball-playing CB":    creative * 2   + security * 1.5,
-            "Aggressive stopper": defense  * 2   + press    * 1.5,
-            "Libero / sweeper":   creative * 1.5 + defense  * 1.0,
-            "Aerial specialist":  defense  * 3,
-        },
-        "GK": {
-            "Sweeper keeper":   decision    * 2 + press    * 1.0,
-            "Shot-stopper":     reliability * 2 + security * 1.0,
-            "Commanding GK":    defense     * 2 + security * 1.0,
-            "Ball-playing GK":  creative    * 2 + security * 1.0,
-        },
-    }
-
-    result = pd.Series("", index=df.index)
-    for pos_code, profile_scores in _spec.items():
-        mask = pos.eq(pos_code)
-        if not mask.any():
-            continue
-        scores_df = pd.DataFrame(profile_scores, index=df.index)
-        result.loc[mask] = scores_df.loc[mask].idxmax(axis=1)
-    return result
-
-
-def calc_profile_fit(df: pd.DataFrame, position: str, profile: str) -> pd.Series:
-    """Return a 0–100 z-score-based profile fit for every row in df.
-    Scores are normalised within the position group so 50 = average,
-    65 = one std above average, 35 = one std below."""
-    weights = PROFILE_WEIGHTS.get(position, {}).get(profile, {})
-    if not weights:
-        return pd.Series(50.0, index=df.index)
-
-    raw = pd.Series(0.0, index=df.index)
-    for col, w in weights.items():
-        raw = raw + safe_col(df, col) * w
-
-    # z-score within the position pool
-    pos_mask = df.get("PositionGroup", pd.Series("", index=df.index)).astype(str).eq(position)
-    pos_raw = raw.loc[pos_mask]
-    if len(pos_raw) < 2 or pos_raw.std() < 1e-6:
-        return pd.Series(50.0, index=df.index)
-
-    mean, std = pos_raw.mean(), pos_raw.std()
-    z = (raw - mean) / std
-    return (z * 15 + 50).clip(0, 100).round(1)
-
-
-def calc_wyscout_profile_fit(df: pd.DataFrame, pos_group: str, profile: str) -> pd.Series:
-    """Z-score profile fit using raw Wyscout column names. 50 = avg, 65 = top 16%, 80 = top 2%."""
-    weights = WYSCOUT_PROFILE_WEIGHTS.get(pos_group, {}).get(profile, {})
-    if not weights:
-        return pd.Series(50.0, index=df.index)
-    raw = pd.Series(0.0, index=df.index)
-    for col, w in weights.items():
-        raw = raw + safe_col(df, col) * w
-    pos_mask = df.get("_PosGroup", pd.Series("", index=df.index)).astype(str).eq(pos_group)
-    pos_raw = raw.loc[pos_mask]
-    if len(pos_raw) < 2 or pos_raw.std() < 1e-6:
-        return pd.Series(50.0, index=df.index)
-    mean, std = pos_raw.mean(), pos_raw.std()
-    z = (raw - mean) / std
-    return (z * 15 + 50).clip(0, 100).round(1)
+@st.cache_data(show_spinner=False, ttl=600)
+def _load_raw(leagues_key: tuple[str, ...] | None, min_minutes: int) -> pd.DataFrame:
+    leagues = list(leagues_key) if leagues_key else None
+    df = load_wyscout_raw(min_minutes=min_minutes, leagues=leagues)
+    if df.empty:
+        return df
+    if "AgeYears" not in df.columns and "Age" in df.columns:
+        df["AgeYears"] = pd.to_numeric(df["Age"], errors="coerce")
+    mins_col = next((c for c in ["Minutes played", "MinutesPlayed"] if c in df.columns), None)
+    if mins_col and "CompositeRecruitmentScore" not in df.columns:
+        mins = pd.to_numeric(df[mins_col], errors="coerce").fillna(0)
+        df["CompositeRecruitmentScore"] = (
+            (mins - mins.min()) / (mins.max() - mins.min() + 1e-9) * 100
+        ).clip(0, 100)
+    return df.reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False, ttl=600)
-def _load_link_db() -> pd.DataFrame:
-    p = APP_DIR / "data" / "IMPECT_Wyscout_Link.csv"
-    if p.exists():
-        return pd.read_csv(p)
-    return pd.DataFrame()
-
-
-@st.cache_data(show_spinner=False, ttl=600)
-def _load_wyscout_index() -> pd.DataFrame:
-    p = APP_DIR / "data" / "Wyscout_Player_Index.csv"
-    if p.exists():
-        return pd.read_csv(p)
-    return pd.DataFrame()
-
-
-def _render_wyscout_bars(
-    ws_row: pd.Series,
-    pos_pool: pd.DataFrame,
-    pos_group: str,
-    ws_name: str,
-    ws_team: str,
-    ws_file: str,
-) -> "plt.Figure | None":
-    """FBref-style horizontal percentile bars for Wyscout raw metrics."""
-    all_metrics = WYSCOUT_POS_METRICS.get(pos_group, [])
-    metrics = [m for m in all_metrics if m in ws_row.index and m in pos_pool.columns]
-    if not metrics:
-        return None
-
-    n = len(metrics)
-    fig_h = max(4.0, n * 0.56 + 1.4)
-    fig, ax = plt.subplots(figsize=(7.2, fig_h), dpi=130)
-    fig.patch.set_facecolor("#f9f8f3")
-    ax.set_facecolor("#ffffff")
-
-    pcts: list[float | None] = []
-    raw_strs: list[str] = []
-    for m in metrics:
-        val = pd.to_numeric(ws_row.get(m), errors="coerce")
-        if pd.isna(val):
-            pcts.append(None)
-            raw_strs.append("—")
-        else:
-            p = percentile_rank(pd.to_numeric(pos_pool[m], errors="coerce"), float(val))
-            if m in WYSCOUT_LOWER_IS_BETTER:
-                p = 100.0 - p
-            pcts.append(p)
-            raw_strs.append(f"{val:.2f}")
-
-    # y=n-1 → first metric (top), y=0 → last metric (bottom)
-    y_pos = list(range(n - 1, -1, -1))
-
-    for y, m, pct, raw in zip(y_pos, metrics, pcts, raw_strs):
-        ax.barh(y, 100, height=0.62, color="#eeede8", zorder=1)
-        if pct is not None:
-            clr = "#0d9e7d" if pct >= 67 else ("#f4a261" if pct >= 34 else "#e76f51")
-            ax.barh(y, pct, height=0.62, color=clr, zorder=2, alpha=0.88)
-            x_txt = max(pct - 1.5, 2.0)
-            ha = "right" if pct > 8 else "left"
-            ax.text(x_txt, y, f"{pct:.0f}", va="center", ha=ha,
-                    fontsize=8, color="#1a1a1a", fontweight="bold", zorder=3)
-        ax.text(102, y, raw, va="center", ha="left", fontsize=7.5, color="#888888", zorder=3)
-
-    ax.axvline(50, color="#cccccc", linewidth=1.2, linestyle="--", zorder=3)
-    ax.set_yticks(list(range(n)))
-    ax.set_yticklabels([m for m in reversed(metrics)], fontsize=8, color="#1a1a1a")
-    ax.set_xlim(0, 116)
-    ax.set_ylim(-0.5, n - 0.5)
-    ax.set_xticks([0, 25, 50, 75, 100])
-    ax.set_xticklabels(["0", "25", "50", "75", "100"], fontsize=7, color="#888888")
-    ax.tick_params(axis="x", length=3, color="#cccccc")
-    ax.tick_params(axis="y", length=0)
-    for sp in ax.spines.values():
-        sp.set_visible(False)
-    ax.grid(axis="x", color="#eeede8", linewidth=0.5, zorder=0)
-
-    pool_n = len(pos_pool)
-    fig.text(0.02, 0.98, f"Wyscout · {ws_file.replace('.xlsx','')}", ha="left", va="top",
-             fontsize=10, fontweight="bold", color="#1a1a1a")
-    fig.text(0.02, 0.945, f"{pos_group} · percentile vs {pool_n} position peers · 50 = average",
-             ha="left", va="top", fontsize=8, color="#888888")
-    plt.tight_layout(rect=[0, 0, 1, 0.93])
-    return fig
-
-
-def weighted_role_score(row: pd.Series) -> float:
-    weights = ROLE_SCORE_WEIGHTS.get(str(row.get("PositionGroup", "")), ROLE_SCORE_WEIGHTS["CM"])
-    positive_total = sum(v for v in weights.values() if v > 0)
-    raw = 0.0
-    for col, weight in weights.items():
-        value = pd.to_numeric(row.get(col, 0), errors="coerce")
-        value = 0 if pd.isna(value) else float(value)
-        if weight < 0:
-            raw += max(0, 100 - (value * 6)) * abs(weight)
-        else:
-            raw += value * weight
-    return float(np.clip(raw / max(positive_total + sum(abs(v) for v in weights.values() if v < 0), 1), 0, 100))
-
-
-def _role_score_vec(df: pd.DataFrame) -> pd.Series:
-    pos = df.get("PositionGroup", pd.Series("CM", index=df.index)).fillna("CM").astype(str)
-    result = pd.Series(50.0, index=df.index)
-    for pos_code, weights in {**ROLE_SCORE_WEIGHTS, "_default": ROLE_SCORE_WEIGHTS["CM"]}.items():
-        mask = pos.eq(pos_code) if pos_code != "_default" else ~pos.isin(ROLE_SCORE_WEIGHTS)
-        if not mask.any():
+def _run_anomaly_detection(data_json: str, threshold: float, method: str) -> pd.DataFrame:
+    df = pd.read_json(data_json)
+    frames: list[pd.DataFrame] = []
+    for pos_group, grp in df.groupby("PositionGroup"):
+        metrics = [m for m in POSITION_METRICS.get(str(pos_group), []) if m in grp.columns]
+        if not metrics or len(grp) < 5:
+            frames.append(grp)
             continue
-        sub = df.loc[mask]
-        pos_total = sum(v for v in weights.values() if v > 0)
-        neg_total = sum(abs(v) for v in weights.values() if v < 0)
-        denom = max(pos_total + neg_total, 1)
-        raw = pd.Series(0.0, index=sub.index)
-        for col, weight in weights.items():
-            vals = pd.to_numeric(sub.get(col, pd.Series(0, index=sub.index)), errors="coerce").fillna(0)
-            if weight < 0:
-                raw += np.maximum(0.0, 100 - vals * 6) * abs(weight)
-            else:
-                raw += vals * weight
-        result.loc[mask] = np.clip(raw / denom, 0, 100)
-    return result
+        engine = AnomalyEngine(threshold=threshold, method=method, groupby=None)
+        try:
+            frames.append(engine.fit_transform(grp, metrics))
+        except Exception:
+            frames.append(grp)
+    return pd.concat(frames, ignore_index=True) if frames else df
 
 
-def _drivers_vec(df: pd.DataFrame, col_map: dict[str, str], limit: int = 3) -> pd.Series:
-    labels = list(col_map.keys())
-    mat = np.column_stack([
-        pd.to_numeric(df.get(col, pd.Series(0, index=df.index)), errors="coerce").fillna(0).values
-        for col in col_map.values()
-    ])
-    top_idx    = np.argsort(-mat, axis=1)[:, :limit]
-    top_scores = mat[np.arange(len(mat))[:, None], top_idx]
-    top_labels = np.array(labels)[top_idx]
-    return pd.Series(
-        [", ".join(f"{lbl} {sc:.0f}" for lbl, sc in zip(rl, rs)) for rl, rs in zip(top_labels, top_scores)],
-        index=df.index,
+# ── Excel export ──────────────────────────────────────────────────────────────
+
+def _build_anomaly_excel(anomalies: pd.DataFrame, zdf: pd.DataFrame, threshold: float) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils.dataframe import dataframe_to_rows
+
+    wb = Workbook()
+    header_fill = PatternFill("solid", fgColor="0C0F18")
+    accent_fill = PatternFill("solid", fgColor="EE3A27")
+    white_font  = Font(color="FFFFFF", bold=True, size=10)
+    thin_border = Border(
+        left=Side(style="thin", color="1A1F2E"),
+        right=Side(style="thin", color="1A1F2E"),
+        top=Side(style="thin", color="1A1F2E"),
+        bottom=Side(style="thin", color="1A1F2E"),
     )
 
+    def _sheet(wb, title: str, df: pd.DataFrame) -> None:
+        if df is None or df.empty:
+            return
+        ws = wb.create_sheet(title=title[:31])
+        ws.cell(row=1, column=1, value=title)
+        ws.cell(row=1, column=1).font = Font(color="FFFFFF", bold=True, size=12)
+        ws.cell(row=1, column=1).fill = header_fill
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(df.columns))
+        ws.row_dimensions[1].height = 22
+        for ci, col_name in enumerate(df.columns, start=1):
+            cell = ws.cell(row=2, column=ci, value=col_name)
+            cell.font = white_font
+            cell.fill = accent_fill
+            cell.alignment = Alignment(horizontal="center")
+            cell.border = thin_border
+        for ri, row in enumerate(dataframe_to_rows(df.reset_index(drop=True), index=False, header=False), start=3):
+            for ci, val in enumerate(row, start=1):
+                cell = ws.cell(row=ri, column=ci, value=val)
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal="left" if ci <= 3 else "center")
+                if ri % 2 == 0:
+                    cell.fill = PatternFill("solid", fgColor="0F1420")
+        for col_cells in ws.columns:
+            width = max(len(str(col_cells[1].value or "")),
+                        *(len(str(c.value or "")) for c in col_cells[2:8]))
+            ws.column_dimensions[col_cells[0].column_letter].width = min(width + 3, 40)
 
-def _risk_flags_vec(df: pd.DataFrame) -> pd.Series:
-    names  = ["low minutes", "low reliability", "high security risk", "own-half losses", "danger losses", "high-possession context"]
-    bools  = np.column_stack([
-        safe_col(df, "MinutesPlayed").fillna(0).lt(900).values,
-        safe_col(df, "PerformanceReliabilityScore").fillna(100).lt(55).values,
-        safe_col(df, "SecurityRisk_per90").fillna(0).gt(13).values,
-        safe_col(df, "OwnHalfLosses_per90").fillna(0).gt(3).values,
-        safe_col(df, "DangerOwnHalfLosses_per90").fillna(0).gt(0.5).values,
-        df.get("TeamPossProxy", pd.Series(0.0, index=df.index)).fillna(0).gt(1.25).values,
-    ])
-    result = []
-    for row in bools:
-        active = [names[i] for i in np.where(row)[0]]
-        result.append(", ".join(active) if active else "clean profile")
-    return pd.Series(result, index=df.index)
-
-
-@st.cache_data(show_spinner=False)
-def _add_static_fields(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    out["Archetype"]    = assign_archetypes(out)
-    out["RoleFitScore"] = _role_score_vec(out)
-    out["AgeYears"]     = safe_col(out, "AgeYears").round(1)
-    out["RiskBand"] = pd.cut(
-        safe_col(out, "SecurityRisk_per90"),
-        bins=[-np.inf, 5, 9, 13, np.inf],
-        labels=["Low", "Moderate", "Elevated", "High"],
-    ).astype(str)
-    out["Readiness"] = pd.cut(
-        safe_col(out, "PerformanceReliabilityScore"),
-        bins=[-np.inf, 55, 70, 85, np.inf],
-        labels=["Monitor", "Develop", "Ready", "High confidence"],
-    ).astype(str)
-    out["ProfileScore"] = (
-        safe_col(out, "ScoringThreatScore")
-        + safe_col(out, "CreativeProgressionScore")
-        + safe_col(out, "DefensiveDisruptionScore")
-        + safe_col(out, "BallSecurityScore")
-    ) / 4
-    out["QualityScore"] = (
-        safe_col(out, "RoleFitScore") * 0.34
-        + safe_col(out, "ProfileScore") * 0.24
-        + safe_col(out, "DecisionScore") * 0.16
-        + safe_col(out, "PerformanceReliabilityScore") * 0.14
-        + safe_col(out, "ExpectedThreatScore") * 0.07
-        + safe_col(out, "BallSecurityScore") * 0.05
-    ).clip(0, 100)
-    out["QualityTier"] = pd.cut(
-        out["QualityScore"],
-        bins=[-np.inf, 42, 52, 62, 72, np.inf],
-        labels=["Monitor", "Useful", "Good", "High quality", "Elite"],
-    ).astype(str)
-    out["FitDrivers"]     = _drivers_vec(out, {
-        "Composite": "CompositeRecruitmentScore", "Decision": "DecisionScore",
-        "Value": "ValueRecruitmentScore", "Scoring": "ScoringThreatScore",
-        "Creation": "CreativeProgressionScore", "Defense": "DefensiveDisruptionScore",
-        "Pressing": "PressingScore", "Security": "BallSecurityScore",
-        "xThreat": "ExpectedThreatScore", "Reliability": "PerformanceReliabilityScore",
-    })
-    out["QualityDrivers"] = _drivers_vec(out, {
-        "Role": "RoleFitScore", "Impact": "ProfileScore", "Decision": "DecisionScore",
-        "Reliability": "PerformanceReliabilityScore", "Threat": "ExpectedThreatScore",
-        "Security": "BallSecurityScore", "Creation": "CreativeProgressionScore",
-        "Defense": "DefensiveDisruptionScore", "Pressing": "PressingScore",
-    })
-    out["RiskFlags"]      = _risk_flags_vec(out)
-    out["PlayerProfile"]  = assign_player_profiles(out)
-    return out
-
-
-@st.cache_data(show_spinner=False)
-def add_scouting_fields(df: pd.DataFrame, weights: dict[str, int]) -> pd.DataFrame:
-    out = _add_static_fields(df)
-    numerator = (
-        safe_col(out, "CompositeRecruitmentScore") * weights["Composite"]
-        + safe_col(out, "DecisionScore") * weights["Decision"]
-        + safe_col(out, "ValueRecruitmentScore") * weights["Value"]
-        + safe_col(out, "SuccessProbability") * weights["Success"]
-        + safe_col(out, "PerformanceReliabilityScore") * weights["Reliability"]
-        - safe_col(out, "SecurityRisk_per90") * weights["Risk penalty"]
-    )
-    denominator = max(sum(v for k, v in weights.items() if k != "Risk penalty"), 1)
-    out["ModelFitScore"] = (numerator / denominator).clip(0, 100)
-    out["ScoutFitScore"] = ((out["ModelFitScore"] * 0.58) + (out["RoleFitScore"] * 0.42)).clip(0, 100)
-    out["MarketTier"] = pd.cut(
-        out["ScoutFitScore"],
-        bins=[-np.inf, 42, 50, 58, 66, np.inf],
-        labels=["Watch", "Depth", "Shortlist", "Priority", "Must scout"],
-    ).astype(str)
-    out["TierReason"] = (
-        out["MarketTier"].astype(str)
-        + " because Scout Fit is "
-        + out["ScoutFitScore"].round(1).astype(str)
-        + ", driven by "
-        + out["FitDrivers"].astype(str)
-        + "."
-    )
-    return out
-
-
-def fit_drivers(row: pd.Series, limit: int = 3) -> str:
-    candidates = {
-        "Composite": row.get("CompositeRecruitmentScore", 0),
-        "Decision": row.get("DecisionScore", 0),
-        "Value": row.get("ValueRecruitmentScore", 0),
-        "Scoring": row.get("ScoringThreatScore", 0),
-        "Creation": row.get("CreativeProgressionScore", 0),
-        "Defense": row.get("DefensiveDisruptionScore", 0),
-        "Pressing": row.get("PressingScore", 0),
-        "Security": row.get("BallSecurityScore", 0),
-        "xThreat": row.get("ExpectedThreatScore", 0),
-        "Reliability": row.get("PerformanceReliabilityScore", 0),
-    }
-    top = sorted(candidates.items(), key=lambda item: pd.to_numeric(item[1], errors="coerce"), reverse=True)[:limit]
-    return ", ".join(f"{label} {float(score):.0f}" for label, score in top)
-
-
-def quality_drivers(row: pd.Series, limit: int = 3) -> str:
-    candidates = {
-        "Role": row.get("RoleFitScore", 0),
-        "Impact": row.get("ProfileScore", 0),
-        "Decision": row.get("DecisionScore", 0),
-        "Reliability": row.get("PerformanceReliabilityScore", 0),
-        "Threat": row.get("ExpectedThreatScore", 0),
-        "Security": row.get("BallSecurityScore", 0),
-        "Creation": row.get("CreativeProgressionScore", 0),
-        "Defense": row.get("DefensiveDisruptionScore", 0),
-        "Pressing": row.get("PressingScore", 0),
-    }
-    top = sorted(candidates.items(), key=lambda item: pd.to_numeric(item[1], errors="coerce"), reverse=True)[:limit]
-    return ", ".join(f"{label} {float(score):.0f}" for label, score in top)
-
-
-def risk_flags(row: pd.Series) -> list[str]:
-    flags = []
-    if row.get("MinutesPlayed", 0) < 900:
-        flags.append("low minutes")
-    if row.get("PerformanceReliabilityScore", 100) < 55:
-        flags.append("low reliability")
-    if row.get("SecurityRisk_per90", 0) > 13:
-        flags.append("high security risk")
-    if row.get("OwnHalfLosses_per90", 0) > 3:
-        flags.append("own-half losses")
-    if row.get("DangerOwnHalfLosses_per90", 0) > 0.5:
-        flags.append("danger losses")
-    if row.get("TeamPossProxy", 1) > 1.25:
-        flags.append("high-possession context")
-    return flags or ["clean profile"]
-
-
-def tier_reason(row: pd.Series) -> str:
-    return (
-        f"{row.get('MarketTier', 'Watch')} because Scout Fit is {row.get('ScoutFitScore', 0):.1f}, "
-        f"driven by {fit_drivers(row)}. Main risk check: {', '.join(risk_flags(row)[:2])}."
-    )
-
-
-
-
-def percentile_rank(series: pd.Series, value: float) -> float:
-    series = pd.to_numeric(series, errors="coerce").dropna()
-    if series.empty:
-        return 0.0
-    return float((series.le(value).mean() * 100).round(1))
-
-
-def player_strengths(row: pd.Series) -> str:
-    focus = {
-        "Scoring": row.get("ScoringThreatScore", 0),
-        "Creation": row.get("CreativeProgressionScore", 0),
-        "Defense": row.get("DefensiveDisruptionScore", 0),
-        "Pressing": row.get("PressingScore", 0),
-        "Security": row.get("BallSecurityScore", 0),
-        "xThreat": row.get("ExpectedThreatScore", 0),
-    }
-    top = sorted(focus.items(), key=lambda item: item[1], reverse=True)[:3]
-    return " / ".join(f"{name} {score:.0f}" for name, score in top)
-
-
-def profile_note(row: pd.Series) -> str:
-    return (
-        f"{row['Archetype']} with {player_strengths(row)}. "
-        f"Reliability: {row['Readiness']}; risk: {row['RiskBand']}; market tier: {row['MarketTier']}."
-    )
-
-
-def percentile_values(df: pd.DataFrame, row: pd.Series, metrics: dict[str, str]) -> list[float]:
-    values = []
-    for col in metrics.values():
-        values.append(percentile_rank(df[col], float(row[col])) if col in df else 0.0)
-    return values
-
-
-def similarity_features(df: pd.DataFrame) -> list[str]:
-    base = [
-        "ScoringThreatScore",
-        "CreativeProgressionScore",
-        "DefensiveDisruptionScore",
-        "PressingScore",
-        "BallSecurityScore",
-        "ExpectedThreatScore",
-        "ASA_GoalsAddedScore",
-        "xG_per90",
-        "xA_per90",
-        "Shots_per90",
-        "KeyPasses_per90",
-        "ProgressivePasses_per90",
-        "PassesToFinalThird_per90",
-        "PressingDuelsWon_per90",
-        "Imp_BypassedOpp_per90",
-        "Imp_BypassedDef_per90",
-        "Imp_BallWin_per90",
-        "Imp_BallLoss_per90",
+    DISPLAY_COLS = [
+        "Player", "Team", "Position", "PositionGroup", "Age", "_League",
+        "Minutes played", "Matches played",
+        "_anomaly_type", "_anomaly_score", "_peak_z", "_mean_z", "_anomaly_breadth",
+        "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+        "Key passes per 90", "Passes per 90", "Accurate passes, %",
+        "Successful defensive actions per 90", "Progressive passes per 90",
     ]
-    return [col for col in base if col in df.columns]
 
+    rename_map = {
+        "_League": "League", "_anomaly_type": "Anomaly Type",
+        "_anomaly_score": "Score", "_peak_z": "Peak Z",
+        "_mean_z": "Mean Z", "_anomaly_breadth": "Breadth",
+    }
 
-def similar_players(df: pd.DataFrame, row: pd.Series, same_position: bool = True, n: int = 10) -> pd.DataFrame:
-    pool = df.copy()
-    if same_position:
-        pool = pool.loc[pool["PositionGroup"].eq(row["PositionGroup"])].copy()
-    features = similarity_features(pool)
-    matrix = pool[features].apply(pd.to_numeric, errors="coerce").fillna(0)
-    center = matrix.mean()
-    spread = matrix.std().replace(0, 1)
-    z = (matrix - center) / spread
-    target = (pd.to_numeric(row[features], errors="coerce").fillna(0) - center) / spread
-    pool["SimilarityScore"] = (100 - np.sqrt(((z - target) ** 2).sum(axis=1)) * 8).clip(0, 100)
-    pool = pool.loc[pool["PlayerName"].ne(row["PlayerName"])]
-    return pool.sort_values("SimilarityScore", ascending=False).head(n)
+    def _prep(df: pd.DataFrame) -> pd.DataFrame:
+        cols = [c for c in DISPLAY_COLS if c in df.columns]
+        return df[cols].rename(columns=rename_map).round(3).reset_index(drop=True)
 
+    ws = wb.active
+    ws.title = "Overview"
+    ws.cell(row=1, column=1, value=f"Anomaly Platform Export  |  threshold={threshold:.1f}  |  {len(anomalies):,} anomalies")
+    ws.cell(row=1, column=1).font = Font(color="FFFFFF", bold=True, size=13)
+    ws.cell(row=1, column=1).fill = header_fill
+    ws.merge_cells("A1:H1")
+    ws.row_dimensions[1].height = 26
 
-def render_player_pizza(reference_df: pd.DataFrame, row: pd.Series):
-    params = list(PIZZA_METRICS.keys())
-    values = percentile_values(reference_df, row, PIZZA_METRICS)
-    slice_colors = [PIZZA_CATEGORY_COLORS[param] for param in params]
-    value_box_colors = ["#0f1623"] * len(params)
-    value_text_colors = ["#e8edf3"] * len(params)
-    baker = PyPizza(
-        params=params,
-        background_color="#080c14",
-        straight_line_color="#1e2d3d",
-        straight_line_lw=1,
-        last_circle_color="#00d4a8",
-        last_circle_lw=1.4,
-        other_circle_color="#1e2d3d",
-        other_circle_lw=0.7,
-        inner_circle_size=18,
-    )
-    fig, _ = baker.make_pizza(
-        values,
-        figsize=(8, 8),
-        color_blank_space="same",
-        slice_colors=slice_colors,
-        value_colors=value_text_colors,
-        value_bck_colors=value_box_colors,
-        blank_alpha=0.18,
-        kwargs_slices={"edgecolor": "#080c14", "linewidth": 1.1},
-        kwargs_params={"color": "#8fa3b1", "fontsize": 9, "fontweight": "bold"},
-        kwargs_values={
-            "color": "#e8edf3",
-            "fontsize": 9,
-            "fontweight": "bold",
-            "bbox": {
-                "boxstyle": "round,pad=0.28",
-                "facecolor": "#0f1623",
-                "edgecolor": "#1e2d3d",
-                "linewidth": 0.8,
-            },
-        },
-    )
-    fig.text(0.5, 0.975, row["PlayerName"], ha="center", va="center", fontsize=18, fontweight="bold", color="#e8edf3")
-    fig.text(
-        0.5,
-        0.945,
-        f"{row['TeamName']} | {row['PositionGroup']} | percentiles vs position pool",
-        ha="center",
-        va="center",
-        fontsize=10,
-        color="#8fa3b1",
-    )
-    return fig
+    for i, (atype, color) in enumerate(ANOMALY_COLORS.items(), start=3):
+        subset = anomalies[anomalies["_anomaly_type"] == atype] if "_anomaly_type" in anomalies.columns else pd.DataFrame()
+        ws.cell(row=i, column=1, value=atype)
+        ws.cell(row=i, column=2, value=len(subset))
+        ws.cell(row=i, column=1).font = Font(color="FFFFFF", bold=True)
+        ws.cell(row=i, column=1).fill = PatternFill("solid", fgColor=color.lstrip("#"))
 
+    _sheet(wb, "All Anomalies",          _prep(anomalies.head(2000)))
+    _sheet(wb, "Hidden Gems",            _prep(anomalies[anomalies.get("_anomaly_type", pd.Series()) == "Hidden Gem"]))
+    _sheet(wb, "Specialist Elite",       _prep(anomalies[anomalies.get("_anomaly_type", pd.Series()) == "Specialist Elite"]))
+    _sheet(wb, "Multi-dimensional",      _prep(anomalies[anomalies.get("_anomaly_type", pd.Series()) == "Multi-dimensional"]))
+    _sheet(wb, "Age-adjusted Gems",      _prep(anomalies[anomalies.get("_anomaly_type", pd.Series()) == "Age-adjusted Gem"]))
+    _sheet(wb, "Consistent Overperf",    _prep(anomalies[anomalies.get("_anomaly_type", pd.Series()) == "Consistent Overperformer"]))
 
-def render_score_distribution(df: pd.DataFrame, metric: str, highlight: float | None = None):
-    fig, ax = plt.subplots(figsize=(9, 4.8), dpi=150)
-    fig.patch.set_facecolor("#f9f8f3")
-    ax.set_facecolor("#ffffff")
-    values = pd.to_numeric(df[metric], errors="coerce").dropna()
-    ax.hist(values, bins=28, color="#1478b0", alpha=0.65, edgecolor="#f9f8f3", linewidth=0.8)
-    ax.axvline(values.median(), color="#888888", linewidth=1.8, linestyle="--", label=f"Median {values.median():.1f}")
-    if highlight is not None:
-        ax.axvline(highlight, color="#ee3a27", linewidth=2.5, label=f"Selected {highlight:.1f}")
-    ax.set_title(f"{metric} distribution", loc="left", fontsize=13, fontweight="bold", color="#1a1a1a")
-    ax.set_xlabel("Score", color="#888888", fontsize=9)
-    ax.set_ylabel("Players", color="#888888", fontsize=9)
-    ax.tick_params(colors="#888888")
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#cccccc")
-    ax.grid(axis="y", color="#eeede8", linewidth=0.7, alpha=0.8)
-    ax.spines[["top", "right"]].set_visible(False)
-    legend = ax.legend(frameon=True, facecolor="#ffffff", edgecolor="#cccccc", labelcolor="#1a1a1a", fontsize=9)
-    fig.tight_layout()
-    return fig
+    # Set piece sheet
+    try:
+        sp = SetPieceAnalyzer(threshold=threshold * 0.85)
+        sp_enriched = sp.fit_transform(zdf)
+        sp_table = sp.anomaly_table(sp_enriched, top_n=300)
+        _sheet(wb, "Set Piece Anomalies", sp_table)
+    except Exception:
+        pass
 
-
-def render_league_heatmap(df: pd.DataFrame, metric: str):
-    pivot = (
-        df.pivot_table(index="BundleLabel", columns="PositionGroup", values=metric, aggfunc="median")
-        .reindex(columns=["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"])
-        .dropna(how="all")
-        .sort_index()
-    )
-    if len(pivot) > 18:
-        top_leagues = df.groupby("BundleLabel")["PlayerName"].count().sort_values(ascending=False).head(18).index
-        pivot = pivot.loc[pivot.index.intersection(top_leagues)]
-    fig, ax = plt.subplots(figsize=(10, max(4.5, len(pivot) * 0.34)), dpi=150)
-    fig.patch.set_facecolor("#f9f8f3")
-    ax.set_facecolor("#ffffff")
-    im = ax.imshow(pivot.fillna(np.nan), cmap="YlGnBu", aspect="auto", vmin=20, vmax=75)
-    ax.set_xticks(range(len(pivot.columns)), labels=pivot.columns, fontsize=9, fontweight="bold", color="#1a1a1a")
-    ax.set_yticks(range(len(pivot.index)), labels=pivot.index, fontsize=8, color="#888888")
-    ax.tick_params(colors="#888888")
-    ax.set_title(f"League depth | median {metric}", loc="left", fontsize=13, fontweight="bold", color="#1a1a1a")
-    for i in range(len(pivot.index)):
-        for j in range(len(pivot.columns)):
-            val = pivot.iloc[i, j]
-            if pd.notna(val):
-                ax.text(j, i, f"{val:.0f}", ha="center", va="center", fontsize=7, color="#1a1a1a", fontweight="bold")
-    ax.spines[:].set_visible(False)
-    cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
-    cbar.outline.set_visible(False)
-    cbar.ax.tick_params(colors="#888888")
-    fig.tight_layout()
-    return fig
-
-
-def render_position_boxplot(df: pd.DataFrame, metric: str):
-    order = ["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"]
-    groups = [pd.to_numeric(df.loc[df["PositionGroup"].eq(pos), metric], errors="coerce").dropna() for pos in order]
-    fig, ax = plt.subplots(figsize=(10, 4.8), dpi=150)
-    fig.patch.set_facecolor("#f5f7fa")
-    ax.set_facecolor("#ffffff")
-    bp = ax.boxplot(groups, patch_artist=True, tick_labels=order, showfliers=False,
-                    medianprops={"color": "#0d9e7d", "linewidth": 2},
-                    whiskerprops={"color": "#c8d3df"}, capprops={"color": "#c8d3df"})
-    for patch, pos in zip(bp["boxes"], order):
-        patch.set_facecolor(POSITION_COLORS.get(pos, "#457b9d"))
-        patch.set_alpha(0.75)
-        patch.set_edgecolor("#c8d3df")
-    ax.set_title(f"{metric} by position", loc="left", fontsize=13, fontweight="bold", color="#1a2332")
-    ax.set_ylabel("Score", color="#4a5e75", fontsize=9)
-    ax.tick_params(colors="#4a5e75")
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#dde3ec")
-    ax.grid(axis="y", color="#dde3ec", linewidth=0.7)
-    ax.spines[["top", "right"]].set_visible(False)
-    fig.tight_layout()
-    return fig
-
-
-def metric_card(label: str, value: str, caption: str | None = None) -> None:
-    st.markdown(
-        f"""
-        <div class="metric-card">
-            <div class="metric-label">{label}</div>
-            <div class="metric-value">{value}</div>
-            <div class="metric-caption">{caption or ""}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _to_excel_bytes(sheets: dict[str, pd.DataFrame]) -> bytes:
-    """Serialise one or more DataFrames into a multi-sheet .xlsx BytesIO buffer."""
     buf = BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        for sheet_name, df in sheets.items():
-            safe_name = sheet_name[:31]  # Excel sheet name limit
-            df.to_excel(writer, sheet_name=safe_name, index=False)
+    wb.save(buf)
     return buf.getvalue()
 
 
-def _pdf_table(rows: list[list[str]], header_color: str = "#102a43") -> Table:
-    table = Table(rows, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(header_color)),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4f7f9")]),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d8e2e7")),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]
-        )
-    )
-    return table
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+def _player_col(df: pd.DataFrame) -> str:
+    return "Player" if "Player" in df.columns else "PlayerName"
 
 
-def _format_pdf_frame(frame: pd.DataFrame, max_text: int = 30) -> list[list[str]]:
-    out = frame.copy()
-    for col in out.select_dtypes(include=[np.number]).columns:
-        out[col] = out[col].map(lambda x: f"{x:.1f}")
-    out = out.map(lambda x: shorten(str(x), width=max_text, placeholder="..."))
-    return [list(out.columns)] + out.values.tolist()
+def _team_col(df: pd.DataFrame) -> str:
+    return "Team" if "Team" in df.columns else "TeamName"
 
 
-def build_player_card_pdf(player: pd.Series, ref_df: pd.DataFrame, scout_notes: str = "") -> bytes:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
-    styles = getSampleStyleSheet()
-    story = []
-    story.append(Paragraph(f"Player Card: {player.get('PlayerName', 'Unknown')}", styles["Title"]))
-    meta = " · ".join(filter(None, [
-        str(player.get("TeamName", "")), str(player.get("PositionGroup", "")),
-        str(player.get("BundleLabel", "")), f"Age {player.get('AgeYears', ''):.1f}" if pd.notna(player.get("AgeYears")) else "",
-        f"{int(player.get('MinutesPlayed', 0)):,} min" if pd.notna(player.get("MinutesPlayed")) else "",
-    ]))
-    story.append(Paragraph(meta, styles["Normal"]))
-    story.append(Spacer(1, 12))
+def _anomaly_table(anomalies: pd.DataFrame, height: int = 500) -> None:
+    disp = [c for c in [
+        _player_col(anomalies), _team_col(anomalies), "PositionGroup", "_League", "Age",
+        "_anomaly_type", "_anomaly_score", "_peak_z", "_mean_z", "_anomaly_breadth",
+        "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+        "Key passes per 90", "Successful defensive actions per 90",
+    ] if c in anomalies.columns]
 
-    scores_data = [["Quality", "Role Fit", "Impact", "Decision", "Reliability", "Risk Band"]]
-    scores_data.append([
-        f"{player.get('QualityScore', 0):.1f}", f"{player.get('RoleFitScore', 0):.1f}",
-        f"{player.get('ProfileScore', 0):.1f}", f"{player.get('DecisionScore', 0):.1f}",
-        f"{player.get('PerformanceReliabilityScore', 0):.1f}", str(player.get("RiskBand", "?")),
-    ])
-    story.append(Paragraph("Scores", styles["Heading2"]))
-    story.append(_pdf_table(scores_data, header_color="#2a9d8f"))
-    story.append(Spacer(1, 10))
-
-    profile_rows = [["Field", "Value"]]
-    for field, key in [("Archetype", "Archetype"), ("Quality tier", "QualityTier"), ("Readiness", "Readiness"),
-                       ("Primary style", "PrimaryPlayerStyle"), ("Secondary style", "SecondaryPlayerStyle"),
-                       ("Style summary", "PlayerStyleSummary"), ("Hradec fit", "WhyThisClubStyle"),
-                       ("Style clubs", "SmartClubTop3"), ("Closeness tier", "SmartClubClosenessTier")]:
-        val = str(player.get(key, "") or "")
-        if val and val not in ("nan", "None", ""):
-            profile_rows.append([field, shorten(val, width=80, placeholder="…")])
-    if len(profile_rows) > 1:
-        story.append(Paragraph("Profile", styles["Heading2"]))
-        story.append(_pdf_table(profile_rows, header_color="#457b9d"))
-        story.append(Spacer(1, 10))
-
-    for field, key in [("Quality drivers", "QualityDrivers"), ("Fit drivers", "FitDrivers"), ("Risk flags", "RiskFlags")]:
-        val = str(player.get(key, "") or "")
-        if val and val not in ("nan", "None", ""):
-            story.append(Paragraph(f"<b>{field}:</b> {shorten(val, width=120, placeholder='…')}", styles["Normal"]))
-    story.append(Spacer(1, 8))
-
-    if scout_notes:
-        story.append(Paragraph("Scout Notes", styles["Heading2"]))
-        story.append(Paragraph(scout_notes, styles["Normal"]))
-        story.append(Spacer(1, 8))
-
-    pos_group = str(player.get("PositionGroup", ""))
-    comp = ref_df.loc[ref_df["PositionGroup"].eq(pos_group) & ref_df["PlayerName"].ne(str(player.get("PlayerName", "")))]
-    comp = comp.sort_values("QualityScore", ascending=False).head(8)
-    if not comp.empty:
-        comp_cols = [c for c in ["PlayerName", "TeamName", "AgeYears", "QualityScore", "RoleFitScore", "Archetype"] if c in comp.columns]
-        comp_view = comp[comp_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","AgeYears":"Age","QualityScore":"Quality","RoleFitScore":"Fit"})
-        story.append(Paragraph(f"Top {pos_group} comparators (position pool)", styles["Heading2"]))
-        story.append(_pdf_table(_format_pdf_frame(comp_view, max_text=28), header_color="#102a43"))
-
-    doc.build(story)
-    return buffer.getvalue()
-
-
-def build_pdf(df: pd.DataFrame, title: str, scope_note: str = "Filtered view", top_n: int = 50) -> bytes:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(letter),
-        leftMargin=28,
-        rightMargin=28,
-        topMargin=28,
-        bottomMargin=24,
-    )
-    styles = getSampleStyleSheet()
-    sort_col = "QualityScore" if "QualityScore" in df.columns else "ScoutFitScore"
-    sorted_df = df.sort_values(sort_col, ascending=False).copy()
-    high_quality_count = sorted_df["QualityTier"].isin(["High quality", "Elite"]).sum() if "QualityTier" in sorted_df else 0
-    median_quality = sorted_df[sort_col].median() if not sorted_df.empty else 0
-    median_age = sorted_df["AgeYears"].median() if not sorted_df.empty else 0
-
-    story = [
-        Paragraph(title, styles["Title"]),
-        Paragraph(scope_note, styles["Normal"]),
-        Spacer(1, 12),
-        Paragraph("Executive Summary", styles["Heading2"]),
-        _pdf_table(
-            [
-                ["Players", "Median quality", "Median age", "High quality"],
-                [f"{len(sorted_df):,}", f"{median_quality:.1f}", f"{median_age:.1f}", f"{high_quality_count:,}"],
-            ],
-            header_color="#2a9d8f",
-        ),
-        Spacer(1, 10),
-    ]
-
-    if not sorted_df.empty:
-        pos_summary = (
-            sorted_df.groupby("PositionGroup")
-            .agg(
-                Players=("PlayerName", "count"),
-                MedianQuality=(sort_col, "median"),
-                MedianAge=("AgeYears", "median"),
-                HighQuality=("QualityTier", lambda x: x.isin(["High quality", "Elite"]).sum()),
-            )
-            .round(1)
-            .reset_index()
-            .sort_values("MedianQuality", ascending=False)
-        )
-        story.extend(
-            [
-                Paragraph("Position Summary", styles["Heading2"]),
-                _pdf_table(_format_pdf_frame(pos_summary, max_text=24), header_color="#457b9d"),
-                Spacer(1, 10),
-            ]
-        )
-
-        archetype_summary = (
-            sorted_df["Archetype"]
-            .value_counts()
-            .head(10)
-            .rename_axis("Archetype")
-            .reset_index(name="Players")
-        )
-        story.extend(
-            [
-                Paragraph("Top Archetypes", styles["Heading2"]),
-                _pdf_table(_format_pdf_frame(archetype_summary, max_text=34), header_color="#102a43"),
-                Spacer(1, 10),
-            ]
-        )
-
-        top_u23 = sorted_df.loc[sorted_df.get("IsU23Target", False).astype(bool)].head(15)
-        if not top_u23.empty:
-            top_u23 = top_u23[
-                [
-                    "PlayerName",
-                    "TeamName",
-                    "PositionGroup",
-                    "AgeYears",
-                    sort_col,
-                    "RoleFitScore",
-                    "QualityTier",
-                    "QualityDrivers",
-                ]
-            ].rename(
-                columns={
-                    "PlayerName": "Player",
-                    "TeamName": "Team",
-                    "PositionGroup": "Pos",
-                    "AgeYears": "Age",
-                    sort_col: "Quality",
-                    "RoleFitScore": "Role Fit",
-                    "QualityDrivers": "Drivers",
-                }
-            )
-            story.extend(
-                [
-                    Paragraph("Top U23 Targets", styles["Heading2"]),
-                    _pdf_table(_format_pdf_frame(top_u23, max_text=32), header_color="#2a9d8f"),
-                    Spacer(1, 10),
-                ]
-            )
-
-        xi_order = ["GK", "CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
-        used_names = set()
-        xi_rows = []
-        for slot in xi_order:
-            candidates = sorted_df.loc[sorted_df["PositionGroup"].eq(slot) & ~sorted_df["PlayerName"].isin(used_names)]
-            if candidates.empty:
-                continue
-            pick = candidates.iloc[0]
-            used_names.add(pick["PlayerName"])
-            xi_rows.append(
-                {
-                    "Role": slot,
-                    "Player": pick["PlayerName"],
-                    "Team": pick["TeamName"],
-                    "Age": pick["AgeYears"],
-                    "Quality": pick[sort_col],
-                    "Role Fit": pick.get("RoleFitScore", 0),
-                    "Drivers": pick.get("QualityDrivers", ""),
-                }
-            )
-        if xi_rows:
-            story.extend(
-                [
-                    Paragraph("Best XI From Scope", styles["Heading2"]),
-                    _pdf_table(_format_pdf_frame(pd.DataFrame(xi_rows), max_text=32), header_color="#e76f51"),
-                    Spacer(1, 10),
-                ]
-            )
-
-    table_cols = [
-        "PlayerName",
-        "TeamName",
-        "PositionGroup",
-        "AgeYears",
-        sort_col,
-        "QualityTier",
-        "Archetype",
-        "CompositeRecruitmentScore",
-        "DecisionScore",
-        "Readiness",
-        "RiskBand",
-        "RoleFitScore",
-        "ProfileScore",
-        "QualityDrivers",
-        "RiskFlags",
-    ]
-    export = sorted_df.head(top_n)
-    export = export[[c for c in table_cols if c in export.columns]].copy()
-    export = export.rename(
-        columns={
-            "PlayerName": "Player",
-            "TeamName": "Team",
-            "PositionGroup": "Pos",
-            "AgeYears": "Age",
-            sort_col: "Quality",
-            "CompositeRecruitmentScore": "Composite",
-            "DecisionScore": "Decision",
-            "RiskBand": "Risk",
-            "RoleFitScore": "Role Fit",
-            "ProfileScore": "Impact",
-            "QualityDrivers": "Drivers",
-            "RiskFlags": "Risk Flags",
-        }
-    )
-    story.extend(
-        [
-            Paragraph(f"Top {min(top_n, len(export))} Targets", styles["Heading2"]),
-            _pdf_table(_format_pdf_frame(export, max_text=28), header_color="#e76f51"),
-        ]
-    )
-    doc.build(story)
-    return buffer.getvalue()
-
-
-def hradec_recruitment_targets(df: pd.DataFrame, top_n: int = 50) -> pd.DataFrame:
-    """Score every external player on how well they'd address Hradec Kralove's squad needs."""
-    hradec = hradec_squad(df)
-    external = df.loc[
-        ~df["TeamName"].fillna("").astype(str).str.lower().str.contains("hradec|kralove|králové", regex=True)
-    ].copy()
-
-    if hradec.empty or external.empty:
-        external["HradecTargetScore"] = safe_col(external, "QualityScore")
-        external["PositionNeed"] = "Unknown"
-        return external.sort_values("HradecTargetScore", ascending=False).head(top_n)
-
-    hradec_pos_quality = hradec.groupby("PositionGroup")["QualityScore"].median()
-    hradec_pos_count = hradec.groupby("PositionGroup")["PlayerName"].count()
-
-    def target_score(row: pd.Series) -> float:
-        pos = str(row.get("PositionGroup", ""))
-        quality = float(pd.to_numeric(row.get("QualityScore", 0), errors="coerce") or 0)
-        value = float(pd.to_numeric(row.get("ValueRecruitmentScore", 50), errors="coerce") or 50)
-        resale = float(pd.to_numeric(row.get("AgeResaleScore", 50), errors="coerce") or 50)
-        smart = float(pd.to_numeric(row.get("SmartClubScore", 50), errors="coerce") or 50)
-        reliability = float(pd.to_numeric(row.get("PerformanceReliabilityScore", 50), errors="coerce") or 50)
-        hradec_q = float(hradec_pos_quality.get(pos, 50))
-        count = int(hradec_pos_count.get(pos, 3))
-        # Boost for positions where Hradec is weak or thin
-        gap_bonus = max(0.0, (65.0 - hradec_q) / 65.0) * 20
-        depth_bonus = max(0.0, (4.0 - count) / 4.0) * 10
-        base = quality * 0.38 + value * 0.18 + resale * 0.12 + smart * 0.16 + reliability * 0.16
-        return float(np.clip(base + gap_bonus + depth_bonus, 0, 130))
-
-    external["HradecTargetScore"] = external.apply(target_score, axis=1)
-
-    def need_label(pos: str) -> str:
-        q = float(hradec_pos_quality.get(pos, 55))
-        c = int(hradec_pos_count.get(pos, 3))
-        if c == 0:
-            return "🔴 No depth"
-        if q < 48 or c <= 1:
-            return "🔴 High need"
-        if q < 55 or c <= 2:
-            return "🟡 Medium need"
-        return "🟢 Covered"
-
-    external["PositionNeed"] = external["PositionGroup"].apply(need_label)
-    return external.sort_values("HradecTargetScore", ascending=False).head(top_n)
-
-
-def render_european_map(market_df: pd.DataFrame) -> alt.Chart:
-    """Altair bubble map of Europe coloured by scout priority score."""
-    background = alt.Chart({"values": [{}]}).mark_geoshape(
-        fill="#0a1220", stroke="#1e2d3d", strokeWidth=0.4
-    ).properties(width=700, height=440).project("mercator")
-
-    bubbles = (
-        alt.Chart(market_df)
-        .mark_circle(opacity=0.88, stroke="#080c14", strokeWidth=1)
-        .encode(
-            longitude="lon:Q",
-            latitude="lat:Q",
-            size=alt.Size(
-                "Players:Q",
-                scale=alt.Scale(range=[40, 700]),
-                legend=alt.Legend(title="Players", orient="bottom-right", labelColor="#8fa3b1", titleColor="#8fa3b1"),
-            ),
-            color=alt.Color(
-                "GoScore:Q",
-                scale=alt.Scale(domain=[30, 75], range=["#1e2d3d", "#00d4a8"]),
-                legend=alt.Legend(title="Scout priority", orient="bottom-left", labelColor="#8fa3b1", titleColor="#8fa3b1"),
-            ),
-            tooltip=[
-                alt.Tooltip("Country:N", title="Country"),
-                alt.Tooltip("Players:Q", title="Players"),
-                alt.Tooltip("MedianScore:Q", title="Median quality", format=".1f"),
-                alt.Tooltip("HighQualityShare:Q", title="High quality %", format=".1f"),
-                alt.Tooltip("GoScore:Q", title="Scout priority", format=".1f"),
-                alt.Tooltip("Recommendation:N", title="Action"),
-                alt.Tooltip("MedianAge:Q", title="Median age", format=".1f"),
-            ],
-        )
-    )
-
-    labels = (
-        alt.Chart(market_df.loc[market_df["GoScore"] >= 55])
-        .mark_text(fontSize=9, fontWeight="bold", dy=-14, color="#e8edf3")
-        .encode(longitude="lon:Q", latitude="lat:Q", text="Country:N")
-    )
-
-    return (
-        (bubbles + labels)
-        .properties(width=700, height=440)
-        .project(type="mercator", center=[15, 52], scale=480)
-        .configure_view(fill="#080c14", stroke=None)
-        .configure(background="#080c14")
+    rename = {
+        _player_col(anomalies): "Player", _team_col(anomalies): "Team",
+        "_League": "League", "_anomaly_type": "Type",
+        "_anomaly_score": "Score", "_peak_z": "Peak Z",
+        "_mean_z": "Mean Z", "_anomaly_breadth": "Breadth",
+    }
+    st.dataframe(
+        anomalies[disp].rename(columns=rename).round(3),
+        use_container_width=True,
+        height=height,
+        hide_index=True,
+        column_config={
+            "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=18, format="%.2f"),
+            "Peak Z": st.column_config.NumberColumn("Peak Z", format="%.2f"),
+        },
     )
 
 
-def generate_scout_report(player: pd.Series, ref_df: pd.DataFrame) -> str:
-    """Call Claude API to generate a 150-word scout report for a player."""
-    try:
-        import anthropic as _anthropic
-        _client = _anthropic.Anthropic()
-        _pos_df = ref_df.loc[ref_df["PositionGroup"].eq(player["PositionGroup"])]
-        _pctile = percentile_rank(_pos_df["QualityScore"].dropna(), float(player["QualityScore"]))
-        _prompt = (
-            f"You are a professional football scout. Write a concise 150-word scouting report.\n\n"
-            f"Player: {player['PlayerName']} | Team: {player['TeamName']} | League: {player.get('BundleLabel','?')}\n"
-            f"Position: {player['PositionGroup']} | Age: {player['AgeYears']:.1f} | Minutes: {int(player['MinutesPlayed']):,}\n"
-            f"Quality: {player['QualityScore']:.1f} ({_pctile:.0f}th pctile for {player['PositionGroup']}) | "
-            f"Role Fit: {player.get('RoleFitScore',0):.1f} | Impact: {player.get('ProfileScore',0):.1f} | "
-            f"Decision: {player.get('DecisionScore',0):.1f} | Reliability: {player.get('PerformanceReliabilityScore',0):.1f}\n"
-            f"Risk: {player.get('RiskBand','?')} | Archetype: {player.get('Archetype','?')} | Tier: {player.get('QualityTier','?')}\n"
-            f"Key drivers: {player.get('QualityDrivers','?')}\n\n"
-            f"Write as a scout would: strengths, playing style, reliability/risk, and a signing verdict for "
-            f"FC Hradec Králové (Czech top-flight club). Plain prose, no bullet points, ~150 words."
-        )
-        _msg = _client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=450,
-            messages=[{"role": "user", "content": _prompt}],
-        )
-        return _msg.content[0].text
-    except Exception as _e:
-        return f"Report generation failed: {_e}"
-
-
-def download_name(prefix: str, suffix: str) -> str:
-    return f"fchk_{prefix.lower().replace(' ', '_')}.{suffix}"
-
-
-def reset_filters() -> None:
-    for key in [
-        "positions_filter",
-        "profiles_filter",
-        "bundles_filter",
-        "archetypes_filter",
-        "countries_filter",
-        "u23_filter",
-        "age_filter",
-        "minutes_filter",
-        "fit_floor",
-        "quality_floor",
-        "composite_floor",
-        "reliability_floor",
-        "max_risk",
-        "search_filter",
-    ]:
-        st.session_state.pop(key, None)
-    st.session_state["quick_mode"] = "Full board"
-
-
-def _load_shortlist_file() -> dict:
-    try:
-        if SHORTLIST_FILE.exists():
-            return json.loads(SHORTLIST_FILE.read_text())
-    except Exception:
-        pass
-    return {}
-
-def _save_shortlist_file(data: dict) -> None:
-    try:
-        SHORTLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
-        SHORTLIST_FILE.write_text(json.dumps(data, indent=2))
-    except Exception:
-        pass
-
-def add_to_shortlist(player_name: str, priority: str = "Watch", notes: str = "") -> None:
-    sl = st.session_state.get("shortlist_data", {})
-    if player_name not in sl:
-        sl[player_name] = {"priority": priority, "notes": notes, "added": str(_date.today())}
-    else:
-        # update priority/notes if provided
-        if priority != "Watch" or notes:
-            sl[player_name]["priority"] = priority
-            sl[player_name]["notes"] = notes
-    st.session_state["shortlist_data"] = sl
-    st.session_state["shortlist_players"] = list(sl.keys())
-    _save_shortlist_file(sl)
-
-def clear_shortlist() -> None:
-    st.session_state["shortlist_data"] = {}
-    st.session_state["shortlist_players"] = []
-    _save_shortlist_file({})
-
-
-def set_quick_mode(mode: str) -> None:
-    st.session_state["quick_mode"] = mode
-    if mode == "U23 quality":
-        st.session_state["u23_filter"] = True
-        st.session_state["fit_floor"] = 35
-        st.session_state["quality_floor"] = 52
-        st.session_state["max_risk"] = 18.0
-    elif mode == "Elite quality":
-        st.session_state["fit_floor"] = 35
-        st.session_state["quality_floor"] = 68
-        st.session_state["composite_floor"] = 45
-        st.session_state["reliability_floor"] = 55
-    elif mode == "Reliable quality":
-        st.session_state["max_risk"] = 9.0
-        st.session_state["reliability_floor"] = 70
-        st.session_state["quality_floor"] = 55
-    else:
-        reset_filters()
-
-
-WORKSPACES = ["Command", "Deep Scan", "Cross-Source", "Player Intel", "Projections", "Watchlist", "Set Piece"]
-_WORKSPACE_ICONS = {
-    "Command":      ("⚡", "Anomaly landscape"),
-    "Deep Scan":    ("🔬", "Multi-method detector"),
-    "Cross-Source": ("🔗", "Wyscout divergence"),
-    "Player Intel": ("🧠", "Player deep-dive"),
-    "Projections":  ("📈", "3-season Monte Carlo"),
-    "Watchlist":    ("📋", "Saved targets"),
-    "Set Piece":    ("🎯", "Set-piece scouting"),
-}
-WYSCOUT_DB_DIR = APP_DIR / "data" / "Wyscout DB"
-
-
-def set_workspace(section: str) -> None:
-    st.session_state["active_workspace"] = section
-    st.session_state["show_scouting_workspace"] = True
-    st.session_state.pop("landing_notice", None)
-
-
-def enter_scouting_workspace() -> None:
-    set_workspace("Recruitment")
-
-
-def render_workspace_nav(location: str = "top") -> None:
-    active = st.session_state.get("active_workspace", "Command")
-
-    # ── Top bar: brand + workspace buttons ───────────────────────────────────
-    brand_col, *nav_col_list = st.columns([3] + [1] * len(WORKSPACES), gap="small")
-    with brand_col:
-        st.markdown(
-            "<div class='app-nav-brand'>"
-            "<span class='app-nav-emoji'>⚽</span>"
-            "<div><div class='app-nav-name'>FCHK Scouting IQ</div>"
-            "<div class='app-nav-tagline'>Hradec Králové · Analytics</div></div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-    for idx, section in enumerate(WORKSPACES):
-        icon, desc = _WORKSPACE_ICONS.get(section, ("", ""))
-        is_active = active == section
-        with nav_col_list[idx]:
-            st.button(
-                f"{icon}  {section}",
-                key=f"workspace_{location}_{section}",
-                type="primary" if is_active else "secondary",
-                width="stretch",
-                on_click=set_workspace,
-                args=(section,),
-            )
-
-    # ── Data source strip ────────────────────────────────────────────────────
-    src_col, league_col, info_col = st.columns([2, 5, 3], gap="small")
-    with src_col:
-        current_src = st.session_state.get("data_source", "IMPECT")
-        new_src = st.radio(
-            "Data source",
-            ["IMPECT", "Wyscout"],
-            index=0 if current_src == "IMPECT" else 1,
-            horizontal=True,
-            key=f"ds_radio_{location}",
-            label_visibility="collapsed",
-        )
-        if new_src != current_src:
-            st.session_state["data_source"] = new_src
-            # Clear cached Wyscout data when switching
-            st.session_state.pop("ws_dashboard_data", None)
-            st.rerun()
-
-    with league_col:
-        if st.session_state.get("data_source") == "Wyscout":
-            all_leagues = wyscout_available_leagues()
-            prev_sel = st.session_state.get("ws_selected_leagues", all_leagues)
-            sel_leagues = st.multiselect(
-                "Leagues",
-                all_leagues,
-                default=prev_sel,
-                key=f"ws_leagues_{location}",
-                placeholder="All leagues",
-                label_visibility="collapsed",
-            )
-            if sel_leagues != st.session_state.get("ws_selected_leagues"):
-                st.session_state["ws_selected_leagues"] = sel_leagues
-                st.session_state.pop("ws_dashboard_data", None)
-        else:
-            st.markdown(
-                "<div style='padding:8px 0;font-size:.7rem;color:#888;font-style:italic'>"
-                "IMPECT model data — recruitment scores across 16 European leagues</div>",
-                unsafe_allow_html=True,
-            )
-
-    with info_col:
-        src = st.session_state.get("data_source", "IMPECT")
-        mins_filter = st.session_state.get("ws_min_minutes", 400)
-        if src == "Wyscout":
-            n_leagues = len(st.session_state.get("ws_selected_leagues") or wyscout_available_leagues())
-            st.markdown(
-                f"<div style='padding:8px 0;font-size:.7rem;color:#888;font-style:italic'>"
-                f"Wyscout DB · {n_leagues} leagues selected · min {mins_filter} min</div>",
-                unsafe_allow_html=True,
-            )
-
-
-@st.cache_data(show_spinner=False, ttl=600)
-def _load_wyscout_scored(leagues_key: tuple[str, ...] | None, min_minutes: int) -> pd.DataFrame:
-    """Cached Wyscout load + full model scoring."""
-    leagues = list(leagues_key) if leagues_key else None
-    return build_wyscout_dashboard_data(min_minutes=min_minutes, leagues=leagues)
-
-
-def get_active_data() -> tuple[pd.DataFrame, str]:
-    """
-    Return (data, source) where source is 'IMPECT' or 'Wyscout'.
-    Handles caching and league filtering for the Wyscout path.
-    """
-    src = st.session_state.get("data_source", "IMPECT")
-    if src == "Wyscout":
-        sel = st.session_state.get("ws_selected_leagues") or None
-        leagues_key = tuple(sorted(sel)) if sel else None
-        min_min = st.session_state.get("ws_min_minutes", 400)
-        cache_key = ("ws_dashboard_data", leagues_key, min_min)
-        if st.session_state.get("ws_cache_key") != cache_key:
-            with st.spinner("Building Wyscout model — scoring leagues…"):
-                df = _load_wyscout_scored(leagues_key, min_min)
-            st.session_state["ws_dashboard_data"] = df
-            st.session_state["ws_cache_key"] = cache_key
-        return st.session_state["ws_dashboard_data"], "Wyscout"
-    return load_default_data(), "IMPECT"
-
-
-def active_score_cols(df: pd.DataFrame, source: str) -> list[str]:
-    """Return the score columns relevant for the active data source."""
-    if source == "Wyscout":
-        candidates = WYSCOUT_SCORE_COLS
-    else:
-        candidates = [
-            "DecisionScore", "ValueRecruitmentScore", "CompositeRecruitmentScore",
-            "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
-            "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
-            "ASA_GoalsAddedScore", "AgeResaleScore", "PerformanceReliabilityScore",
-        ]
-    return [c for c in candidates if c in df.columns]
-
-
-def active_proj_metrics(df: pd.DataFrame, source: str) -> list[str]:
-    """Return projection-suitable metric columns for the active data source."""
-    if source == "Wyscout":
-        return [m for m in WYSCOUT_PROJ_METRICS if m in df.columns]
-    return [m for m in [
-        "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
-        "PressingScore", "BallSecurityScore", "ExpectedThreatScore", "ASA_GoalsAddedScore",
-        "DecisionScore", "ValueRecruitmentScore",
-    ] if m in df.columns]
-
-
-BALANCED_WEIGHTS = {"Composite": 3, "Decision": 2, "Value": 2, "Success": 1, "Reliability": 1, "Risk penalty": 1}
-
-
-def czech_market(df: pd.DataFrame) -> pd.DataFrame:
-    country = df.get("CountryLabel", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
-    league = df.get("LeagueLabel", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
-    return df.loc[country.eq("czechia") | country.eq("czech republic") | league.str.contains("fortuna|chance narodni|czech", regex=True)].copy()
-
-
-def hradec_squad(df: pd.DataFrame) -> pd.DataFrame:
-    team = df.get("TeamName", pd.Series("", index=df.index)).fillna("").astype(str).str.lower()
-    return df.loc[team.str.contains("hradec|kralove|králové", regex=True)].copy()
-
-
-def _first_position(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only the first listed position when Wyscout stores comma-separated values."""
-    for col in ["Position", "PositionGroup", "Pos", "position", "pos"]:
-        if col in df.columns:
-            df[col] = (
-                df[col].astype(str)
-                .str.split(r"[,;]")
-                .str[0]
-                .str.strip()
-                .replace("nan", "")
-            )
-    return df
-
-
-def _load_wyscout_file(path: Path) -> pd.DataFrame:
-    suffix = path.suffix.lower()
-    if suffix in (".xlsx", ".xls"):
-        try:
-            return _first_position(_clean_columns(pd.read_excel(path)))
-        except Exception:
-            xl = pd.ExcelFile(path)
-            frames = []
-            for sheet in xl.sheet_names:
-                try:
-                    frames.append(_first_position(_clean_columns(pd.read_excel(xl, sheet_name=sheet))))
-                except Exception:
-                    pass
-            return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    elif suffix == ".csv":
-        for enc in ("utf-8", "latin-1", "cp1252"):
-            try:
-                return _first_position(_clean_columns(pd.read_csv(path, encoding=enc)))
-            except Exception:
-                continue
-    return pd.DataFrame()
-
-
-@st.cache_data(show_spinner=False, ttl=300)
-def _load_wyscout_tier(paths_and_labels: tuple[tuple[str, str], ...]) -> pd.DataFrame:
-    """Load and combine multiple Wyscout files into one DataFrame.
-    Adds a _League column so the result can be filtered by league."""
-    frames = []
-    for path_str, label in paths_and_labels:
-        df = _load_wyscout_file(Path(path_str))
-        if not df.empty:
-            df["_League"] = label
-            frames.append(df)
-    if not frames:
-        return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
-
-
-@st.cache_data(show_spinner=False)
-def load_leagues_overview() -> pd.DataFrame:
-    path = APP_DIR / "data" / "Leagues Overview.xlsx"
-    if not path.exists():
-        return pd.DataFrame()
-    df = pd.read_excel(path)
-    df.columns = [str(c).strip() for c in df.columns]
-    if "Division" in df.columns:
-        df["Division"] = df["Division"].astype(str)
-    return df
-
-
-_COUNTRY_ALIASES: dict[str, str] = {
-    "Czech": "Czech Republic",
-    "Moldovia": "Moldova",
-    "Moldovia": "Moldova",
-    "Turkiye": "Türkiye",
-    "Saudi": "Saudi Arabia",
-    "Korea": "South Korea",
-    "Bosnia": "Bosnia",
-    "USA": "USA",
-    "Japan II III": "Japan",
-}
-
-_TIER_COLORS_WS: dict[str, str] = {
-    "Elite":          "#e76f51",
-    "Top":            "#f4a261",
-    "Strong":         "#2a9d8f",
-    "Developing":     "#457b9d",
-    "Lower":          "#637d96",
-    "Youth/Grassroots": "#4a5568",
-}
-
-_TIER_ICONS: dict[str, str] = {
-    "Elite": "🏆",
-    "Top": "⭐",
-    "Strong": "💪",
-    "Developing": "📈",
-    "Lower": "🔍",
-    "Youth/Grassroots": "🌱",
-}
-
-
-def _parse_wyscout_filename(filename: str) -> tuple[str, int | str]:
-    """Return (country, division) from a Wyscout DB filename."""
-    name = filename
-    for ext in (".xlsx", ".xls", ".csv"):
-        name = name.replace(ext, "")
-    # Japan II III is a combined file
-    if name == "Japan II III":
-        return "Japan", 2
-    # Numbered parts: "Germany 4 - Part I" → Germany, div 4
-    import re as _re
-    m = _re.match(r"^(.+?)\s+(\d)\s+-\s+Part\s+", name)
-    if m:
-        return m.group(1).strip(), int(m.group(2))
-    # Roman-suffix parts: "Australia II - Part I" → Australia, div 2
-    m2 = _re.match(r"^(.+?)\s+(IV|III|II)\s+-\s+Part\s+", name)
-    if m2:
-        return m2.group(1).strip(), {"II": 2, "III": 3, "IV": 4}[m2.group(2)]
-    # Youth suffixes
-    for tag, div in (("U19", "U19"), ("U17", "U17")):
-        if name.endswith(tag):
-            return name[: -len(tag)].strip(), div
-        if f" {tag}" in name:
-            return name.split(f" {tag}")[0].strip(), div
-    # Standard roman suffixes
-    for suffix, num in ((" IV", 4), (" III", 3), (" II", 2)):
-        if name.endswith(suffix):
-            return name[: -len(suffix)].strip(), num
-    return name.strip(), 1
-
-
-def _match_league(filename: str, leagues_df: pd.DataFrame) -> pd.Series | None:
-    if leagues_df.empty:
-        return None
-    country_raw, division = _parse_wyscout_filename(filename)
-    country = _COUNTRY_ALIASES.get(country_raw, country_raw)
-    div_str = str(division)
-    mask = (
-        leagues_df["Country"].fillna("").str.lower().str.contains(country.lower(), regex=False)
-        & leagues_df["Division"].astype(str).str.strip().eq(div_str)
-    )
-    match = leagues_df.loc[mask]
-    if not match.empty:
-        return match.iloc[0]
-    # Fuzzy: just match country, take lowest division number for that country
-    mask2 = leagues_df["Country"].fillna("").str.lower().str.contains(country.lower(), regex=False)
-    match2 = leagues_df.loc[mask2]
-    if not match2.empty:
-        num_divs = pd.to_numeric(match2["Division"], errors="coerce")
-        best = match2.loc[num_divs.eq(num_divs.min())]
-        return best.iloc[0]
-    return None
-
-
-def render_scouting_workspace() -> None:
-    leagues_df = load_leagues_overview()
-    wyscout_files = sorted(
-        [p for p in WYSCOUT_DB_DIR.glob("*") if p.suffix.lower() in (".xlsx", ".xls", ".csv") and not p.name.startswith("~")],
-        key=lambda p: p.name.lower(),
-    )
-
-    file_meta: dict[str, pd.Series | None] = {p.name: _match_league(p.name, leagues_df) for p in wyscout_files}
-
-    def _tier_of(fname: str) -> str:
-        m = file_meta.get(fname)
-        return str(m["Tier Label"]) if m is not None and pd.notna(m.get("Tier Label")) else "Unknown"
-
-    def _file_label(p: Path) -> str:
-        m = file_meta.get(p.name)
-        if m is not None and pd.notna(m.get("League Name")):
-            return str(m["League Name"])
-        return p.stem
-
-    # Initialise filter state so all variables are defined before the sidebar block
-    sel_leagues: list[str] = []
-    sel_pos: list[str] = []
-    sel_teams: list[str] = []
-    sel_age: tuple[float, float] | None = None
-    ws_search: str = ""
-    sort_col_sel: str = "Default"
-    _ws_numeric_cols: list[str] = []
-    _ws_text_cols: list[str] = []
-    _player_col = _team_col = _pos_col = _age_col = None
-    ws_df: pd.DataFrame = pd.DataFrame()
-    sel_tier: str = "All"
-    visible_files: list = []
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🔍</div>"
-            "<div><div class='sidebar-brand-title'>Scouting</div>"
-            "<div class='sidebar-brand-meta'>Wyscout DB browser</div></div></div>",
-            unsafe_allow_html=True,
-        )
-
-        if wyscout_files:
-            st.markdown("<div class='sbar-hdr'>Tier</div>", unsafe_allow_html=True)
-            all_tiers = ["All", "Elite", "Top", "Strong", "Developing", "Lower", "Youth/Grassroots"]
-            sel_tier = st.selectbox("Tier", all_tiers, key="ws_tier_filter", label_visibility="collapsed")
-
-            visible_files = [p for p in wyscout_files if _tier_of(p.name) == sel_tier] if sel_tier != "All" else wyscout_files
-
-            if visible_files:
-                # Build the combined dataset for this tier (cached by the set of files)
-                paths_and_labels = tuple((str(p), _file_label(p)) for p in visible_files)
-                with st.spinner(f"Loading {len(visible_files)} league file{'s' if len(visible_files) != 1 else ''}…"):
-                    ws_df = _load_wyscout_tier(paths_and_labels)
-
-                if not ws_df.empty:
-                    _ws_numeric_cols = [c for c in ws_df.select_dtypes(include=[np.number]).columns if c != "_League"]
-                    _ws_text_cols    = [c for c in ws_df.select_dtypes(exclude=[np.number]).columns if c != "_League"]
-                    _player_col = next((c for c in ["Player", "PlayerName", "Name", "player", "name"] if c in ws_df.columns), None)
-                    _team_col   = next((c for c in ["Team", "TeamName", "Club", "team", "club"] if c in ws_df.columns), None)
-                    _pos_col    = next((c for c in ["Position", "PositionGroup", "Pos", "position", "pos"] if c in ws_df.columns), None)
-                    _age_col    = next((c for c in ["Age", "AgeYears", "age"] if c in ws_df.columns), None)
-                    # Add position group mapping column for profile search
-                    if _pos_col and "_PosGroup" not in ws_df.columns:
-                        _pg = ws_df[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("").rename("_PosGroup")
-                        ws_df = pd.concat([ws_df, _pg], axis=1)
-
-                    st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
-                    ws_search = st.text_input("Search", key="ws_search", placeholder="Player or team…", label_visibility="collapsed")
-
-                    league_opts = sorted(ws_df["_League"].dropna().astype(str).unique())
-                    if len(league_opts) > 1:
-                        sel_leagues = st.multiselect("League", league_opts, default=[], placeholder="All leagues", key="ws_league_filter")
-
-                    if _pos_col:
-                        pos_opts = sorted(ws_df[_pos_col].replace("", pd.NA).dropna().astype(str).unique())
-                        sel_pos = st.multiselect("Position", pos_opts, default=[], placeholder="All positions", key="ws_pos_filter")
-
-                    if _team_col:
-                        team_opts = sorted(ws_df[_team_col].dropna().astype(str).unique())
-                        sel_teams = st.multiselect("Team", team_opts, default=[], placeholder="All teams", key="ws_team_filter")
-
-                    if _age_col:
-                        _age_s = pd.to_numeric(ws_df[_age_col], errors="coerce").dropna()
-                        if not _age_s.empty:
-                            _amin = float(np.floor(_age_s.min()))
-                            _amax = float(np.ceil(_age_s.max()))
-                            if _amin < _amax:
-                                sel_age = st.slider("Age", _amin, _amax, (_amin, _amax), step=1.0, key="ws_age_filter")
-
-                    if _ws_numeric_cols:
-                        st.markdown("<div class='sbar-hdr'>Sort by</div>", unsafe_allow_html=True)
-                        sort_col_sel = st.selectbox("Sort column", ["Default"] + _ws_numeric_cols, key="ws_sort_col", label_visibility="collapsed")
-
-    # ── Page header ──────────────────────────────────────────────────────────
-    st.markdown(
-        "<div class='page-header'>"
-        "<div class='page-header-icon'>🔍</div>"
-        "<div><div class='page-header-title'>Scouting</div>"
-        "<div class='page-header-sub'>Wyscout data browser — search and filter imported league files</div></div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    if not wyscout_files:
-        st.markdown(
-            '<div class="note-box" style="border-left-color:var(--amber);">'
-            '<strong style="color:var(--amber);">No Wyscout files found.</strong><br>'
-            f'Upload your exported Wyscout Excel or CSV files to '
-            f'<code style="color:var(--teal);background:rgba(13,158,125,.08);padding:2px 6px;border-radius:4px;">data/Wyscout DB/</code>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        return
-
-    if ws_df.empty:
-        st.info("No data loaded. Select a tier in the sidebar.")
-        return
-
-    # ── Apply sidebar filters (shared across both tabs) ───────────────────────
-    ws_filtered = ws_df.copy()
-    if sel_leagues:
-        ws_filtered = ws_filtered.loc[ws_filtered["_League"].isin(sel_leagues)]
-    if sel_pos and _pos_col:
-        ws_filtered = ws_filtered.loc[ws_filtered[_pos_col].astype(str).isin(sel_pos)]
-    if sel_teams and _team_col:
-        ws_filtered = ws_filtered.loc[ws_filtered[_team_col].astype(str).isin(sel_teams)]
-    if sel_age and _age_col:
-        ws_filtered = ws_filtered.loc[pd.to_numeric(ws_filtered[_age_col], errors="coerce").between(sel_age[0], sel_age[1])]
-    if ws_search:
-        _hcols = [c for c in [_player_col, _team_col] if c]
-        if _hcols:
-            _hay = ws_filtered[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
-            ws_filtered = ws_filtered.loc[_hay.str.contains(ws_search.lower(), regex=False)]
-
-    ws_browse_tab, ws_profile_tab = st.tabs(["🔍 Browse", "🎭 Profile Search"])
-
-    with ws_browse_tab:
-        # ── Status bar ────────────────────────────────────────────────────────
-        _n_leagues = ws_filtered["_League"].nunique()
-        _league_summary = f"{_n_leagues} league{'s' if _n_leagues != 1 else ''}"
-        row_meta_c, dl_c = st.columns([5, 1], gap="small")
-        with row_meta_c:
-            st.markdown(
-                f'<div style="color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding-top:6px;">'
-                f'<span style="color:var(--ink);">{len(ws_filtered):,}</span> / {len(ws_df):,} players'
-                f'&nbsp;·&nbsp;{_league_summary}&nbsp;·&nbsp;{sel_tier}</div>',
-                unsafe_allow_html=True,
-            )
-        with dl_c:
-            st.download_button(
-                "⬇ CSV",
-                data=ws_filtered.drop(columns=["_League", "_PosGroup"], errors="ignore").to_csv(index=False).encode("utf-8"),
-                file_name=f"wyscout_{sel_tier.lower().replace(' ','_')}_filtered.csv",
-                mime="text/csv",
-                width="stretch",
-            )
-
-        # ── Main table ────────────────────────────────────────────────────────
-        display_cols = [c for c in ws_filtered.columns if c not in ("_League", "_PosGroup")]
-        if ws_filtered["_League"].nunique() > 1:
-            display_cols = ["_League"] + display_cols
-            ws_display_df = ws_filtered[display_cols].rename(columns={"_League": "League"})
-        else:
-            ws_display_df = ws_filtered[display_cols]
-
-        if sort_col_sel and sort_col_sel != "Default" and sort_col_sel in ws_display_df.columns:
-            ws_display_df = ws_display_df.sort_values(sort_col_sel, ascending=False).reset_index(drop=True)
-        else:
-            ws_display_df = ws_display_df.reset_index(drop=True)
-
-        col_config: dict = {}
-        for c in _ws_numeric_cols:
-            if c in ws_display_df.columns:
-                _cmin = float(ws_display_df[c].min()) if not ws_display_df[c].isna().all() else 0.0
-                _cmax = float(ws_display_df[c].max()) if not ws_display_df[c].isna().all() else 100.0
-                if _cmax > _cmin and 0 <= _cmin and _cmax <= 100:
-                    col_config[c] = st.column_config.ProgressColumn(c, min_value=_cmin, max_value=_cmax, format="%.2f")
-
-        st.dataframe(ws_display_df, width="stretch", hide_index=True, height=780, column_config=col_config)
-
-        # ── Column explorer ───────────────────────────────────────────────────
-        if _ws_numeric_cols:
-            with st.expander("📊 Column explorer", expanded=False):
-                _explore_col = st.selectbox("Metric", _ws_numeric_cols, key="ws_explore_col")
-                if _explore_col in ws_filtered.columns:
-                    _series = pd.to_numeric(ws_filtered[_explore_col], errors="coerce").dropna()
-                    if not _series.empty:
-                        exp_left, exp_right = st.columns([2, 1])
-                        with exp_left:
-                            _hist_chart = (
-                                alt.Chart(pd.DataFrame({"value": _series}))
-                                .mark_bar(color="#12c799", opacity=0.7, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
-                                .encode(
-                                    x=alt.X("value:Q", bin=alt.Bin(maxbins=30), title=_explore_col,
-                                            axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e", gridColor="#21262d")),
-                                    y=alt.Y("count():Q", title="Players", axis=alt.Axis(labelColor="#8b949e", gridColor="#21262d")),
-                                )
-                                .properties(height=220)
-                                .configure_view(fill="#ffffff", stroke=None).configure(background="#f9f8f3")
-                            )
-                            st.altair_chart(_hist_chart, width="stretch")
-                        with exp_right:
-                            _stats = _series.describe()
-                            _stats.index = ["Count", "Mean", "Std", "Min", "P25", "Median", "P75", "Max"]
-                            st.dataframe(_stats.reset_index().rename(columns={"index": "Stat", 0: "Value"}).round(2),
-                                         width="stretch", hide_index=True)
-
-        # ── League index ──────────────────────────────────────────────────────
-        if not leagues_df.empty:
-            with st.expander("🌍 League index", expanded=False):
-                present_names: set[str] = set()
-                for p in wyscout_files:
-                    m = file_meta.get(p.name)
-                    if m is not None:
-                        present_names.add(str(m.get("League Name", "")))
-                lo_view = leagues_df.copy()
-                lo_view["✓"] = lo_view["League Name"].isin(present_names).map({True: "✓", False: ""})
-                lo_view["Division"] = lo_view["Division"].astype(str)
-                li_tier = st.selectbox("Tier", ["All"] + sorted(lo_view["Tier Label"].dropna().unique().tolist()), key="ws_li_tier")
-                if li_tier != "All":
-                    lo_view = lo_view.loc[lo_view["Tier Label"].eq(li_tier)]
-                st.dataframe(
-                    lo_view[["League Name", "Country", "Tier Label", "Division", "✓"]],
-                    width="stretch", hide_index=True, height=420,
-                )
-
-    with ws_profile_tab:
-        # ── Profile target selectors ─────────────────────────────────────────
-        # Show actual Wyscout position codes present in the data, filtered to
-        # those that map to a known profile group
-        if _pos_col and not ws_df.empty:
-            _ws_all_raw_pos = sorted(
-                p for p in ws_df[_pos_col].astype(str).str.strip().unique().tolist()
-                if isinstance(p, str) and p and p != "nan"
-            )
-            _ws_mapped_pos = [p for p in _ws_all_raw_pos if WYSCOUT_POSITION_MAP.get(p)]
-        else:
-            _ws_mapped_pos = []
-
-        _wppos_col, _wppro_col = st.columns([1, 2], gap="small")
-        with _wppos_col:
-            _ws_raw_pos_sel = st.selectbox(
-                "Position", ["—"] + _ws_mapped_pos,
-                key="ws_profile_pos", label_visibility="visible",
-            )
-        # Resolve raw Wyscout position → profile group
-        _ws_target_pos = WYSCOUT_POSITION_MAP.get(_ws_raw_pos_sel, "") if _ws_raw_pos_sel != "—" else ""
-
-        with _wppro_col:
-            _ws_prof_options = list(WYSCOUT_PROFILE_WEIGHTS.get(_ws_target_pos, {}).keys()) if _ws_target_pos else []
-            _ws_target_profile = st.selectbox(
-                "Profile", ["—"] + _ws_prof_options,
-                key="ws_profile_name", disabled=not _ws_target_pos, label_visibility="visible",
-            )
-
-        if not _ws_target_pos or _ws_target_profile == "—":
-            st.markdown(
-                "<div class='note-box'>Select a <strong>position</strong> and a <strong>profile</strong> above "
-                "to rank every player in that position by how well they fit the profile, "
-                "using z-scores calculated from Wyscout metrics within the position pool.</div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            # Calculate ProfileFit on full ws_df so z-scores use the complete position pool
-            _ws_scored = ws_df.copy()
-            if "_PosGroup" not in _ws_scored.columns and _pos_col:
-                _pg2 = _ws_scored[_pos_col].astype(str).str.strip().map(WYSCOUT_POSITION_MAP).fillna("").rename("_PosGroup")
-                _ws_scored = pd.concat([_ws_scored, _pg2], axis=1)
-            _ws_scored["ProfileFit"] = calc_wyscout_profile_fit(_ws_scored, _ws_target_pos, _ws_target_profile)
-
-            # Apply sidebar filters (except position — the position selector replaces that)
-            if sel_leagues:
-                _ws_scored = _ws_scored.loc[_ws_scored["_League"].isin(sel_leagues)]
-            if sel_teams and _team_col:
-                _ws_scored = _ws_scored.loc[_ws_scored[_team_col].astype(str).isin(sel_teams)]
-            if sel_age and _age_col:
-                _ws_scored = _ws_scored.loc[pd.to_numeric(_ws_scored[_age_col], errors="coerce").between(sel_age[0], sel_age[1])]
-            if ws_search:
-                _hcols = [c for c in [_player_col, _team_col] if c]
-                if _hcols:
-                    _hay = _ws_scored[_hcols].fillna("").astype(str).agg(" ".join, axis=1).str.lower()
-                    _ws_scored = _ws_scored.loc[_hay.str.contains(ws_search.lower(), regex=False)]
-
-            # Show players whose raw position maps to the selected group
-            _ws_pos_pool = _ws_scored.loc[_ws_scored["_PosGroup"].eq(_ws_target_pos)].copy()
-
-            if _ws_pos_pool.empty:
-                st.info(f"No {_ws_raw_pos_sel} players found with current filters.")
-            else:
-                _ws_pos_pool = _ws_pos_pool.sort_values("ProfileFit", ascending=False)
-
-                # Profile driver strip
-                _ws_pw = WYSCOUT_PROFILE_WEIGHTS[_ws_target_pos][_ws_target_profile]
-                _ws_drivers = " · ".join(f"{k} ×{v}" for k, v in _ws_pw.items())
-                _ws_avail_drivers = [k for k in _ws_pw if k in _ws_pos_pool.columns]
-                _ws_missing = [k for k in _ws_pw if k not in _ws_pos_pool.columns]
-                _ws_note = (
-                    f'<br><span style="color:var(--amber);font-size:.65rem;">Missing columns (scored as 0): '
-                    f'{", ".join(_ws_missing)}</span>' if _ws_missing else ""
-                )
-                # Count how many position codes are included in this group
-                _ws_group_codes = [k for k, v in WYSCOUT_POSITION_MAP.items() if v == _ws_target_pos]
-                _ws_pool_size = len(ws_df.loc[ws_df.get("_PosGroup", pd.Series("", index=ws_df.index)).eq(_ws_target_pos)])
-                st.markdown(
-                    f"<div class='note-box'>"
-                    f"<strong style='color:var(--teal-hi);'>{_ws_target_profile}</strong> "
-                    f"<span style='color:var(--muted);'>{_ws_raw_pos_sel} · {_ws_target_pos} group "
-                    f"({', '.join(_ws_group_codes)}) · z-scores vs {_ws_pool_size:,} players</span>"
-                    f"<br><span style='color:var(--faint);font-size:.7rem;'>Drivers: {_ws_drivers}</span>"
-                    f"{_ws_note}"
-                    f"<br><span style='color:var(--faint);font-size:.7rem;'>"
-                    f"50 = position average · 65 = top 16% · 80 = top 2%"
-                    f"</span></div>",
-                    unsafe_allow_html=True,
-                )
-
-                # Build display: id cols + league + age + raw position + ProfileFit + driver cols
-                _ws_id_cols = [c for c in [_player_col, _team_col] if c]
-                _ws_show = _ws_id_cols[:]
-                if "_League" in _ws_pos_pool.columns and _ws_pos_pool["_League"].nunique() > 1:
-                    _ws_show.append("_League")
-                if _age_col and _age_col in _ws_pos_pool.columns:
-                    _ws_show.append(_age_col)
-                if _pos_col and _pos_col in _ws_pos_pool.columns:
-                    _ws_show.append(_pos_col)
-                _ws_show.append("ProfileFit")
-                for _wsc in _ws_avail_drivers:
-                    if _wsc not in _ws_show:
-                        _ws_show.append(_wsc)
-
-                _ws_prof_board = (
-                    _ws_pos_pool[[c for c in _ws_show if c in _ws_pos_pool.columns]]
-                    .rename(columns={"_League": "League"})
-                    .reset_index(drop=True)
-                )
-
-                _ws_prof_cfg: dict = {
-                    "ProfileFit": st.column_config.ProgressColumn("Profile Fit ▼", min_value=0, max_value=100, format="%.1f"),
-                }
-                for _wsc in _ws_avail_drivers:
-                    _cmin = float(_ws_prof_board[_wsc].min()) if _wsc in _ws_prof_board.columns and not _ws_prof_board[_wsc].isna().all() else 0.0
-                    _cmax = float(_ws_prof_board[_wsc].max()) if _wsc in _ws_prof_board.columns and not _ws_prof_board[_wsc].isna().all() else 1.0
-                    if _cmax > _cmin:
-                        _ws_prof_cfg[_wsc] = st.column_config.ProgressColumn(_wsc, min_value=_cmin, max_value=_cmax, format="%.2f")
-
-                st.dataframe(_ws_prof_board.round(2), width="stretch", hide_index=True, height=780, column_config=_ws_prof_cfg)
-
-
-def _norm_search(s: object) -> str:
-    """Accent-stripped lowercase for robust name search."""
-    import unicodedata as _ud
-    return _ud.normalize("NFD", str(s)).encode("ascii", "ignore").decode().lower()
-
-
-def render_search_workspace(data: pd.DataFrame) -> None:
-    """Cross-database player search with IMPECT pizza + Wyscout percentile bar profile."""
-    link_db = _load_link_db()
-    ws_idx  = _load_wyscout_index()
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🔎</div>"
-            "<div><div class='sidebar-brand-title'>Player Search</div>"
-            "<div class='sidebar-brand-meta'>IMPECT + Wyscout combined</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        _ws_idx_count = len(ws_idx) if not ws_idx.empty else 0
-        st.markdown(
-            f"<div style='color:var(--faint);font-size:.68rem;padding:6px 0 0 4px;'>"
-            f"IMPECT: <strong style='color:var(--ink);'>{len(data):,}</strong> players · "
-            f"Wyscout: <strong style='color:var(--ink);'>{_ws_idx_count:,}</strong> players</div>",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown(
-        "<div class='page-header'>"
-        "<div class='page-header-icon'>🔎</div>"
-        "<div><div class='page-header-title'>Player Search</div>"
-        "<div class='page-header-sub'>Search across IMPECT model data and Wyscout — click a result for a full profile</div></div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    search_q = st.text_input(
-        "Search",
-        placeholder="Type a player name (min 2 characters)…",
-        key="player_search_q",
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("""
+    <div style='padding:18px 0 8px 4px;'>
+        <div style='font-size:1rem;font-weight:800;color:#ee3a27;letter-spacing:.05em;'>
+            ANOMALY PLATFORM
+        </div>
+        <div style='font-size:0.65rem;color:#2a3048;text-transform:uppercase;letter-spacing:.12em;'>
+            Pure z-score intelligence
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    page = st.radio(
+        "Navigate",
+        ["⚡ Anomaly Hub", "🔍 Explorer", "👤 Player Profile", "🔗 Similarity", "⚽ Set Pieces", "📥 Export"],
         label_visibility="collapsed",
     )
-    q = search_q.strip()
 
-    if len(q) < 2:
-        st.markdown(
-            "<div class='note-box'>Start typing a player name above. "
-            "Results come from <strong>IMPECT model data</strong> and the <strong>Wyscout database</strong> "
-            "(68 000+ players). Wyscout names use abbreviated format — search by last name for best results.</div>",
-            unsafe_allow_html=True,
-        )
-        return
+    st.markdown("---")
+    st.markdown("<div style='font-size:.65rem;color:#2a3048;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;'>Data</div>", unsafe_allow_html=True)
 
-    q_norm = _norm_search(q)
+    all_leagues = wyscout_available_leagues()
+    sel_leagues = st.multiselect(
+        "Leagues", all_leagues, default=[],
+        placeholder="All leagues", key="sel_leagues", label_visibility="collapsed",
+    )
+    leagues_key: tuple[str, ...] | None = tuple(sorted(sel_leagues)) if sel_leagues else None
 
-    # ── IMPECT search ─────────────────────────────────────────────────────────
-    impect_mask = data["PlayerName"].astype(str).apply(_norm_search).str.contains(q_norm, regex=False)
-    impect_hits = data.loc[impect_mask].copy()
+    min_minutes = st.slider("Min minutes", 0, 2500, 450, 50, key="min_min")
 
-    results_rows: list[dict] = []
-    covered_ws: set[tuple[str, str]] = set()  # (file, ws_player_name) already linked
+    st.markdown("<div style='font-size:.65rem;color:#2a3048;text-transform:uppercase;letter-spacing:.1em;margin-top:12px;margin-bottom:6px;'>Detection</div>", unsafe_allow_html=True)
 
-    for idx, row in impect_hits.iterrows():
-        pname = str(row.get("PlayerName", ""))
-        ws_link: pd.Series | None = None
-        if not link_db.empty:
-            cands = link_db.loc[link_db["IMPECT_Name"].astype(str).apply(_norm_search).eq(_norm_search(pname))]
-            if not cands.empty:
-                for conf in ("HIGH", "MEDIUM", "LOW"):
-                    sub = cands.loc[cands["MatchConfidence"] == conf]
-                    if not sub.empty:
-                        ws_link = sub.iloc[0]
-                        covered_ws.add((str(ws_link["Wyscout_File"]), str(ws_link["Wyscout_Name"])))
-                        break
-        results_rows.append({
-            "Player":      pname,
-            "Pos":         str(row.get("PositionGroup", "")),
-            "Team":        str(row.get("TeamName", "")),
-            "League":      str(row.get("BundleLabel", "")),
-            "Age":         round(float(row.get("AgeYears", 0) or 0), 1),
-            "Quality":     round(float(row.get("QualityScore", row.get("CompositeRecruitmentScore", 0)) or 0), 1),
-            "Source":      f"IMPECT+WS ({ws_link['MatchConfidence']})" if ws_link is not None else "IMPECT",
-            "_data_idx":   idx,
-            "_ws_link":    ws_link,
-            "_ws_idx_row": None,
-        })
+    threshold = st.slider("Anomaly threshold (z)", 1.0, 3.0, 1.8, 0.1, key="threshold")
+    method_options = {"Z-score": "z-score", "MAD (robust)": "mad", "IQR": "iqr"}
+    method_label = st.selectbox("Method", list(method_options.keys()), key="method", label_visibility="collapsed")
+    method = method_options[method_label]
 
-    # ── Wyscout-only search ───────────────────────────────────────────────────
-    if not ws_idx.empty:
-        ws_norms = ws_idx["Player"].astype(str).apply(_norm_search)
-        ws_mask = ws_norms.str.contains(q_norm, regex=False)
-        # also match last word of query against Wyscout names (handles "Firstname Lastname" → "F. Lastname")
-        q_parts = q_norm.split()
-        if len(q_parts) > 1:
-            ws_mask = ws_mask | ws_norms.str.contains(q_parts[-1], regex=False)
-        ws_hits = ws_idx.loc[ws_mask].copy()
 
-        for _, ws_row in ws_hits.iterrows():
-            file_name = str(ws_row.get("File", ""))
-            ws_name   = str(ws_row.get("Player", ""))
-            if (file_name, ws_name) in covered_ws:
-                continue
-            country_raw, division = _parse_wyscout_filename(file_name)
-            div_label = (
-                "I" * division if isinstance(division, int)
-                else str(division)
-            )
-            league_label = f"{country_raw} {div_label}".strip() if div_label not in ("1", "I") else country_raw
-            raw_pos = str(ws_row.get("Position", "") or "")
-            raw_pos = raw_pos.split(",")[0].split(";")[0].strip()  # first position only
-            ws_pg   = WYSCOUT_POSITION_MAP.get(raw_pos, "")
-            _age_raw = pd.to_numeric(ws_row.get("Age"), errors="coerce")
-            results_rows.append({
-                "Player":      ws_name,
-                "Pos":         ws_pg or raw_pos,
-                "Team":        str(ws_row.get("Team", "")),
-                "League":      league_label,
-                "Age":         float(_age_raw) if not pd.isna(_age_raw) else float("nan"),
-                "Quality":     float("nan"),
-                "Source":      "Wyscout",
-                "_data_idx":   None,
-                "_ws_link":    None,
-                "_ws_idx_row": ws_row,
-            })
+# ── Load & process data ───────────────────────────────────────────────────────
 
-    if not results_rows:
-        st.info(f"No players found matching '{q}'. Try searching by last name.")
-        return
+with st.spinner("Loading Wyscout data…"):
+    df = _load_raw(leagues_key, min_minutes)
 
-    results_df = pd.DataFrame(results_rows)
-    display_df = results_df[["Player", "Pos", "Team", "League", "Age", "Quality", "Source"]]
+if df.empty:
+    st.error("No data found. Add Wyscout `.xlsx` files to `data/Wyscout DB/`.")
+    st.stop()
 
+with st.spinner("Running anomaly detection…"):
+    zdf = _run_anomaly_detection(df.to_json(), threshold, method)
+
+if "_peak_z" in zdf.columns:
+    anomalies = zdf[zdf["_peak_z"] >= threshold].sort_values("_anomaly_score", ascending=False).reset_index(drop=True)
+else:
+    anomalies = pd.DataFrame()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Anomaly Hub
+# ══════════════════════════════════════════════════════════════════════════════
+if page == "⚡ Anomaly Hub":
     st.markdown(
-        f"<div style='color:var(--faint);font-size:.65rem;font-weight:700;text-transform:uppercase;"
-        f"letter-spacing:.08em;padding:4px 0 6px;'>"
-        f"<span style='color:var(--ink);'>{len(results_df)}</span> result{'s' if len(results_df) != 1 else ''} "
-        f"for <span style='color:var(--teal-hi);'>{q}</span></div>",
+        "<div class='page-title'>Anomaly Hub</div>"
+        "<div class='page-sub'>Global outlier landscape — all positions, all types, all leagues</div>",
         unsafe_allow_html=True,
     )
 
-    event = st.dataframe(
-        display_df,
-        selection_mode="single-row",
-        on_select="rerun",
-        key="player_search_results",
-        hide_index=True,
-        use_container_width=True,
-        height=min(len(results_df) * 36 + 50, 380),
-        column_config={
-            "Quality": st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
-            "Source":  st.column_config.TextColumn("Source"),
-        },
-    )
+    n_players   = len(df)
+    n_anomalies = len(anomalies)
+    n_leagues   = df["_League"].nunique() if "_League" in df.columns else 0
+    n_pos       = df["PositionGroup"].nunique() if "PositionGroup" in df.columns else 0
 
-    if not event.selection.rows:
-        st.markdown(
-            "<div class='note-box' style='margin-top:8px;'>↑ Click a row to open the full player profile.</div>",
-            unsafe_allow_html=True,
-        )
-        return
-
-    # ── Player profile ────────────────────────────────────────────────────────
-    sel = results_df.iloc[event.selection.rows[0]]
-    is_wyscout_only = pd.isna(sel["_data_idx"])
-
-    # Resolve IMPECT row (None for Wyscout-only players)
-    impect_row: pd.Series | None = data.loc[sel["_data_idx"]] if not is_wyscout_only else None
-
-    # Resolve Wyscout source: link DB row (IMPECT-linked) OR index row (Wyscout-only)
-    # pandas converts None → NaN in mixed-type columns; pd.Series can't be bool-tested
-    def _unwrap(v):
-        if isinstance(v, pd.Series):
-            return v
-        try:
-            return None if pd.isna(v) else v
-        except (TypeError, ValueError):
-            return v
-
-    ws_link    = _unwrap(sel["_ws_link"])
-    ws_idx_row = _unwrap(sel["_ws_idx_row"])
-    has_wyscout = ws_link is not None or ws_idx_row is not None
-
-    if impect_row is not None:
-        pos_group = str(impect_row.get("PositionGroup", ""))
-    else:
-        raw_pos   = str(ws_idx_row.get("Position", "") or "")  # type: ignore[union-attr]
-        raw_pos   = raw_pos.split(",")[0].split(";")[0].strip()  # first position only
-        pos_group = WYSCOUT_POSITION_MAP.get(raw_pos, "")
-
-    # Pre-load Wyscout data so charts and table share it
-    _ws_row_loaded: pd.Series | None = None
-    _ws_pos_pool_loaded: pd.DataFrame = pd.DataFrame()
-    _ws_file_loaded = ""
-    _ws_name_loaded = ""
-    _ws_team_loaded = ""
-    _ws_conf_loaded = ""
-
-    if ws_link is not None:
-        # IMPECT-linked player — use link DB metadata
-        _ws_file_loaded = str(ws_link.get("Wyscout_File", ""))
-        _ws_name_loaded = str(ws_link.get("Wyscout_Name", ""))
-        _ws_team_loaded = str(ws_link.get("Wyscout_Team", ""))
-        _ws_conf_loaded = str(ws_link.get("MatchConfidence", ""))
-    elif ws_idx_row is not None:
-        # Wyscout-only player — use index row metadata
-        _ws_file_loaded = str(ws_idx_row.get("File", ""))
-        _ws_name_loaded = str(ws_idx_row.get("Player", ""))
-        _ws_team_loaded = str(ws_idx_row.get("Team", ""))
-        _ws_conf_loaded = ""
-
-    if _ws_file_loaded:
-        _ws_path_loaded = WYSCOUT_DB_DIR / _ws_file_loaded
-        if _ws_path_loaded.exists():
-            _ws_df_loaded = _load_wyscout_file(_ws_path_loaded)
-            if not _ws_df_loaded.empty:
-                _ws_hit = _ws_df_loaded.loc[_ws_df_loaded["Player"].astype(str).eq(_ws_name_loaded)]
-                if not _ws_hit.empty:
-                    _ws_row_loaded = _ws_hit.iloc[0]
-                    _pc_ws = next((c for c in ["Position", "Pos"] if c in _ws_df_loaded.columns), None)
-                    _pg_col = (_ws_df_loaded[_pc_ws].astype(str).str.strip()
-                               .map(WYSCOUT_POSITION_MAP).fillna("").rename("_PosGroup")
-                               if _pc_ws else pd.Series("", index=_ws_df_loaded.index, name="_PosGroup"))
-                    _ws_df_loaded = pd.concat([_ws_df_loaded, _pg_col], axis=1)
-                    _ws_pos_pool_loaded = _ws_df_loaded.loc[_ws_df_loaded["_PosGroup"].eq(pos_group)]
-
-    st.markdown("<hr style='border:none;border-top:1px solid #21262d;margin:1.2rem 0 0.8rem;'>",
-                unsafe_allow_html=True)
-
-    # Header card
-    if impect_row is not None:
-        _risk_cls = {"Low": "teal", "Moderate": "amber", "Elevated": "amber", "High": "red"}.get(
-            str(impect_row.get("RiskBand", "")), "")
-        _qs   = float(impect_row.get("QualityScore", impect_row.get("CompositeRecruitmentScore", 0)) or 0)
-        _tier = str(impect_row.get("QualityTier", impect_row.get("ScoreBand", "")) or "")
-        _arch = str(impect_row.get("Archetype", "") or "")
-        _risk = str(impect_row.get("RiskBand", "") or "")
-        _mins = int(impect_row.get("MinutesPlayed", 0) or 0)
-        _age  = float(impect_row.get("AgeYears", 0) or 0)
-        _ws_badge = (f'<span class="pill teal">Wyscout {_ws_conf_loaded}</span>' if has_wyscout else "")
-        st.markdown(
-            f'<div class="profile-card">'
-            f'<div class="profile-name">{escape(str(impect_row.get("PlayerName","")))}</div>'
-            f'<div class="profile-meta">{escape(str(impect_row.get("TeamName","")))} · '
-            f'{escape(str(impect_row.get("BundleLabel","")))} · {escape(pos_group)} · '
-            f'{_age:.1f} yrs · {_mins:,} min</div>'
-            f'<div class="pill-row">'
-            f'<span class="pill teal">Quality {_qs:.1f}</span>'
-            f'{f"""<span class="pill">{escape(_tier)}</span>""" if _tier else ""}'
-            f'{f"""<span class="pill">{escape(_arch)}</span>""" if _arch else ""}'
-            f'{f"""<span class="pill {_risk_cls}">{escape(_risk)} risk</span>""" if _risk else ""}'
-            f'{_ws_badge}'
-            f'</div></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        # Wyscout-only header
-        _ws_age_raw = ws_idx_row.get("Age", "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
-        _ws_age_str = f"{float(_ws_age_raw):.0f} yrs" if pd.notna(pd.to_numeric(_ws_age_raw, errors="coerce")) else ""
-        _ws_raw_pos_full = str(ws_idx_row.get("Position", "") or "") if ws_idx_row is not None else ""  # type: ignore[union-attr]
-        _ws_raw_pos = _ws_raw_pos_full.split(",")[0].split(";")[0].strip()
-        country_raw2, _ = _parse_wyscout_filename(_ws_file_loaded)
-        st.markdown(
-            f'<div class="profile-card">'
-            f'<div class="profile-name">{escape(_ws_name_loaded)}</div>'
-            f'<div class="profile-meta">{escape(_ws_team_loaded)} · '
-            f'{escape(country_raw2)} · {escape(_ws_raw_pos)} ({escape(pos_group)}) · {escape(_ws_age_str)}</div>'
-            f'<div class="pill-row">'
-            f'<span class="pill">Wyscout</span>'
-            f'</div></div>',
+    k1, k2, k3, k4 = st.columns(4)
+    for w, num, lbl in [
+        (k1, f"{n_players:,}",   "Players analysed"),
+        (k2, f"{n_anomalies:,}", "Anomalies detected"),
+        (k3, n_leagues,          "Leagues"),
+        (k4, n_pos,              "Position groups"),
+    ]:
+        w.markdown(
+            f"<div class='kpi-card'><div class='kpi-num'>{num}</div>"
+            f"<div class='kpi-label'>{lbl}</div></div>",
             unsafe_allow_html=True,
         )
 
-    # ── Charts ────────────────────────────────────────────────────────────────
-    has_impect_model  = impect_row is not None and bool(pos_group)
-    has_wyscout_loaded = _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty
-
-    def _render_pizza_section(container=None):
-        target = container if container is not None else st
-        target.markdown(
-            f"<div style='color:var(--muted);font-size:.75rem;font-weight:700;text-transform:uppercase;"
-            f"letter-spacing:.06em;margin-bottom:6px;'>IMPECT model · percentile vs {pos_group} pool</div>",
-            unsafe_allow_html=True,
-        )
-        pos_pool_impect = data.loc[data["PositionGroup"].astype(str).eq(pos_group)].copy()
-        try:
-            fig_pizza = render_player_pizza(pos_pool_impect, impect_row)
-            target.pyplot(fig_pizza, use_container_width=True)
-            plt.close(fig_pizza)
-        except Exception as _ex:
-            target.info(f"Pizza chart unavailable: {_ex}")
-
-    def _render_bars_section(container=None):
-        target = container if container is not None else st
-        target.markdown(
-            "<div style='color:var(--muted);font-size:.75rem;font-weight:700;text-transform:uppercase;"
-            "letter-spacing:.06em;margin-bottom:6px;'>Wyscout raw metrics · percentile bars</div>",
-            unsafe_allow_html=True,
-        )
-        if has_wyscout_loaded:
-            if _ws_conf_loaded and _ws_conf_loaded != "HIGH":
-                target.markdown(
-                    f"<span style='color:var(--amber);font-size:.72rem;'>Link: {_ws_conf_loaded} — verify manually</span>",
-                    unsafe_allow_html=True,
-                )
-            _fig_bars = _render_wyscout_bars(
-                _ws_row_loaded, _ws_pos_pool_loaded, pos_group,
-                _ws_name_loaded, _ws_team_loaded, _ws_file_loaded,
-            )
-            if _fig_bars:
-                target.pyplot(_fig_bars, use_container_width=True)
-                plt.close(_fig_bars)
-            else:
-                target.info("No Wyscout metrics available for this position.")
-        elif has_wyscout:
-            target.info(f"Wyscout data unavailable ({_ws_file_loaded}).")
-        else:
-            target.markdown(
-                "<div class='note-box'>No Wyscout link for this player "
-                "(league may not be in Wyscout DB, or link confidence too low).</div>",
-                unsafe_allow_html=True,
-            )
-
-    if has_impect_model and has_wyscout_loaded:
-        pizza_col, bars_col = st.columns(2, gap="large")
-        _render_pizza_section(pizza_col)
-        _render_bars_section(bars_col)
-    elif has_wyscout_loaded:
-        _render_bars_section()
-    else:
-        if has_impect_model:
-            _render_pizza_section()
-        _render_bars_section()
-
-    # ── Stats tables ──────────────────────────────────────────────────────────
-    _show_impect_tbl = impect_row is not None
-    _show_ws_tbl     = _ws_row_loaded is not None and not _ws_pos_pool_loaded.empty
-
-    if _show_impect_tbl and _show_ws_tbl:
-        _exp_left, _exp_right = st.columns(2, gap="large")
-        _impect_tbl_ctx = _exp_left
-        _ws_tbl_ctx     = _exp_right
-    elif _show_impect_tbl:
-        _impect_tbl_ctx = st.container()
-        _ws_tbl_ctx     = None  # type: ignore[assignment]
-    else:
-        _impect_tbl_ctx = None  # type: ignore[assignment]
-        _ws_tbl_ctx     = st.container()
-
-    if _show_impect_tbl:
-        with _impect_tbl_ctx:  # type: ignore[union-attr]
-            with st.expander("📊 IMPECT model scores", expanded=False):
-                _score_rows2: list[dict] = []
-                _pos_data = data.loc[data["PositionGroup"].astype(str).eq(pos_group)]
-                for label, col in PIZZA_METRICS.items():
-                    if col not in impect_row.index:  # type: ignore[union-attr]
-                        continue
-                    _sv = float(impect_row.get(col, 0) or 0)  # type: ignore[union-attr]
-                    _pv = round(percentile_rank(_pos_data[col], _sv), 0) if col in _pos_data.columns else None
-                    _score_rows2.append({"Metric": label, "Score": round(_sv, 1), "Pct": _pv})
-                if _score_rows2:
-                    _score_df2 = pd.DataFrame(_score_rows2).sort_values("Score", ascending=False)
-                    st.dataframe(
-                        _score_df2, hide_index=True, use_container_width=True,
-                        column_config={
-                            "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.1f"),
-                            "Pct":   st.column_config.NumberColumn("Pct %", format="%.0f"),
-                        },
-                    )
-
-    if _show_ws_tbl:
-        with _ws_tbl_ctx:  # type: ignore[union-attr]
-            with st.expander("📋 Wyscout raw stats", expanded=False):
-                _ws_metrics_show = [m for m in WYSCOUT_POS_METRICS.get(pos_group, [])
-                                    if m in _ws_row_loaded.index]  # type: ignore[union-attr]
-                _ws_table_rows2: list[dict] = []
-                for m in _ws_metrics_show:
-                    _v = pd.to_numeric(_ws_row_loaded.get(m), errors="coerce")  # type: ignore[union-attr]
-                    if pd.isna(_v):
-                        continue
-                    _p2 = percentile_rank(pd.to_numeric(_ws_pos_pool_loaded[m], errors="coerce"), float(_v))
-                    if m in WYSCOUT_LOWER_IS_BETTER:
-                        _p2 = 100.0 - _p2
-                    _ws_table_rows2.append({"Metric": m, "Value": round(float(_v), 2), "Pct": round(_p2, 0)})
-                if _ws_table_rows2:
-                    _ws_tbl2 = pd.DataFrame(_ws_table_rows2).sort_values("Pct", ascending=False)
-                    st.dataframe(
-                        _ws_tbl2, hide_index=True, use_container_width=True,
-                        column_config={
-                            "Pct": st.column_config.ProgressColumn("Pct %", min_value=0, max_value=100, format="%.0f"),
-                        },
-                    )
-
-
-def render_model_workspace(data: pd.DataFrame, metadata: dict[str, pd.DataFrame]) -> None:
-    smart_df = metadata.get("smart_club", pd.DataFrame()).copy()
-    if smart_df.empty:
-        st.info("Smart Club Closeness workbook not loaded.")
-        return
-
-    score_col = "SmartClubClosenessScore"
-    model_col = "SmartClubModel"
-    required_cols = {model_col, score_col}
-    if not required_cols.issubset(smart_df.columns):
-        st.info("Smart Club Closeness workbook is loaded, but the expected model and closeness columns were not found.")
-        st.dataframe(smart_df.head(50), width="stretch", hide_index=True)
-        return
-
-    smart_df[score_col] = pd.to_numeric(smart_df[score_col], errors="coerce")
-    smart_df = smart_df.dropna(subset=[model_col, score_col])
-    if smart_df.empty:
-        st.info("Smart Club Closeness workbook has no usable model rows after cleaning.")
-        return
-
-    summary = (
-        smart_df.groupby(model_col)
-        .agg(
-            Players=("PlayerName", "count"),
-            MedianCloseness=(score_col, "median"),
-            BestCloseness=(score_col, "max"),
-            EliteLinks=(score_col, lambda values: values.ge(90).sum()),
-        )
-        .round(1)
-        .reset_index()
-        .sort_values(["MedianCloseness", "BestCloseness"], ascending=False)
-    )
-
-    with st.sidebar:
-        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-icon'>🔬</div><div><div class='sidebar-brand-title'>Model &amp; Data</div><div class='sidebar-brand-meta'>Smart Club Closeness</div></div></div>", unsafe_allow_html=True)
-        st.markdown("<div class='sbar-hdr'>Club model</div>", unsafe_allow_html=True)
-        selected_model = st.selectbox("Select model", summary[model_col].tolist(), key="model_selectbox")
-
-    st.markdown(
-        "<div class='page-header'>"
-        "<div class='page-header-icon'>🔬</div>"
-        "<div><div class='page-header-title'>Model &amp; Data</div>"
-        "<div class='page-header-sub'>Smart club closeness scores and league data coverage</div></div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    metric_cols = st.columns(4)
-    with metric_cols[0]:
-        metric_card("Club models", f"{summary[model_col].nunique():,}", "smart-club profiles")
-    with metric_cols[1]:
-        metric_card("Player links", f"{len(smart_df):,}", "model comparisons")
-    with metric_cols[2]:
-        metric_card("Median closeness", f"{smart_df[score_col].median():.1f}", "all links")
-    with metric_cols[3]:
-        metric_card("90+ links", f"{smart_df[score_col].ge(90).sum():,}", "elite model matches")
-
-    left, right = st.columns([1, 1])
-    with left:
-        st.subheader("Club model ranking")
-        st.dataframe(
-            summary,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
-                "BestCloseness": st.column_config.ProgressColumn("Best", min_value=0, max_value=100, format="%.1f"),
-            },
-        )
-
-    with right:
-        selected = smart_df.loc[smart_df[model_col].eq(selected_model)].copy()
-        st.subheader("Position spread")
-        if "PositionGroup" in selected.columns:
-            position_summary = (
-                selected.groupby("PositionGroup")
-                .agg(Players=("PlayerName", "count"), MedianCloseness=(score_col, "median"))
-                .round(1)
-                .reset_index()
-                .sort_values("Players", ascending=False)
-            )
-            st.dataframe(
-                position_summary,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "MedianCloseness": st.column_config.ProgressColumn("Median", min_value=0, max_value=100, format="%.1f"),
-                },
-            )
-        else:
-            st.info("No position detail found for this club model.")
-
-    st.subheader(f"Top matches for {selected_model}")
-    top_cols = [
-        col
-        for col in [
-            "SmartClubRank",
-            "PlayerName",
-            "TeamName",
-            "PositionGroup",
-            "LeagueLabel",
-            "AgeYears",
-            "MinutesPlayed",
-            "SmartClubClosenessScore",
-        ]
-        if col in selected.columns
-    ]
-    sort_cols = [score_col] + (["PlayerName"] if "PlayerName" in selected.columns else [])
-    top_matches = selected.sort_values(sort_cols, ascending=[False] + ([True] if len(sort_cols) > 1 else [])).head(100)
-    st.dataframe(
-        top_matches[top_cols],
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "SmartClubClosenessScore": st.column_config.ProgressColumn("Closeness", min_value=0, max_value=100, format="%.1f"),
-            "AgeYears": st.column_config.NumberColumn("Age", format="%.1f"),
-            "MinutesPlayed": st.column_config.NumberColumn("Minutes", format="%d"),
-        },
-    )
-
-    style_df = metadata.get("player_styles", pd.DataFrame()).copy()
-    if not style_df.empty and "SmartClubTop3" in style_df.columns:
-        related_styles = style_df.loc[
-            style_df["SmartClubTop3"].fillna("").astype(str).str.contains(str(selected_model), case=False, regex=False)
-        ].copy()
-        if not related_styles.empty:
-            st.subheader("Style notes linked to this model")
-            style_cols = [
-                col
-                for col in [
-                    "PlayerName",
-                    "TeamName",
-                    "PositionGroup",
-                    "PrimaryPlayerStyle",
-                    "SecondaryPlayerStyle",
-                    "ClosestArchetype",
-                    "WhyThisClubStyle",
-                    "SmartClubTop3",
-                    "SmartClubClosenessTier",
-                ]
-                if col in related_styles.columns
-            ]
-            st.dataframe(related_styles[style_cols].head(50), width="stretch", hide_index=True)
-
-
-def render_goalkeepers_workspace(data: pd.DataFrame) -> None:
-    keeper_df = add_scouting_fields(data, BALANCED_WEIGHTS)
-    keeper_df = keeper_df.loc[keeper_df["PositionGroup"].astype(str).eq("GK")].sort_values(
-        ["ScoutFitScore", "PerformanceReliabilityScore"],
-        ascending=False,
-    )
-
-    if keeper_df.empty:
-        st.info("No goalkeeper rows were found in the loaded model outputs.")
-        return
-
-    league_options = sorted(keeper_df["BundleLabel"].dropna().astype(str).unique())
-
-    with st.sidebar:
-        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-icon'>🧤</div><div><div class='sidebar-brand-title'>Goalkeepers</div><div class='sidebar-brand-meta'>GK-specific scoring</div></div></div>", unsafe_allow_html=True)
-        st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
-        selected_leagues = st.multiselect("Leagues", league_options, default=league_options, key="gk_bundles_filter")
-        age_min = float(np.floor(keeper_df["AgeYears"].min()))
-        age_max = float(np.ceil(keeper_df["AgeYears"].max()))
-        age_range = st.slider("Age range", age_min, age_max, (age_min, age_max), step=0.5, key="gk_age_filter")
-
-    gk_filtered = keeper_df.loc[
-        keeper_df["BundleLabel"].astype(str).isin(selected_leagues)
-        & keeper_df["AgeYears"].between(age_range[0], age_range[1])
-    ].copy()
-
-    st.markdown(
-        f"<div class='page-header'>"
-        f"<div class='page-header-icon'>🧤</div>"
-        f"<div><div class='page-header-title'>Goalkeepers</div>"
-        f"<div class='page-header-sub'>GK-specific scoring model · {len(gk_filtered):,} keepers</div></div>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    board_cols = [
-        "PlayerName",
-        "TeamName",
-        "BundleLabel",
-        "AgeYears",
-        "MinutesPlayed",
-        "ScoutFitScore",
-        "CompositeRecruitmentScore",
-        "DecisionScore",
-        "PerformanceReliabilityScore",
-        "BallSecurityScore",
-        "SecurityRisk_per90",
-        "Readiness",
-        "RiskBand",
-        "FitDrivers",
-    ]
-    board = gk_filtered[[c for c in board_cols if c in gk_filtered.columns]].rename(
-        columns={
-            "PlayerName": "Player",
-            "TeamName": "Team",
-            "BundleLabel": "League",
-            "AgeYears": "Age",
-            "MinutesPlayed": "Minutes",
-            "ScoutFitScore": "Fit",
-            "CompositeRecruitmentScore": "Model",
-            "DecisionScore": "Decision",
-            "PerformanceReliabilityScore": "Reliability",
-            "BallSecurityScore": "Security",
-            "SecurityRisk_per90": "Risk/90",
-            "FitDrivers": "Drivers",
-        }
-    )
-    st.dataframe(
-        board.round(2),
-        width="stretch",
-        hide_index=True,
-        height=780,
-        column_config={
-            "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
-            "Model": st.column_config.ProgressColumn("Model", min_value=0, max_value=100, format="%.1f"),
-            "Decision": st.column_config.ProgressColumn("Decision", min_value=0, max_value=100, format="%.1f"),
-            "Reliability": st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
-        },
-    )
-
-
-def render_case_analysis_tab(filtered_df: pd.DataFrame) -> None:
-    """Transfer value, resale upside, style-fit and cost-risk analysis tab."""
-    rd = filtered_df.copy()
-    value_score = safe_col(rd, "ValueRecruitmentScore")
-    resale_score = safe_col(rd, "AgeResaleScore")
-    style_score = safe_col(rd, "FCHKStyleScore", safe_col(rd, "SmartClubScore").median())
-    smart_club_score = safe_col(rd, "SmartClubScore", style_score.median())
-    success_score = safe_col(rd, "SuccessProbability")
-    readiness_score = safe_col(rd, "PerformanceReliabilityScore")
-    wage_risk = safe_col(rd, "WageRisk")
-    fee_risk = safe_col(rd, "FeeRisk")
-
-    rd["CaseScore"] = (
-        value_score * 0.24 + resale_score * 0.20 + style_score * 0.18
-        + smart_club_score * 0.14 + success_score * 0.14 + readiness_score * 0.10
-        - wage_risk * 0.04 - fee_risk * 0.04
-    ).clip(0, 100)
-    rd["StyleFit"] = np.where(style_score.ge(70), "Strong", np.where(style_score.ge(55), "Useful", "Question"))
-    rd["CostRisk"] = np.select(
-        [fee_risk.ge(70) | wage_risk.ge(70), fee_risk.ge(50) | wage_risk.ge(50)],
-        ["High", "Medium"], default="Low",
-    )
-    rd = rd.sort_values(["CaseScore", "ValueRecruitmentScore"], ascending=False)
-
-    _kpi_cols = st.columns(4)
-    with _kpi_cols[0]: metric_card("Median transfer value", f"{value_score.median():.1f}", "0–100 scale")
-    with _kpi_cols[1]: metric_card("Median resale upside", f"{resale_score.median():.1f}", "age × potential")
-    with _kpi_cols[2]: metric_card("Strong style fit", f"{rd['StyleFit'].eq('Strong').sum():,}", "FCHK + smart-club")
-    with _kpi_cols[3]: metric_card("Low cost risk", f"{rd['CostRisk'].eq('Low').sum():,}", "fee + wage combined")
-
-    st.markdown(
-        '<div class="note-box">Case score = value 24% + resale 20% + style fit 18% + smart-club 14% + success 14% + readiness 10% − cost risk 8%.</div>',
-        unsafe_allow_html=True,
-    )
-
-    fc1, fc2, fc3 = st.columns([1, 1, 1])
-    with fc1:
-        role_opts = sorted(rd["PositionGroup"].dropna().astype(str).unique())
-        sel_roles = st.multiselect("Roles", role_opts, default=role_opts, key="ca_roles")
-    with fc2:
-        min_resale = st.slider("Min resale score", 0, 100, 40, key="ca_resale")
-    with fc3:
-        sel_style = st.multiselect("Style fit", ["Strong", "Useful", "Question"], default=["Strong", "Useful", "Question"], key="ca_style")
-
-    rd = rd.loc[rd["PositionGroup"].astype(str).isin(sel_roles) & rd["AgeResaleScore"].ge(min_resale) & rd["StyleFit"].isin(sel_style)].copy()
-
-    left, right = st.columns([1.3, 1])
-    with left:
-        st.markdown("<div class='workspace-label' style='font-size:.58rem;margin-bottom:6px;'>Best recruitment cases</div>", unsafe_allow_html=True)
-        _board_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","CaseScore","ValueRecruitmentScore","AgeResaleScore","SuccessProbability","StyleFit","CostRisk","PrimaryPlayerStyle","SmartClubTop3"] if c in rd.columns]
-        st.dataframe(
-            rd[_board_cols].head(100).rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","CaseScore":"Case","ValueRecruitmentScore":"Value","AgeResaleScore":"Resale","SuccessProbability":"Success","PrimaryPlayerStyle":"Style","SmartClubTop3":"Style Clubs"}).round(2),
-            width="stretch", hide_index=True,
-            column_config={
-                "Case": st.column_config.ProgressColumn("Case", min_value=0, max_value=100, format="%.1f"),
-                "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
-                "Resale": st.column_config.ProgressColumn("Resale", min_value=0, max_value=100, format="%.1f"),
-                "Success": st.column_config.ProgressColumn("Success", min_value=0, max_value=100, format="%.1f"),
-                "Age": st.column_config.NumberColumn("Age", format="%.1f"),
-            },
-        )
-    with right:
-        chart_df = rd[["PlayerName","PositionGroup","CaseScore","AgeResaleScore","FCHKStyleScore","CostRisk"]].dropna() if "FCHKStyleScore" in rd.columns else pd.DataFrame()
-        if not chart_df.empty:
-            case_chart = (
-                alt.Chart(chart_df.head(300))
-                .mark_circle(size=72, opacity=0.78)
-                .encode(
-                    x=alt.X("AgeResaleScore:Q", title="Resale upside", axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    y=alt.Y("FCHKStyleScore:Q", title="Playing-style fit", axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    color=alt.Color("CostRisk:N", title="Cost risk", scale=alt.Scale(domain=["Low","Medium","High"], range=["#2a9d8f","#f4a261","#e76f51"])),
-                    shape=alt.Shape("PositionGroup:N", title="Role"),
-                    tooltip=["PlayerName","PositionGroup",alt.Tooltip("CaseScore:Q",format=".1f"),alt.Tooltip("AgeResaleScore:Q",format=".1f"),"CostRisk"],
-                )
-                .properties(height=380, title=alt.TitleParams("Resale upside vs style fit", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#ffffff", stroke=None).configure(background="#f9f8f3")
-                .interactive()
-            )
-            st.altair_chart(case_chart, width="stretch")
-        else:
-            _shape = rd.groupby(["PositionGroup","StyleFit"]).agg(Players=("PlayerName","count"),MedianCase=("CaseScore","median")).round(1).reset_index().sort_values("MedianCase",ascending=False)
-            st.dataframe(_shape, width="stretch", hide_index=True)
-
-
-def render_deep_scan_workspace(data: pd.DataFrame) -> None:
-    """Multi-method anomaly detection engine — surface hidden gems and statistical outliers."""
-    import seaborn as sns
-
-    all_positions = sorted(data["PositionGroup"].dropna().astype(str).unique())
-    all_leagues   = sorted(data["BundleLabel"].dropna().astype(str).unique())
-
-    # ── Sidebar ──────────────────────────────────────────────────────────────
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'>"
-            "<div class='sidebar-brand-icon'>⚡</div>"
-            "<div><div class='sidebar-brand-title'>Anomaly Engine</div>"
-            "<div class='sidebar-brand-meta'>Multi-method outlier detection</div></div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
-        sel_positions = st.multiselect("Positions", all_positions, default=all_positions, key="anom_positions")
-        sel_leagues   = st.multiselect("Leagues",   all_leagues,   default=all_leagues,  key="anom_leagues")
-        min_minutes   = st.slider("Min minutes", 0, 3000, 600, step=100, key="anom_min_min")
-        age_bands     = {"All ages": None, "U21": 21, "U23": 23, "U27": 27}
-        age_band_lbl  = st.selectbox("Age band", list(age_bands.keys()), key="anom_age_band")
-        max_age       = age_bands[age_band_lbl]
-
-        st.markdown("<div class='sbar-hdr'>Detection config</div>", unsafe_allow_html=True)
-        detection_method = st.selectbox(
-            "Detection method",
-            ["Z-score (per position)", "MAD — robust z-score", "IQR fence", "Multivariate (Mahalanobis)"],
-            key="anom_method",
-        )
-        threshold = st.slider("Outlier cutoff", 1.0, 4.0, 1.8, step=0.1, key="anom_threshold")
-
-        st.markdown("<div class='sbar-hdr'>Anomaly lens</div>", unsafe_allow_html=True)
-        metric_labels = list(PIZZA_METRICS.keys())
-        sel_metrics   = st.multiselect("Metrics to scan", metric_labels, default=metric_labels, key="anom_metrics")
-        _all_types    = ["Specialist Elite", "Hidden Gem", "Multi-dimensional", "Age-adjusted Gem", "Consistent Overperformer"]
-        type_filter   = st.multiselect("Anomaly types", _all_types, default=_all_types, key="anom_type_filter")
-        hidden_gem_mode = st.toggle("Hidden gem mode (low composite only)", value=False, key="anom_hidden_gem")
-        top_n           = st.slider("Max results", 10, 200, 60, step=10, key="anom_top_n")
-
-    # ── Header ────────────────────────────────────────────────────────────────
-    st.markdown(
-        "<div class='page-header'>"
-        "<div class='page-header-icon'>⚡</div>"
-        "<div><div class='page-header-title'>Anomaly Intelligence Engine</div>"
-        "<div class='page-header-sub'>Multi-method outlier detection — surface hidden gems, specialists, and statistically unique players</div></div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    if not sel_metrics:
-        st.info("Select at least one metric in the sidebar.")
-        return
-
-    sel_score_cols = [PIZZA_METRICS[m] for m in sel_metrics if PIZZA_METRICS[m] in data.columns]
-    if not sel_score_cols:
-        st.warning("None of the selected metrics exist in this dataset.")
-        return
-
-    # ── Filter pool ───────────────────────────────────────────────────────────
-    pool = data.copy()
-    if sel_positions:
-        pool = pool.loc[pool["PositionGroup"].astype(str).isin(sel_positions)]
-    if sel_leagues:
-        pool = pool.loc[pool["BundleLabel"].astype(str).isin(sel_leagues)]
-    if "MinutesPlayed" in pool.columns:
-        pool = pool.loc[pool["MinutesPlayed"].fillna(0) >= min_minutes]
-    if max_age is not None and "AgeYears" in pool.columns:
-        pool = pool.loc[pool["AgeYears"].fillna(99) <= max_age]
-    if pool.empty:
-        st.warning("No players match the current filters.")
-        return
-
-    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in pool.columns else None
-    base_cols     = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed"]
-    extra_cols    = [composite_col] if composite_col else []
-
-    # ── Per-position anomaly computation ─────────────────────────────────────
-    def _score_group(grp: pd.DataFrame) -> pd.DataFrame:
-        keep = list(dict.fromkeys([c for c in base_cols + extra_cols + sel_score_cols if c in grp.columns]))
-        out  = grp[keep].copy()
-        X    = grp[sel_score_cols].values.astype(float)
-        n    = len(grp)
-
-        if "MAD" in detection_method:
-            med   = np.nanmedian(X, axis=0)
-            mad   = np.nanmedian(np.abs(X - med), axis=0)
-            mad   = np.where(mad == 0, 1e-9, mad)
-            scores = 0.6745 * (X - med) / mad
-        elif "IQR" in detection_method:
-            q1, q3 = np.nanpercentile(X, 25, axis=0), np.nanpercentile(X, 75, axis=0)
-            iqr     = np.where((q3 - q1) == 0, 1e-9, q3 - q1)
-            scores  = (X - (q3 + 1.5 * iqr)) / iqr
-        elif "Mahalanobis" in detection_method and n >= len(sel_score_cols) + 2:
-            mu  = np.nanmean(X, axis=0)
-            sig = np.nanstd(X, axis=0, ddof=0)
-            sig = np.where(sig == 0, 1e-9, sig)
-            scores = (X - mu) / sig  # per-metric z for coloring
-            try:
-                cov     = np.cov(X.T)
-                inv_cov = np.linalg.pinv(cov)
-                diff    = X - mu
-                mahal   = np.sqrt(np.einsum("ij,jk,ik->i", diff, inv_cov, diff))
-                m_mu    = np.nanmean(mahal)
-                m_sig   = np.nanstd(mahal) or 1e-9
-                out["_mahal_z"] = (mahal - m_mu) / m_sig
-            except Exception:
-                pass
-        else:  # default Z-score
-            mu  = np.nanmean(X, axis=0)
-            sig = np.nanstd(X, axis=0, ddof=0)
-            sig = np.where(sig == 0, 1e-9, sig)
-            scores = (X - mu) / sig
-
-        for i, col in enumerate(sel_score_cols):
-            out[f"_z_{col}"] = scores[:, i]
-        return out
-
-    frames = [_score_group(grp) for _, grp in pool.groupby("PositionGroup")]
-    if not frames:
-        st.warning("Not enough data to compute anomaly scores.")
-        return
-
-    zdf    = pd.concat(frames, ignore_index=True)
-    z_cols = [f"_z_{c}" for c in sel_score_cols]
-
-    zdf["_peak_z"]          = zdf[z_cols].max(axis=1)
-    zdf["_mean_z"]          = zdf[z_cols].mean(axis=1)
-    zdf["_anomaly_breadth"] = (zdf[z_cols] >= threshold).sum(axis=1)
-    label_map               = {v: k for k, v in PIZZA_METRICS.items()}
-    zdf["_best_z_col"]      = zdf[z_cols].idxmax(axis=1).str.replace("_z_", "", regex=False)
-    zdf["_best_metric"]     = zdf["_best_z_col"].map(label_map).fillna(zdf["_best_z_col"])
-
-    if "Mahalanobis" in detection_method and "_mahal_z" in zdf.columns:
-        zdf["_anomaly_score"] = (
-            0.50 * zdf["_mahal_z"].clip(lower=0)
-            + 0.30 * zdf["_peak_z"].clip(lower=0)
-            + 0.20 * zdf["_anomaly_breadth"]
-        )
-    else:
-        zdf["_anomaly_score"] = (
-            0.45 * zdf["_peak_z"].clip(lower=0)
-            + 0.35 * zdf["_anomaly_breadth"]
-            + 0.20 * zdf["_mean_z"].clip(lower=0)
-        )
-
-    # ── Anomaly type classification ───────────────────────────────────────────
-    def _classify(row) -> str:
-        peak    = row["_peak_z"]
-        breadth = row["_anomaly_breadth"]
-        age_raw = pd.to_numeric(row.get("AgeYears"), errors="coerce")
-        age     = float(age_raw) if pd.notna(age_raw) else 99.0
-        if composite_col and composite_col in row.index:
-            comp_raw = pd.to_numeric(row[composite_col], errors="coerce")
-            comp = float(comp_raw) if pd.notna(comp_raw) else 50.0
-        else:
-            comp = 50.0
-        if peak >= threshold and comp <= 40:
-            return "Hidden Gem"
-        if peak >= threshold * 1.5 and breadth <= 2:
-            return "Specialist Elite"
-        if breadth >= 4:
-            return "Multi-dimensional"
-        if peak >= threshold and age <= 23:
-            return "Age-adjusted Gem"
-        if breadth >= 2:
-            return "Consistent Overperformer"
-        return "Specialist Elite"
-
-    zdf["_anomaly_type"] = zdf.apply(_classify, axis=1)
-
-    # ── Apply threshold & type filters ────────────────────────────────────────
-    anomalies = zdf.loc[zdf["_peak_z"] >= threshold].copy()
-    if hidden_gem_mode and composite_col:
-        anomalies = anomalies.loc[anomalies[composite_col].fillna(100) <= 40]
-    if type_filter:
-        anomalies = anomalies.loc[anomalies["_anomaly_type"].isin(type_filter)]
-    anomalies = anomalies.sort_values("_anomaly_score", ascending=False).head(top_n)
-
-    # ── KPIs ──────────────────────────────────────────────────────────────────
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    with kpi1:
-        metric_card("Anomalies found", f"{len(anomalies)}", f"cutoff ≥ {threshold:.1f}")
-    with kpi2:
-        metric_card("Pool scanned", f"{len(pool):,}", "players after filters")
-    with kpi3:
-        top_score = f"{anomalies['_anomaly_score'].max():.2f}" if not anomalies.empty else "—"
-        metric_card("Top anomaly score", top_score, "composite signal strength")
-    with kpi4:
-        type_mode = anomalies["_anomaly_type"].value_counts().idxmax() if not anomalies.empty else "—"
-        metric_card("Dominant type", type_mode, "most common anomaly class")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     if anomalies.empty:
-        st.info(f"No anomalies at threshold {threshold:.1f}. Lower the cutoff or adjust filters.")
-        return
+        st.info("No anomalies at the current threshold. Lower the z threshold in the sidebar.")
+        st.stop()
 
-    st.markdown(
-        "<div class='note-box'>"
-        f"Method: <b>{detection_method}</b>. "
-        "Anomaly score = weighted peak signal + breadth + mean excess. "
-        "Types: <b>Hidden Gem</b> = specialist-excellent but low composite · "
-        "<b>Specialist Elite</b> = extreme in 1–2 metrics · "
-        "<b>Multi-dimensional</b> = outlier across 4+ metrics · "
-        "<b>Age-adjusted Gem</b> = exceptional for age ≤ 23 · "
-        "<b>Consistent Overperformer</b> = moderate excess across 2+ metrics."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    type_colors = {
-        "Hidden Gem":              "#00c7b7",
-        "Specialist Elite":        "#e76f51",
-        "Multi-dimensional":       "#f4a261",
-        "Age-adjusted Gem":        "#2a9d8f",
-        "Consistent Overperformer":"#457b9d",
-    }
-
-    # ── Tabs ──────────────────────────────────────────────────────────────────
-    tab_rank, tab_heatmap, tab_scatter, tab_breakdown = st.tabs(
-        ["Rankings", "Fingerprint heatmap", "Scatter analysis", "Type breakdown"]
-    )
-
-    rename_scores    = {c: label_map.get(c, c) for c in sel_score_cols}
-    display_src_cols = (
-        ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed",
-         "_anomaly_type", "_best_metric", "_anomaly_breadth", "_anomaly_score", "_peak_z"]
-        + sel_score_cols
-    )
-    display_src_cols = [c for c in display_src_cols if c in anomalies.columns]
-    display = anomalies[display_src_cols].rename(columns={
-        "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
-        "BundleLabel": "League", "AgeYears": "Age", "MinutesPlayed": "Minutes",
-        "_anomaly_type": "Type", "_best_metric": "Best Metric",
-        "_anomaly_breadth": "Breadth", "_anomaly_score": "Anomaly Score", "_peak_z": "Peak Z",
-        **rename_scores,
-    }).round(2)
-
-    col_config: dict = {
-        "Anomaly Score": st.column_config.ProgressColumn("Anomaly Score", min_value=0, max_value=20, format="%.2f"),
-        "Peak Z":        st.column_config.NumberColumn("Peak Z",  format="%.2f"),
-        "Breadth":       st.column_config.NumberColumn("Breadth", format="%d"),
-        "Age":           st.column_config.NumberColumn("Age",     format="%.1f"),
-        "Minutes":       st.column_config.NumberColumn("Minutes", format="%d"),
-    }
-    for lbl in list(label_map.keys()):
-        if lbl in display.columns:
-            col_config[lbl] = st.column_config.ProgressColumn(lbl, min_value=0, max_value=100, format="%.1f")
-
-    # Rankings tab
-    with tab_rank:
-        st.dataframe(display, width="stretch", hide_index=True, height=540, column_config=col_config)
-        csv_bytes = display.to_csv(index=False).encode()
-        _dl1, _dl2 = st.columns(2)
-        with _dl1:
-            st.download_button("Download CSV", csv_bytes, "anomaly_scouting.csv", "text/csv", key="anom_dl")
-        with _dl2:
-            st.download_button(
-                "Download Excel",
-                _to_excel_bytes({"Anomalies": display}),
-                "anomaly_scouting.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="anom_dl_xlsx",
-            )
-
-    # Fingerprint heatmap tab
-    with tab_heatmap:
-        hm_n    = min(30, len(anomalies))
-        hm_data = anomalies.head(hm_n)
-        hm_labels  = hm_data["PlayerName"].fillna("?").astype(str).tolist()
-        hm_matrix  = hm_data[z_cols].values.astype(float)
-        metric_ticks = [label_map.get(c.replace("_z_", ""), c.replace("_z_", "")) for c in z_cols]
-
-        fig_h, ax_h = plt.subplots(figsize=(max(8, len(z_cols) * 0.95), max(5, hm_n * 0.38)))
-        fig_h.patch.set_facecolor("#f9f8f3")
-        ax_h.set_facecolor("#ffffff")
-        sns.heatmap(
-            hm_matrix, ax=ax_h,
-            cmap="RdYlGn", center=0, vmin=-2, vmax=4,
-            linewidths=0.4, linecolor="#ffffff",
-            xticklabels=metric_ticks, yticklabels=hm_labels,
-            annot=(hm_n <= 20), fmt=".1f" if hm_n <= 20 else "",
-            cbar_kws={"label": "anomaly signal (z)", "shrink": 0.6},
-        )
-        ax_h.tick_params(colors="#888888", labelsize=9)
-        ax_h.set_title(
-            f"Anomaly fingerprint — top {hm_n} players × {len(z_cols)} metrics",
-            color="#888888", fontsize=11, pad=12,
-        )
-        for spine in ax_h.spines.values():
-            spine.set_edgecolor("#cccccc")
-        plt.xticks(rotation=35, ha="right", color="#888888")
-        plt.yticks(color="#888888", fontsize=8)
-        plt.tight_layout()
-        st.pyplot(fig_h, clear_figure=True)
-        st.markdown(
-            "<div class='note-box' style='font-size:11px'>Green = above-average signal · Red = below average · "
-            "Each row is one player; each column is a metric z-score vs their position peer group.</div>",
-            unsafe_allow_html=True,
-        )
-
-    # Scatter analysis tab
-    with tab_scatter:
-        if composite_col and composite_col in anomalies.columns:
-            scat_df = (
-                anomalies[["PlayerName", "PositionGroup", "_peak_z", composite_col,
-                            "_best_metric", "_anomaly_breadth", "_anomaly_type", "_anomaly_score"]]
-                .dropna()
-                .rename(columns={
-                    "PlayerName": "Player", "PositionGroup": "Role",
-                    "_peak_z": "Peak Z", composite_col: "Composite",
-                    "_best_metric": "Best Metric", "_anomaly_breadth": "Breadth",
-                    "_anomaly_type": "Type", "_anomaly_score": "Anomaly Score",
-                })
-            )
-            scatter = (
-                alt.Chart(scat_df)
-                .mark_circle(opacity=0.85)
-                .encode(
-                    x=alt.X("Composite:Q", title="Composite score (overall quality)",
-                            scale=alt.Scale(domain=[0, 100]),
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    y=alt.Y("Peak Z:Q", title="Peak anomaly signal",
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    size=alt.Size("Anomaly Score:Q", scale=alt.Scale(range=[40, 420]), title="Anomaly score"),
-                    color=alt.Color("Type:N", title="Anomaly type",
-                                    scale=alt.Scale(domain=list(type_colors.keys()),
-                                                    range=list(type_colors.values()))),
-                    tooltip=[
-                        "Player", "Role", "Type",
-                        alt.Tooltip("Composite:Q", format=".1f"),
-                        alt.Tooltip("Peak Z:Q", format=".2f"),
-                        "Best Metric",
-                        alt.Tooltip("Anomaly Score:Q", format=".2f"),
-                        alt.Tooltip("Breadth:Q", title="Metric breadth"),
-                    ],
-                )
-                .properties(
-                    height=400,
-                    title=alt.TitleParams(
-                        "Composite quality vs anomaly signal — bottom-left = hidden gems, top-right = elite specialists",
-                        color="#8fa3b1", fontSize=11,
-                    ),
-                )
-                .configure_view(fill="#ffffff", stroke=None)
-                .configure(background="#f9f8f3")
-                .interactive()
-            )
-            st.altair_chart(scatter, width="stretch")
-            st.markdown(
-                "<div class='note-box' style='font-size:12px'>"
-                "<b>Quadrant guide:</b> "
-                "Top-left = <b>Hidden Gems</b> (high anomaly signal, low composite) · "
-                "Top-right = <b>Elite Specialists</b> (high in both) · "
-                "Bottom-right = consistent quality, less anomalous."
-                "</div>",
+    # ── Anomaly-type KPI row ──────────────────────────────────────────────────
+    if "_anomaly_type" in anomalies.columns:
+        type_counts = anomalies["_anomaly_type"].value_counts()
+        tc_cols = st.columns(len(ANOMALY_COLORS))
+        for i, (atype, color) in enumerate(ANOMALY_COLORS.items()):
+            cnt = int(type_counts.get(atype, 0))
+            tc_cols[i].markdown(
+                f"<div class='type-card' style='border-top-color:{color};'>"
+                f"<div style='font-size:1.6rem;font-weight:800;color:{color};line-height:1;'>{cnt}</div>"
+                f"<div style='font-size:0.6rem;color:#4a5470;text-transform:uppercase;letter-spacing:.07em;margin-top:4px;'>{atype}</div>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
-    # Type breakdown tab
-    with tab_breakdown:
-        col_l, col_r = st.columns(2)
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_left, col_right = st.columns([3, 2])
 
-        with col_l:
-            type_counts = (
-                anomalies["_anomaly_type"].value_counts()
-                .reset_index()
-                .rename(columns={"_anomaly_type": "Type", "count": "Count"})
+    with col_left:
+        # Anomaly count stacked by position × type
+        if "_anomaly_type" in anomalies.columns and "PositionGroup" in anomalies.columns:
+            breakdown = (
+                anomalies.groupby(["PositionGroup", "_anomaly_type"])
+                .size()
+                .reset_index(name="Count")
             )
-            type_chart = (
-                alt.Chart(type_counts)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    y=alt.Y("Type:N", sort="-x", title=None,
-                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
-                    x=alt.X("Count:Q", title="Players",
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    color=alt.Color("Type:N",
-                                    scale=alt.Scale(domain=list(type_colors.keys()),
-                                                    range=list(type_colors.values())),
-                                    legend=None),
-                    tooltip=["Type:N", "Count:Q"],
-                )
-                .properties(height=220,
-                            title=alt.TitleParams("Anomaly type distribution", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#ffffff", stroke=None)
-                .configure(background="#f9f8f3")
-            )
-            st.altair_chart(type_chart, width="stretch")
-
-        with col_r:
-            metric_counts = (
-                anomalies.groupby("_best_metric")
-                .agg(Count=("PlayerName", "count"), AvgScore=("_anomaly_score", "mean"))
-                .reset_index()
-                .rename(columns={"_best_metric": "Metric"})
-                .sort_values("Count", ascending=False)
-            )
-            mc_chart = (
-                alt.Chart(metric_counts)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    y=alt.Y("Metric:N", sort="-x", title=None,
-                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
-                    x=alt.X("Count:Q", title="Outlier count",
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    color=alt.Color("AvgScore:Q",
-                                    scale=alt.Scale(range=["#1e3a5f", "#00c7b7"]),
-                                    legend=alt.Legend(title="Avg score", labelColor="#8fa3b1", titleColor="#8fa3b1")),
-                    tooltip=["Metric:N", "Count:Q",
-                             alt.Tooltip("AvgScore:Q", format=".2f", title="Avg anomaly score")],
-                )
-                .properties(height=220,
-                            title=alt.TitleParams("Metric driving most anomalies", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#ffffff", stroke=None)
-                .configure(background="#f9f8f3")
-            )
-            st.altair_chart(mc_chart, width="stretch")
-
-        if "BundleLabel" in anomalies.columns:
-            league_anom = (
-                anomalies.groupby("BundleLabel")
-                .agg(Count=("PlayerName", "count"), AvgScore=("_anomaly_score", "mean"))
-                .reset_index()
-                .rename(columns={"BundleLabel": "League"})
-                .sort_values("Count", ascending=False)
-                .head(20)
-            )
-            lg_chart = (
-                alt.Chart(league_anom)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    y=alt.Y("League:N", sort="-x", title=None,
-                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=11)),
-                    x=alt.X("Count:Q", title="Anomaly count",
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    color=alt.Color("AvgScore:Q",
-                                    scale=alt.Scale(range=["#1e3a5f", "#e76f51"]),
-                                    legend=alt.Legend(title="Avg score", labelColor="#8fa3b1", titleColor="#8fa3b1")),
-                    tooltip=["League:N", "Count:Q",
-                             alt.Tooltip("AvgScore:Q", format=".2f", title="Avg anomaly score")],
-                )
-                .properties(height=max(160, len(league_anom) * 26),
-                            title=alt.TitleParams("Anomaly concentration by league", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#ffffff", stroke=None)
-                .configure(background="#f9f8f3")
-            )
-            st.altair_chart(lg_chart, width="stretch")
-
-
-def _anomaly_engine(
-    pool: pd.DataFrame,
-    score_cols: list[str],
-    method: str = "Z-score (per position)",
-    threshold: float = 1.8,
-) -> pd.DataFrame:
-    """
-    Compute per-position anomaly signals for every player in pool.
-    Returns pool enriched with _z_*, _peak_z, _mean_z, _anomaly_breadth,
-    _anomaly_score, _anomaly_type, _best_metric columns.
-    """
-    label_map     = {v: k for k, v in PIZZA_METRICS.items()}
-    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in pool.columns else None
-    base_keep     = [c for c in pool.columns if not c.startswith("_z_")]
-
-    def _score_group(grp: pd.DataFrame) -> pd.DataFrame:
-        out = grp[base_keep].copy()
-        X   = grp[score_cols].values.astype(float)
-        n   = len(grp)
-        if "MAD" in method:
-            med    = np.nanmedian(X, axis=0)
-            mad    = np.nanmedian(np.abs(X - med), axis=0)
-            mad    = np.where(mad == 0, 1e-9, mad)
-            scores = 0.6745 * (X - med) / mad
-        elif "IQR" in method:
-            q1, q3 = np.nanpercentile(X, 25, axis=0), np.nanpercentile(X, 75, axis=0)
-            iqr     = np.where((q3 - q1) == 0, 1e-9, q3 - q1)
-            scores  = (X - (q3 + 1.5 * iqr)) / iqr
-        elif "Mahalanobis" in method and n >= len(score_cols) + 2:
-            mu  = np.nanmean(X, axis=0)
-            sig = np.nanstd(X, axis=0, ddof=0)
-            sig = np.where(sig == 0, 1e-9, sig)
-            scores = (X - mu) / sig
-            try:
-                inv_cov = np.linalg.pinv(np.cov(X.T))
-                diff    = X - mu
-                mahal   = np.sqrt(np.einsum("ij,jk,ik->i", diff, inv_cov, diff))
-                m_mu    = np.nanmean(mahal)
-                m_sig   = np.nanstd(mahal) or 1e-9
-                out["_mahal_z"] = (mahal - m_mu) / m_sig
-            except Exception:
-                pass
-        else:
-            mu  = np.nanmean(X, axis=0)
-            sig = np.nanstd(X, axis=0, ddof=0)
-            sig = np.where(sig == 0, 1e-9, sig)
-            scores = (X - mu) / sig
-        for i, col in enumerate(score_cols):
-            out[f"_z_{col}"] = scores[:, i]
-        return out
-
-    frames = [_score_group(g) for _, g in pool.groupby("PositionGroup")]
-    if not frames:
-        return pd.DataFrame()
-    zdf    = pd.concat(frames, ignore_index=True)
-    z_cols = [f"_z_{c}" for c in score_cols]
-
-    zdf["_peak_z"]          = zdf[z_cols].max(axis=1)
-    zdf["_mean_z"]          = zdf[z_cols].mean(axis=1)
-    zdf["_anomaly_breadth"] = (zdf[z_cols] >= threshold).sum(axis=1)
-    zdf["_best_z_col"]      = zdf[z_cols].idxmax(axis=1).str.replace("_z_", "", regex=False)
-    zdf["_best_metric"]     = zdf["_best_z_col"].map(label_map).fillna(zdf["_best_z_col"])
-
-    # Age efficiency bonus: young players get amplified signal
-    age_bonus = np.zeros(len(zdf))
-    if "AgeYears" in zdf.columns:
-        age_s = pd.to_numeric(zdf["AgeYears"], errors="coerce").fillna(99)
-        age_bonus = np.where(age_s <= 21, 0.25, np.where(age_s <= 23, 0.15, np.where(age_s <= 27, 0.05, 0.0)))
-
-    # Minutes efficiency bonus: high signal with limited sample
-    min_bonus = np.zeros(len(zdf))
-    if "MinutesPlayed" in zdf.columns:
-        mins = pd.to_numeric(zdf["MinutesPlayed"], errors="coerce").fillna(9999)
-        min_bonus = np.where(mins < 900, 0.20, np.where(mins < 1500, 0.10, 0.0))
-
-    # Hidden gem bonus: low composite but high specialist peak
-    gem_bonus = np.zeros(len(zdf))
-    if composite_col and composite_col in zdf.columns:
-        comp = pd.to_numeric(zdf[composite_col], errors="coerce").fillna(50)
-        gem_bonus = np.where(comp <= 30, 0.30, np.where(comp <= 45, 0.15, 0.0))
-
-    if "Mahalanobis" in method and "_mahal_z" in zdf.columns:
-        base_score = (
-            0.50 * zdf["_mahal_z"].clip(lower=0)
-            + 0.30 * zdf["_peak_z"].clip(lower=0)
-            + 0.20 * zdf["_anomaly_breadth"]
-        )
-    else:
-        base_score = (
-            0.45 * zdf["_peak_z"].clip(lower=0)
-            + 0.35 * zdf["_anomaly_breadth"]
-            + 0.20 * zdf["_mean_z"].clip(lower=0)
-        )
-    zdf["_anomaly_score"] = base_score * (1.0 + age_bonus + min_bonus + gem_bonus)
-
-    def _classify(row) -> str:
-        peak    = row["_peak_z"]
-        breadth = row["_anomaly_breadth"]
-        age_raw = pd.to_numeric(row.get("AgeYears"), errors="coerce")
-        age     = float(age_raw) if pd.notna(age_raw) else 99.0
-        if composite_col and composite_col in row.index:
-            comp_raw = pd.to_numeric(row[composite_col], errors="coerce")
-            comp = float(comp_raw) if pd.notna(comp_raw) else 50.0
-        else:
-            comp = 50.0
-        if peak >= threshold and comp <= 40:
-            return "Hidden Gem"
-        if peak >= threshold * 1.5 and breadth <= 2:
-            return "Specialist Elite"
-        if breadth >= 4:
-            return "Multi-dimensional"
-        if peak >= threshold and age <= 23:
-            return "Age-adjusted Gem"
-        if breadth >= 2:
-            return "Consistent Overperformer"
-        return "Specialist Elite"
-
-    zdf["_anomaly_type"] = zdf.apply(_classify, axis=1)
-    return zdf
-
-
-_ANOMALY_TYPE_COLORS = {
-    "Hidden Gem":              "#00c7b7",
-    "Specialist Elite":        "#e76f51",
-    "Multi-dimensional":       "#f4a261",
-    "Age-adjusted Gem":        "#2a9d8f",
-    "Consistent Overperformer":"#457b9d",
-}
-
-
-@st.cache_data(show_spinner=False, ttl=120)
-def _run_anomaly_engine_cached(
-    data_hash: int,  # unused, forces cache key
-    pool_json: str,
-    score_cols_key: str,
-    method: str,
-    threshold: float,
-) -> pd.DataFrame:
-    pool       = pd.read_json(pool_json)
-    score_cols = score_cols_key.split("|")
-    return _anomaly_engine(pool, score_cols, method, threshold)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# COMMAND workspace
-# ─────────────────────────────────────────────────────────────────────────────
-def render_command_workspace(data: pd.DataFrame) -> None:
-    """Anomaly landscape overview — quick intelligence across all positions & types."""
-    import seaborn as sns
-
-    score_cols = [v for v in PIZZA_METRICS.values() if v in data.columns]
-    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in data.columns else None
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>⚡</div>"
-            "<div><div class='sidebar-brand-title'>Command Centre</div>"
-            "<div class='sidebar-brand-meta'>Anomaly landscape overview</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='sbar-hdr'>Scope</div>", unsafe_allow_html=True)
-        min_minutes = st.slider("Min minutes", 0, 2000, 500, step=100, key="cmd_min_min")
-        age_bands   = {"All ages": None, "U23": 23, "U27": 27}
-        max_age     = age_bands[st.selectbox("Age band", list(age_bands.keys()), key="cmd_age")]
-        threshold   = st.slider("Anomaly threshold (z)", 1.0, 3.0, 1.8, step=0.1, key="cmd_thresh")
-
-    st.markdown(
-        "<div class='page-header'><div class='page-header-icon'>⚡</div>"
-        "<div><div class='page-header-title'>Anomaly Command Centre</div>"
-        "<div class='page-header-sub'>Live anomaly landscape — where are the outliers, what type, which leagues</div></div></div>",
-        unsafe_allow_html=True,
-    )
-
-    pool = data.copy()
-    if "MinutesPlayed" in pool.columns:
-        pool = pool.loc[pool["MinutesPlayed"].fillna(0) >= min_minutes]
-    if max_age and "AgeYears" in pool.columns:
-        pool = pool.loc[pool["AgeYears"].fillna(99) <= max_age]
-
-    if pool.empty or not score_cols:
-        st.warning("Not enough data.")
-        return
-
-    zdf = _anomaly_engine(pool, score_cols, "Z-score (per position)", threshold)
-    anomalies = zdf.loc[zdf["_peak_z"] >= threshold].copy()
-
-    # ── KPIs ──────────────────────────────────────────────────────────────────
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        metric_card("Total anomalies", str(len(anomalies)), f"z ≥ {threshold:.1f}")
-    with c2:
-        n_gems = (anomalies["_anomaly_type"] == "Hidden Gem").sum()
-        metric_card("Hidden Gems", str(n_gems), "low composite, high signal")
-    with c3:
-        n_spec = (anomalies["_anomaly_type"] == "Specialist Elite").sum()
-        metric_card("Specialist Elite", str(n_spec), "extreme in 1–2 metrics")
-    with c4:
-        n_multi = (anomalies["_anomaly_type"] == "Multi-dimensional").sum()
-        metric_card("Multi-dimensional", str(n_multi), "4+ metrics above threshold")
-    with c5:
-        n_age = (anomalies["_anomaly_type"] == "Age-adjusted Gem").sum()
-        metric_card("Age-adjusted Gems", str(n_age), "≤23 with elite signal")
-
-    st.markdown("---")
-
-    # ── Position × anomaly type heatmap ───────────────────────────────────────
-    col_l, col_r = st.columns([3, 2])
-
-    with col_l:
-        pivot = (
-            anomalies.groupby(["PositionGroup", "_anomaly_type"])
-            .size()
-            .reset_index(name="Count")
-            .pivot(index="PositionGroup", columns="_anomaly_type", values="Count")
-            .fillna(0)
-        )
-        if not pivot.empty:
-            fig_piv, ax_piv = plt.subplots(figsize=(9, max(3, len(pivot) * 0.55)))
-            fig_piv.patch.set_facecolor("#f9f8f3")
-            ax_piv.set_facecolor("#ffffff")
-            sns.heatmap(
-                pivot.astype(int), ax=ax_piv,
-                cmap="YlOrRd", linewidths=0.5, linecolor="#ffffff",
-                annot=True, fmt="d",
-                cbar_kws={"shrink": 0.6, "label": "count"},
-            )
-            ax_piv.tick_params(colors="#888888", labelsize=9)
-            ax_piv.set_xlabel("", color="#888888")
-            ax_piv.set_ylabel("", color="#888888")
-            ax_piv.set_title("Anomaly count — position × type", color="#888888", fontsize=11, pad=10)
-            plt.xticks(rotation=20, ha="right", color="#888888", fontsize=9)
-            plt.yticks(color="#888888", fontsize=9)
-            plt.tight_layout()
-            st.pyplot(fig_piv, clear_figure=True)
-
-    with col_r:
-        # Top leagues by anomaly density
-        if "BundleLabel" in anomalies.columns:
-            lg_counts = (
-                anomalies.groupby("BundleLabel")
-                .agg(n=("PlayerName", "count"), avg_score=("_anomaly_score", "mean"))
-                .reset_index().rename(columns={"BundleLabel": "League"})
-                .sort_values("n", ascending=False).head(12)
-            )
-            lg_bar = (
-                alt.Chart(lg_counts)
+            pos_order = [p for p in POSITION_ORDER[::-1] if p in breakdown["PositionGroup"].values]
+            chart = (
+                alt.Chart(breakdown)
                 .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
                 .encode(
+                    y=alt.Y("PositionGroup:N", sort=pos_order, title=None,
+                             axis=alt.Axis(labelColor="#6a7390", labelFontSize=12)),
+                    x=alt.X("Count:Q", title="Anomalies detected",
+                             axis=alt.Axis(labelColor="#6a7390", gridColor="#1a1f2e")),
+                    color=alt.Color(
+                        "_anomaly_type:N",
+                        scale=alt.Scale(domain=list(ANOMALY_COLORS.keys()), range=list(ANOMALY_COLORS.values())),
+                        title="Type",
+                        legend=alt.Legend(labelColor="#8fa3b1", titleColor="#8fa3b1", orient="top"),
+                    ),
+                    tooltip=["PositionGroup", "_anomaly_type", "Count"],
+                )
+                .properties(height=320, title="Anomaly breakdown by position & type")
+                .configure_view(fill="#111520", stroke=None)
+                .configure(background="#111520")
+                .configure_title(color="#6a7390", fontSize=11, anchor="start")
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+    with col_right:
+        st.markdown("**Top 20 anomalies**")
+        top20_cols = [c for c in [
+            _player_col(anomalies), "PositionGroup", "_anomaly_type", "_anomaly_score", "_peak_z"
+        ] if c in anomalies.columns]
+        top20 = anomalies.head(20)[top20_cols].copy()
+        rename = {_player_col(anomalies): "Player", "_anomaly_type": "Type", "_anomaly_score": "Score", "_peak_z": "Peak Z"}
+        st.dataframe(
+            top20.rename(columns=rename).round(2),
+            use_container_width=True,
+            height=352,
+            hide_index=True,
+            column_config={
+                "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=18, format="%.2f"),
+            },
+        )
+
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+    # ── Anomaly density by league ─────────────────────────────────────────────
+    if "_League" in anomalies.columns and "_League" in df.columns:
+        total_by_league  = df["_League"].value_counts().rename("Total")
+        anom_by_league   = anomalies["_League"].value_counts().rename("Anomalies")
+        league_df = (
+            pd.concat([anom_by_league, total_by_league], axis=1)
+            .dropna()
+            .reset_index()
+            .rename(columns={"index": "League"})
+        )
+        league_df.columns = ["League", "Anomalies", "Total"]
+        league_df["Density"] = (league_df["Anomalies"] / league_df["Total"] * 100).round(1)
+        league_df = league_df.sort_values("Density", ascending=False).head(30)
+
+        ld1, ld2 = st.columns([3, 2])
+        with ld1:
+            lc = (
+                alt.Chart(league_df)
+                .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3, color="#ee3a27")
+                .encode(
                     y=alt.Y("League:N", sort="-x", title=None,
-                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=10)),
-                    x=alt.X("n:Q", title="Anomalies",
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    color=alt.Color("avg_score:Q",
-                                    scale=alt.Scale(range=["#1e3a5f", "#e76f51"]),
-                                    legend=None),
-                    tooltip=["League:N", "n:Q", alt.Tooltip("avg_score:Q", format=".2f", title="Avg score")],
+                             axis=alt.Axis(labelColor="#6a7390", labelFontSize=11)),
+                    x=alt.X("Density:Q", title="Anomaly density (%)",
+                             axis=alt.Axis(labelColor="#6a7390", gridColor="#1a1f2e")),
+                    tooltip=["League", "Anomalies", "Total", alt.Tooltip("Density:Q", format=".1f", title="Density %")],
                 )
-                .properties(height=320,
-                            title=alt.TitleParams("Top leagues by anomaly count", color="#8fa3b1", fontSize=11))
-                .configure_view(fill="#ffffff", stroke=None)
-                .configure(background="#f9f8f3")
+                .properties(height=max(240, len(league_df) * 18), title="Anomaly density by league")
+                .configure_view(fill="#111520", stroke=None)
+                .configure(background="#111520")
+                .configure_title(color="#6a7390", fontSize=11, anchor="start")
             )
-            st.altair_chart(lg_bar, width="stretch")
+            st.altair_chart(lc, use_container_width=True)
 
-    # ── Top 3 anomalies per type ───────────────────────────────────────────────
-    st.markdown("<div class='sbar-hdr' style='margin:1.2rem 0 .6rem'>Top picks by anomaly type</div>", unsafe_allow_html=True)
-    type_order = list(_ANOMALY_TYPE_COLORS.keys())
-    type_tabs  = st.tabs(type_order)
-
-    for tab, atype in zip(type_tabs, type_order):
-        with tab:
-            subset = anomalies.loc[anomalies["_anomaly_type"] == atype].sort_values("_anomaly_score", ascending=False).head(10)
-            if subset.empty:
-                st.caption("No players of this type in current filters.")
-                continue
-            show_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed", "_best_metric", "_anomaly_score", "_peak_z", "_anomaly_breadth"] if c in subset.columns]
-            disp = subset[show_cols].rename(columns={
-                "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
-                "BundleLabel": "League", "AgeYears": "Age", "MinutesPlayed": "Minutes",
-                "_best_metric": "Best Metric", "_anomaly_score": "Score",
-                "_peak_z": "Peak Z", "_anomaly_breadth": "Breadth",
-            }).round(2)
-            st.dataframe(disp, hide_index=True, height=min(400, 36 + 35 * len(disp)),
-                         column_config={
-                             "Score":   st.column_config.ProgressColumn("Score", min_value=0, max_value=15, format="%.2f"),
-                             "Peak Z":  st.column_config.NumberColumn("Peak Z", format="%.2f"),
-                             "Age":     st.column_config.NumberColumn("Age", format="%.1f"),
-                             "Minutes": st.column_config.NumberColumn("Minutes", format="%d"),
-                         })
-
-    # ── Score distribution by position ────────────────────────────────────────
-    if not anomalies.empty and "_anomaly_score" in anomalies.columns:
-        st.markdown("<div class='sbar-hdr' style='margin:1.2rem 0 .6rem'>Anomaly score distribution by position</div>", unsafe_allow_html=True)
-        dist_df = anomalies[["PositionGroup", "_anomaly_score"]].rename(
-            columns={"PositionGroup": "Position", "_anomaly_score": "Score"}
-        )
-        dist_chart = (
-            alt.Chart(dist_df)
-            .mark_boxplot(size=28, outliers=True)
-            .encode(
-                x=alt.X("Position:N", axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1")),
-                y=alt.Y("Score:Q", title="Anomaly score",
-                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                color=alt.Color("Position:N",
-                                scale=alt.Scale(domain=list(POSITION_COLORS.keys()),
-                                                range=list(POSITION_COLORS.values())),
-                                legend=None),
-            )
-            .properties(height=260)
-            .configure_view(fill="#ffffff", stroke=None)
-            .configure(background="#f9f8f3")
-        )
-        st.altair_chart(dist_chart, width="stretch")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CROSS-SOURCE workspace
-# ─────────────────────────────────────────────────────────────────────────────
-def render_cross_source_workspace(data: pd.DataFrame) -> None:
-    """Wyscout vs FCHK divergence — find players the model misses or misprices."""
-    link_df  = _load_link_db()
-    ws_index = _load_wyscout_index()
-    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in data.columns else None
-    score_cols    = [v for v in PIZZA_METRICS.values() if v in data.columns]
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🔗</div>"
-            "<div><div class='sidebar-brand-title'>Cross-Source</div>"
-            "<div class='sidebar-brand-meta'>Wyscout ↔ FCHK divergence</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='sbar-hdr'>View</div>", unsafe_allow_html=True)
-        view = st.radio(
-            "Mode",
-            ["Model misses — matched but low FCHK", "Dark horses — Wyscout only", "Confidence audit"],
-            key="cs_view",
-        )
-        st.markdown("<div class='sbar-hdr'>Filters</div>", unsafe_allow_html=True)
-        conf_filter = st.multiselect("Match confidence", ["HIGH", "MEDIUM", "LOW"], default=["HIGH", "MEDIUM"], key="cs_conf")
-        min_age = st.slider("Min age", 15, 35, 17, key="cs_min_age")
-        max_age = st.slider("Max age", 15, 40, 28, key="cs_max_age")
-
-    st.markdown(
-        "<div class='page-header'><div class='page-header-icon'>🔗</div>"
-        "<div><div class='page-header-title'>Cross-Source Intelligence</div>"
-        "<div class='page-header-sub'>Wyscout database ↔ FCHK model — find divergences, dark horses, and mis-priced players</div></div></div>",
-        unsafe_allow_html=True,
-    )
-
-    if link_df.empty:
-        st.warning("IMPECT_Wyscout_Link.csv not found. Run build_link_db.py first.")
-        return
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        metric_card("Wyscout players", f"{len(ws_index):,}", "across 165 files")
-    with c2:
-        metric_card("Cross-matched", f"{len(link_df):,}", "FCHK ↔ Wyscout links")
-    with c3:
-        high_conf = (link_df["MatchConfidence"] == "HIGH").sum() if "MatchConfidence" in link_df.columns else 0
-        metric_card("High confidence", str(high_conf), "reliable matches")
-
-    if view == "Model misses — matched but low FCHK":
-        st.markdown("### Players in both databases where FCHK composite score is surprisingly low")
-        st.markdown(
-            "<div class='note-box'>These players have a confirmed Wyscout match (the model knows them) "
-            "but their FCHK composite score sits in the bottom half. "
-            "If they are playing in a strong Wyscout league, the model may be under-rating them.</div>",
-            unsafe_allow_html=True,
-        )
-
-        # Join link DB with FCHK data
-        if "IMPECT_Name" not in link_df.columns:
-            st.error("Link DB missing IMPECT_Name column.")
-            return
-
-        fchk_cols = ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed"] + score_cols
-        fchk_cols = [c for c in fchk_cols if c in data.columns]
-        fchk_slim = data[fchk_cols].copy()
-        fchk_slim["_norm"] = fchk_slim["PlayerName"].astype(str).str.lower().str.strip()
-
-        if "MatchConfidence" in link_df.columns and conf_filter:
-            link_sub = link_df.loc[link_df["MatchConfidence"].isin(conf_filter)].copy()
-        else:
-            link_sub = link_df.copy()
-
-        link_sub["_norm"] = link_sub["IMPECT_Name"].astype(str).str.lower().str.strip()
-        merged = link_sub.merge(fchk_slim, on="_norm", how="inner")
-
-        if "Wyscout_Age" in merged.columns:
-            merged = merged.loc[merged["Wyscout_Age"].fillna(99).between(min_age, max_age)]
-
-        if merged.empty:
-            st.info("No matched players found with current filters.")
-            return
-
-        if composite_col and composite_col in merged.columns:
-            # percentile rank within each position group
-            merged["_composite_pct"] = merged.groupby("PositionGroup")[composite_col].rank(pct=True) * 100
-            merged["_is_miss"] = merged["_composite_pct"] < 40
-            misses = merged.loc[merged["_is_miss"]].sort_values("_composite_pct")
-        else:
-            misses = merged.copy()
-
-        show_cols = [c for c in [
-            "Wyscout_Name", "Wyscout_Team", "Wyscout_File", "Wyscout_Age",
-            "MatchConfidence", "PositionGroup", composite_col, "_composite_pct",
-            "BundleLabel", "MinutesPlayed",
-        ] if c in misses.columns]
-        disp = misses[show_cols].rename(columns={
-            "Wyscout_Name": "Player (Wyscout)", "Wyscout_Team": "Wyscout Team",
-            "Wyscout_File": "Wyscout File", "Wyscout_Age": "Age",
-            "MatchConfidence": "Confidence", "PositionGroup": "Role",
-            composite_col: "FCHK Composite", "_composite_pct": "Composite %ile",
-            "BundleLabel": "FCHK League", "MinutesPlayed": "Minutes",
-        }).round(1)
-        st.dataframe(disp, hide_index=True, height=500)
-        st.download_button("Download CSV", disp.to_csv(index=False).encode(), "model_misses.csv", "text/csv", key="cs_dl1")
-
-    elif view == "Dark horses — Wyscout only":
-        st.markdown("### Players in Wyscout with no FCHK model entry")
-        st.markdown(
-            "<div class='note-box'>These players exist in the Wyscout database but have no match "
-            "in the FCHK model. Filter by country/position to find uncovered talent "
-            "the model has never evaluated.</div>",
-            unsafe_allow_html=True,
-        )
-
-        if ws_index.empty:
-            st.warning("Wyscout_Player_Index.csv not found. Run build_wyscout_index.py first.")
-            return
-
-        # Players in Wyscout index not in link DB
-        matched_ws_players = set()
-        if "Wyscout_Name" in link_df.columns:
-            matched_ws_players = set(link_df["Wyscout_Name"].astype(str).str.lower().str.strip())
-        ws_norm = ws_index.copy()
-        ws_norm["_norm"] = ws_norm["Player"].astype(str).str.lower().str.strip()
-        unmatched = ws_norm.loc[~ws_norm["_norm"].isin(matched_ws_players)].drop(columns=["_norm"])
-
-        # Filters
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            countries = sorted(unmatched["File"].str.replace(".xlsx", "", regex=False).str.split().str[0].dropna().unique())
-            sel_country = st.multiselect("Country/File", countries[:30], key="cs_country")
-        with col_f2:
-            ws_positions = sorted(unmatched["Position"].dropna().unique())
-            sel_pos = st.multiselect("Position", ws_positions, key="cs_pos")
-        with col_f3:
-            pass
-
-        filtered_ws = unmatched.copy()
-        if sel_country:
-            filtered_ws = filtered_ws.loc[filtered_ws["File"].str.split().str[0].isin(sel_country)]
-        if sel_pos:
-            filtered_ws = filtered_ws.loc[filtered_ws["Position"].isin(sel_pos)]
-        if "Age" in filtered_ws.columns:
-            filtered_ws = filtered_ws.loc[filtered_ws["Age"].fillna(99).between(min_age, max_age)]
-
-        metric_card("Uncovered players", f"{len(filtered_ws):,}", "not in FCHK model")
-        st.dataframe(filtered_ws.head(300), hide_index=True, height=520)
-        st.download_button("Download CSV", filtered_ws.to_csv(index=False).encode(), "dark_horses.csv", "text/csv", key="cs_dl2")
-
-    else:  # Confidence audit
-        st.markdown("### Match confidence distribution — how reliable is the cross-database linking?")
-        if "MatchConfidence" not in link_df.columns:
-            st.error("No MatchConfidence column in link DB.")
-            return
-
-        conf_counts = link_df["MatchConfidence"].value_counts().reset_index()
-        conf_counts.columns = ["Confidence", "Count"]
-        c_chart = (
-            alt.Chart(conf_counts)
-            .mark_bar(cornerRadiusTopRight=4)
-            .encode(
-                x=alt.X("Confidence:N", sort=["HIGH", "MEDIUM", "LOW", "NONE"],
-                        axis=alt.Axis(labelColor="#8fa3b1")),
-                y=alt.Y("Count:Q", axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
-                color=alt.Color("Confidence:N",
-                                scale=alt.Scale(domain=["HIGH", "MEDIUM", "LOW", "NONE"],
-                                                range=["#2a9d8f", "#f4a261", "#e76f51", "#637d96"]),
-                                legend=None),
-                tooltip=["Confidence:N", "Count:Q"],
-            )
-            .properties(height=260)
-            .configure_view(fill="#ffffff", stroke=None)
-            .configure(background="#f9f8f3")
-        )
-        st.altair_chart(c_chart, width="stretch")
-
-        # Show by competition
-        if "IMPECT_Competition" in link_df.columns:
-            comp_conf = (
-                link_df.groupby(["IMPECT_Competition", "MatchConfidence"])
-                .size().reset_index(name="Count")
-                .pivot(index="IMPECT_Competition", columns="MatchConfidence", values="Count")
-                .fillna(0).astype(int)
-            )
-            comp_conf["Total"] = comp_conf.sum(axis=1)
-            if "HIGH" in comp_conf.columns:
-                comp_conf["High %"] = (comp_conf["HIGH"] / comp_conf["Total"] * 100).round(1)
-            st.dataframe(comp_conf.sort_values("Total", ascending=False), height=400)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PLAYER INTEL workspace
-# ─────────────────────────────────────────────────────────────────────────────
-def render_player_intel_workspace(data: pd.DataFrame) -> None:
-    """Deep-dive on a single player's anomaly profile, pizza, Wyscout bars, and peers."""
-    import seaborn as sns
-
-    score_cols    = [v for v in PIZZA_METRICS.values() if v in data.columns]
-    composite_col = "CompositeRecruitmentScore" if "CompositeRecruitmentScore" in data.columns else None
-    link_df       = _load_link_db()
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🧠</div>"
-            "<div><div class='sidebar-brand-title'>Player Intel</div>"
-            "<div class='sidebar-brand-meta'>Single-player anomaly deep-dive</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='sbar-hdr'>Select player</div>", unsafe_allow_html=True)
-        player_names = sorted(data["PlayerName"].dropna().astype(str).unique())
-        sel_name = st.selectbox("Player", player_names, key="pi_player")
-        threshold = st.slider("Anomaly threshold (z)", 1.0, 3.0, 1.8, step=0.1, key="pi_thresh")
-
-    st.markdown(
-        "<div class='page-header'><div class='page-header-icon'>🧠</div>"
-        "<div><div class='page-header-title'>Player Intelligence</div>"
-        "<div class='page-header-sub'>Deep anomaly profile — signals, peer comparisons, cross-source</div></div></div>",
-        unsafe_allow_html=True,
-    )
-
-    player_rows = data.loc[data["PlayerName"].astype(str) == sel_name]
-    if player_rows.empty:
-        st.info("Select a player above.")
-        return
-    player_row = player_rows.iloc[0]
-    pos_group  = str(player_row.get("PositionGroup", ""))
-    pos_pool   = data.loc[data["PositionGroup"].astype(str) == pos_group].copy()
-
-    # Run engine on position pool
-    zdf = _anomaly_engine(pos_pool, score_cols, "Z-score (per position)", threshold)
-    player_anom = zdf.loc[zdf["PlayerName"].astype(str) == sel_name]
-    if player_anom.empty:
-        st.warning("Could not compute anomaly scores for this player.")
-        return
-    p_row = player_anom.iloc[0]
-
-    # ── Header KPIs ───────────────────────────────────────────────────────────
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        metric_card("Anomaly score", f"{p_row['_anomaly_score']:.2f}", "composite signal")
-    with k2:
-        metric_card("Peak z-score", f"{p_row['_peak_z']:.2f}", f"best: {p_row['_best_metric']}")
-    with k3:
-        metric_card("Type", p_row["_anomaly_type"], "anomaly classification")
-    with k4:
-        metric_card("Metric breadth", str(int(p_row["_anomaly_breadth"])), f"metrics above z {threshold:.1f}")
-
-    st.markdown("---")
-
-    tab_profile, tab_fingerprint, tab_peers, tab_cross = st.tabs(
-        ["Score profile", "Anomaly fingerprint", "Peer comparison", "Cross-source"]
-    )
-
-    # Score profile: pizza chart
-    with tab_profile:
-        try:
-            fig_pizza = render_player_pizza(pos_pool, player_row)
-            st.pyplot(fig_pizza, clear_figure=True)
-        except Exception as e:
-            st.caption(f"Pizza chart unavailable: {e}")
-
-        # Metric z-score bar chart
-        z_cols = [f"_z_{c}" for c in score_cols]
-        z_vals = [float(p_row.get(zc, 0)) for zc in z_cols]
-        label_map = {v: k for k, v in PIZZA_METRICS.items()}
-        z_labels  = [label_map.get(c, c) for c in score_cols]
-        z_bar_df  = pd.DataFrame({"Metric": z_labels, "Z-score": z_vals}).sort_values("Z-score", ascending=False)
-        z_bar_df["Color"] = z_bar_df["Z-score"].apply(
-            lambda v: "#00c7b7" if v >= threshold else ("#f4a261" if v >= 0 else "#637d96")
-        )
-        z_bar = (
-            alt.Chart(z_bar_df)
-            .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
-            .encode(
-                y=alt.Y("Metric:N", sort="-x", title=None,
-                        axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
-                x=alt.X("Z-score:Q", title="Z-score vs position peers",
-                        axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                color=alt.Color("Color:N", scale=None, legend=None),
-                tooltip=["Metric:N", alt.Tooltip("Z-score:Q", format=".2f")],
-            )
-            .properties(height=max(200, len(z_bar_df) * 26),
-                        title=alt.TitleParams(f"{sel_name} — z-scores vs {pos_group} peers", color="#8fa3b1", fontSize=11))
-            .configure_view(fill="#ffffff", stroke=None)
-            .configure(background="#f9f8f3")
-        )
-        st.altair_chart(z_bar, width="stretch")
-
-    # Anomaly fingerprint: player row vs top 15 anomalies in position
-    with tab_fingerprint:
-        top_anom = zdf.loc[zdf["_peak_z"] >= threshold].sort_values("_anomaly_score", ascending=False).head(14)
-        highlight = zdf.loc[zdf["PlayerName"].astype(str) == sel_name]
-        combined  = pd.concat([highlight, top_anom]).drop_duplicates(subset=["PlayerName"]).head(15)
-        z_cols    = [f"_z_{c}" for c in score_cols]
-        hm_labels = combined["PlayerName"].fillna("?").astype(str).tolist()
-        hm_matrix = combined[z_cols].values.astype(float)
-        metric_ticks = [label_map.get(c.replace("_z_", ""), c.replace("_z_", "")) for c in z_cols]
-
-        fig_f, ax_f = plt.subplots(figsize=(max(8, len(z_cols) * 0.9), max(4, len(combined) * 0.42)))
-        fig_f.patch.set_facecolor("#f9f8f3")
-        ax_f.set_facecolor("#ffffff")
-        sns.heatmap(
-            hm_matrix, ax=ax_f, cmap="RdYlGn", center=0, vmin=-2, vmax=4,
-            linewidths=0.4, linecolor="#ffffff",
-            xticklabels=metric_ticks, yticklabels=hm_labels,
-            annot=True, fmt=".1f",
-            cbar_kws={"label": "z-score", "shrink": 0.6},
-        )
-        ax_f.tick_params(colors="#888888", labelsize=9)
-        ax_f.set_title(f"Anomaly fingerprint — {sel_name} vs top {pos_group} outliers",
-                       color="#888888", fontsize=11, pad=10)
-        # Highlight selected player row
-        idx = hm_labels.index(sel_name) if sel_name in hm_labels else -1
-        if idx >= 0:
-            for x_edge in [0, len(z_cols)]:
-                ax_f.axhline(idx,     color="#1478b0", linewidth=1.8, xmin=0, xmax=1)
-                ax_f.axhline(idx + 1, color="#1478b0", linewidth=1.8, xmin=0, xmax=1)
-        plt.xticks(rotation=30, ha="right", color="#888888")
-        plt.yticks(color="#888888", fontsize=8)
-        plt.tight_layout()
-        st.pyplot(fig_f, clear_figure=True)
-
-    # Peer comparison: similar anomaly profiles — all three similarity methods
-    with tab_peers:
-        peers = zdf.loc[zdf["PlayerName"].astype(str) != sel_name].copy()
-        if not peers.empty and score_cols:
-            sim_method = st.radio(
-                "Similarity method",
-                ["Cosine", "Euclidean", "Pearson"],
-                horizontal=True,
-                key="pi_sim_method",
-            )
-            sim_features = [f"_z_{c}" for c in score_cols if f"_z_{c}" in peers.columns]
-            sim_eng = SimilarityEngine(sim_features)
-            target_sim_row = p_row.copy()
-            top_peers = sim_eng.find_similar(
-                peers,
-                target_sim_row,
-                method=sim_method.lower(),
-                n=10,
-                same_position=False,
-            )
-            if top_peers.empty:
-                st.info("Not enough peers for similarity search.")
-            else:
-                peer_disp_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel",
-                                               "AgeYears", "_anomaly_type", "_anomaly_score", "_similarity"] if c in top_peers.columns]
-                peer_disp = top_peers[peer_disp_cols].rename(columns={
-                    "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
-                    "BundleLabel": "League", "AgeYears": "Age",
-                    "_anomaly_type": "Type", "_anomaly_score": "Score", "_similarity": "Similarity",
-                }).round(3)
-                st.caption(f"10 most similar anomaly profiles to {sel_name} in {pos_group} — {sim_method} similarity")
-                st.dataframe(peer_disp, hide_index=True, height=400)
-
-            # Comparison across all three methods
-            with st.expander("Compare all three similarity methods side-by-side"):
-                col_cos, col_euc, col_pea = st.columns(3)
-                method_results = sim_eng.compare_methods(peers, p_row, n=8, same_position=False)
-                name_col_alias = "PlayerName"
-                for col_widget, (mname, mdf) in zip(
-                    [col_cos, col_euc, col_pea],
-                    method_results.items(),
-                ):
-                    with col_widget:
-                        st.caption(f"**{mname.title()}**")
-                        if mdf.empty:
-                            st.info("No results.")
-                        else:
-                            show_cols = [c for c in [name_col_alias, "TeamName", "AgeYears", "_similarity"] if c in mdf.columns]
-                            st.dataframe(
-                                mdf[show_cols].rename(columns={
-                                    name_col_alias: "Player", "TeamName": "Team",
-                                    "AgeYears": "Age", "_similarity": "Sim",
-                                }).round(3),
-                                hide_index=True, height=300,
-                            )
-
-    # Cross-source: is this player in Wyscout?
-    with tab_cross:
-        if link_df.empty:
-            st.info("No cross-source link DB available.")
-        else:
-            norm_name = sel_name.lower().strip()
-            match = link_df.loc[link_df.get("IMPECT_Name", pd.Series(dtype=str)).astype(str).str.lower().str.strip() == norm_name]
-            if match.empty:
-                # Try Wyscout name
-                match = link_df.loc[link_df.get("Wyscout_Name", pd.Series(dtype=str)).astype(str).str.lower().str.strip().str.contains(norm_name.split()[-1] if norm_name else "", na=False)]
-
-            if match.empty:
-                st.info(f"{sel_name} has no confirmed Wyscout match in the link database.")
-                ws_index = _load_wyscout_index()
-                if not ws_index.empty:
-                    last_name = sel_name.split()[-1] if sel_name else ""
-                    fuzzy = ws_index.loc[ws_index["Player"].astype(str).str.contains(last_name, case=False, na=False)]
-                    if not fuzzy.empty:
-                        st.caption("Possible Wyscout candidates (name match only):")
-                        st.dataframe(fuzzy.head(10), hide_index=True)
-            else:
-                st.success(f"Found {len(match)} Wyscout link(s) for {sel_name}")
-                st.dataframe(match.T, use_container_width=True)
-
-                # Try to load actual Wyscout file for bars
-                ws_file_col = "Wyscout_File"
-                ws_pos_col  = "Wyscout_Position"
-                if ws_file_col in match.columns and ws_pos_col in match.columns:
-                    ws_file = str(match.iloc[0][ws_file_col])
-                    ws_pos  = str(match.iloc[0][ws_pos_col]).split(",")[0].strip()
-                    ws_path = WYSCOUT_DB_DIR / ws_file
-                    if ws_path.exists():
-                        with st.spinner("Loading Wyscout file…"):
-                            ws_df = _load_wyscout_file(ws_path)
-                        if not ws_df.empty:
-                            ws_name_col = "Wyscout_Name"
-                            ws_player_name = str(match.iloc[0].get(ws_name_col, ""))
-                            ws_row_match = ws_df.loc[ws_df["Player"].astype(str).str.strip() == ws_player_name.strip()]
-                            if ws_row_match.empty:
-                                # Try partial
-                                last = ws_player_name.split()[-1] if ws_player_name else ""
-                                ws_row_match = ws_df.loc[ws_df["Player"].astype(str).str.contains(last, case=False, na=False)]
-                            if not ws_row_match.empty:
-                                ws_row = ws_row_match.iloc[0]
-                                mapped_pos = WYSCOUT_POSITION_MAP.get(ws_pos, pos_group)
-                                ws_pool = ws_df.copy()
-                                fig_bars = _render_wyscout_bars(ws_row, ws_pool, mapped_pos, ws_player_name, str(match.iloc[0].get("Wyscout_Team", "")), ws_file)
-                                if fig_bars:
-                                    st.pyplot(fig_bars, clear_figure=True)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SET PIECE workspace
-# ─────────────────────────────────────────────────────────────────────────────
-
-@st.cache_data(show_spinner=False, ttl=600)
-def _load_all_wyscout_for_setpiece() -> pd.DataFrame:
-    """Load every Wyscout DB file into a single combined DataFrame."""
-    frames: list[pd.DataFrame] = []
-    ws_dir = APP_DIR / "data" / "Wyscout DB"
-    if not ws_dir.exists():
-        return pd.DataFrame()
-    for path in sorted(ws_dir.glob("*.xlsx")):
-        try:
-            df = _load_wyscout_file(path)
-            if not df.empty:
-                df["_League"] = path.stem
-                frames.append(df)
-        except Exception:
-            continue
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PROJECTIONS workspace
-# ─────────────────────────────────────────────────────────────────────────────
-
-FTE_PALETTE = {
-    "band_outer": "#d8eaf7",   # 10-90 band
-    "band_inner": "#a0cce8",   # 25-75 band
-    "median":     "#1478b0",   # median line
-    "breakout":   "#3fb34f",
-    "expected":   "#1a1a1a",
-    "decline":    "#ee3a27",
-    "now":        "#888888",
-}
-
-PROJ_METRICS_IMPECT = [
-    "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
-    "PressingScore", "BallSecurityScore", "ExpectedThreatScore", "ASA_GoalsAddedScore",
-    "DecisionScore", "ValueRecruitmentScore",
-]
-
-PROJ_METRICS_WYSCOUT = [
-    "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
-    "Key passes per 90", "Progressive passes per 90", "Dribbles per 90",
-    "Successful defensive actions per 90", "Aerial duels won, %",
-]
-
-
-def _fte_fan_chart(
-    proj: PlayerProjection,
-    metric: str | None = None,
-) -> "plt.Figure":
-    """
-    FiveThirtyEight-style fan chart.
-    If metric is None, uses composite score (normalised to 100 = current).
-    """
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    from matplotlib.lines import Line2D
-
-    if metric and metric in proj.percentiles:
-        bands = {}
-        current_val = proj.metrics[metric]
-        for pct in [10, 25, 50, 75, 90]:
-            vals = [current_val] + proj.percentiles[metric][pct]
-            bands[pct] = vals
-        y_label = metric
-        y_now   = current_val
-    else:
-        cb = proj.composite_bands()
-        if cb.empty:
-            return plt.figure()
-        bands = {pct: cb[f"P{pct}"].tolist() for pct in [10, 25, 50, 75, 90]}
-        y_label = "Relative performance (Now = 100)"
-        y_now   = 100.0
-
-    x = list(range(proj.n_seasons + 1))
-    x_labels = ["Now"] + [f"Season {t+1}" for t in range(proj.n_seasons)]
-
-    fig, ax = plt.subplots(figsize=(9, 5), dpi=130)
-    fig.patch.set_facecolor("#f9f8f3")
-    ax.set_facecolor("#f9f8f3")
-
-    # Bands
-    ax.fill_between(x, bands[10], bands[90], color=FTE_PALETTE["band_outer"], alpha=0.9, label="10–90th pct")
-    ax.fill_between(x, bands[25], bands[75], color=FTE_PALETTE["band_inner"], alpha=0.9, label="25–75th pct")
-    ax.plot(x, bands[50], color=FTE_PALETTE["median"], linewidth=2.5, label="Median", zorder=5)
-
-    # Scenario lines
-    if proj.composite_trajectories is not None and metric is None:
-        final = proj.composite_trajectories[:, -1]
-        for scenario, pct, color, ls in [
-            ("Breakout", 90, FTE_PALETTE["breakout"], "--"),
-            ("Decline",  10, FTE_PALETTE["decline"],  ":"),
-        ]:
-            sim_idx = np.argmin(np.abs(final - np.percentile(final, pct)))
-            traj = [100.0] + proj.composite_trajectories[sim_idx, :].tolist()
-            ax.plot(x, traj, color=color, linewidth=1.4, linestyle=ls, alpha=0.85, label=scenario)
-
-    # "Now" marker
-    ax.scatter([0], [y_now], color=FTE_PALETTE["now"], s=60, zorder=10, clip_on=False)
-
-    # Vertical gridlines at each season
-    for xi in x[1:]:
-        ax.axvline(xi, color="#cccccc", linewidth=0.7, zorder=0)
-
-    # FTE style
-    ax.set_xticks(x)
-    ax.set_xticklabels(x_labels, fontsize=10, color="#444444")
-    ax.tick_params(axis="y", colors="#888888", labelsize=9)
-    ax.tick_params(axis="x", length=0)
-    ax.spines[["top", "right", "left"]].set_visible(False)
-    ax.spines["bottom"].set_color("#cccccc")
-    ax.yaxis.grid(True, color="#cccccc", linewidth=0.6, zorder=0)
-    ax.set_axisbelow(True)
-    ax.set_ylabel(y_label, fontsize=9, color="#888888")
-
-    # Title block
-    fig.text(
-        0.11, 0.97,
-        f"{proj.player_name}  ·  {proj.position}  ·  Age {proj.current_age:.0f}",
-        ha="left", va="top", fontsize=13, fontweight="900", color="#1a1a1a",
-        transform=fig.transFigure,
-    )
-    fig.text(
-        0.11, 0.91,
-        f"Monte Carlo projection — {proj.n_simulations:,} simulations  ·  {proj.n_seasons} seasons",
-        ha="left", va="top", fontsize=9, color="#888888", style="italic",
-        transform=fig.transFigure,
-    )
-
-    legend_handles = [
-        mpatches.Patch(color=FTE_PALETTE["band_outer"], label="10–90th percentile"),
-        mpatches.Patch(color=FTE_PALETTE["band_inner"], label="25–75th percentile"),
-        Line2D([0], [0], color=FTE_PALETTE["median"],   linewidth=2,   label="Median"),
-        Line2D([0], [0], color=FTE_PALETTE["breakout"], linewidth=1.4, linestyle="--", label="Breakout (90th)"),
-        Line2D([0], [0], color=FTE_PALETTE["decline"],  linewidth=1.4, linestyle=":",  label="Decline (10th)"),
-    ]
-    ax.legend(
-        handles=legend_handles, loc="upper right", frameon=True,
-        facecolor="#ffffff", edgecolor="#cccccc", fontsize=8.5,
-        labelcolor="#444444",
-    )
-
-    fig.subplots_adjust(top=0.83, left=0.11, right=0.96, bottom=0.1)
-    return fig
-
-
-def _fte_metric_bars(proj: PlayerProjection) -> "plt.Figure":
-    """Horizontal bar chart: per-metric P10/P50/P90 for season 1 vs season 3."""
-    import matplotlib.pyplot as plt
-
-    metrics   = [m for m in proj.metrics if m in proj.percentiles]
-    if not metrics:
-        return plt.figure()
-
-    fig, axes = plt.subplots(1, proj.n_seasons, figsize=(4 * proj.n_seasons, max(4, len(metrics) * 0.45)), dpi=120, sharey=True)
-    if proj.n_seasons == 1:
-        axes = [axes]
-    fig.patch.set_facecolor("#f9f8f3")
-
-    for t, ax in enumerate(axes):
-        ax.set_facecolor("#f9f8f3")
-        current_vals = np.array([proj.metrics[m] for m in metrics])
-        p10 = np.array([proj.percentiles[m][10][t] for m in metrics])
-        p50 = np.array([proj.percentiles[m][50][t] for m in metrics])
-        p90 = np.array([proj.percentiles[m][90][t] for m in metrics])
-        y   = np.arange(len(metrics))
-
-        ax.barh(y, p90 - p10, left=p10, height=0.5, color=FTE_PALETTE["band_outer"], zorder=2)
-        ax.barh(y, p50 - p10, left=p10, height=0.5, color=FTE_PALETTE["band_inner"], alpha=0.7, zorder=3)
-        ax.scatter(p50, y, color=FTE_PALETTE["median"], s=28, zorder=5)
-        ax.scatter(current_vals, y, color=FTE_PALETTE["now"], s=18, marker="D", zorder=4, label="Current" if t == 0 else "")
-        ax.axvline(0, color="#cccccc", linewidth=0.7)
-
-        ax.set_yticks(y)
-        ax.set_yticklabels([m[:28] for m in metrics], fontsize=8, color="#444444")
-        ax.set_title(f"Season {t+1}", fontsize=10, fontweight="700", color="#1a1a1a", pad=8)
-        ax.tick_params(axis="x", colors="#888888", labelsize=8)
-        ax.spines[["top", "right"]].set_visible(False)
-        ax.spines[["left", "bottom"]].set_color("#cccccc")
-        ax.yaxis.grid(False)
-        ax.xaxis.grid(True, color="#cccccc", linewidth=0.5, zorder=0)
-        ax.set_axisbelow(True)
-
-    fig.suptitle("Per-metric projection bands (blue marker = median, ◆ = current)", fontsize=9, color="#888888", style="italic", y=1.02)
-    fig.tight_layout()
-    return fig
-
-
-def render_projections_workspace(data: pd.DataFrame, source: str = "IMPECT") -> None:
-    """3-season Monte Carlo player projection — FiveThirtyEight-style fan charts."""
-
-    score_cols_proj = active_proj_metrics(data, source)
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>📈</div>"
-            "<div><div class='sidebar-brand-title'>Projections</div>"
-            "<div class='sidebar-brand-meta'>Monte Carlo · 3 seasons</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='sbar-hdr'>Player</div>", unsafe_allow_html=True)
-        player_names_proj = sorted(data["PlayerName"].dropna().astype(str).unique())
-        sel_proj_player   = st.selectbox("Select player", player_names_proj, key="proj_player")
-
-        st.markdown("<div class='sbar-hdr'>Simulation</div>", unsafe_allow_html=True)
-        n_sims    = st.select_slider("Simulations", [500, 1000, 2500, 5000], value=1000, key="proj_n_sims")
-        n_seasons = st.slider("Seasons to project", 1, 5, 3, key="proj_n_seasons")
-
-        st.markdown("<div class='sbar-hdr'>Metrics</div>", unsafe_allow_html=True)
-        proj_metric_opts = score_cols_proj if score_cols_proj else ["(no scores available)"]
-        sel_proj_metrics = st.multiselect("Metrics", proj_metric_opts, default=proj_metric_opts[:6], key="proj_metrics")
-
-    st.markdown(
-        "<div class='page-header'>"
-        "<div class='page-header-title'>Player Projections</div>"
-        "<div class='page-header-sub'>Monte Carlo simulation — position-specific age curves, regression to mean, uncertainty bands</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    player_rows = data.loc[data["PlayerName"].astype(str) == sel_proj_player]
-    if player_rows.empty:
-        st.info("Select a player in the sidebar.")
-        return
-    player_row = player_rows.iloc[0]
-    pos        = str(player_row.get("PositionGroup", "CM"))
-    age_raw    = pd.to_numeric(player_row.get("AgeYears"), errors="coerce")
-    age        = float(age_raw) if pd.notna(age_raw) else 25.0
-    mins       = float(pd.to_numeric(player_row.get("MinutesPlayed", 900), errors="coerce") or 900)
-
-    metric_vals: dict[str, float] = {}
-    for m in (sel_proj_metrics or score_cols_proj):
-        v = pd.to_numeric(player_row.get(m), errors="coerce")
-        if pd.notna(v) and float(v) > 0:
-            metric_vals[m] = float(v)
-
-    if not metric_vals:
-        st.warning("No valid metric values for this player. Try a different metric selection.")
-        return
-
-    with st.spinner(f"Running {n_sims:,} simulations…"):
-        proj = PlayerProjection(
-            player_name=sel_proj_player,
-            team=str(player_row.get("TeamName", "")),
-            position=pos,
-            current_age=age,
-            metrics=metric_vals,
-            minutes=mins,
-            n_seasons=n_seasons,
-            n_simulations=n_sims,
-        )
-        proj.run()
-
-    if proj.composite_trajectories is None:
-        st.warning("Simulation produced no output.")
-        return
-
-    # ── KPI strip ─────────────────────────────────────────────────────────────
-    cb = proj.composite_bands()
-    k_cols = st.columns(4 + n_seasons)
-    with k_cols[0]:
-        metric_card("Player", sel_proj_player, f"{pos} · Age {age:.0f}")
-    with k_cols[1]:
-        metric_card("Team", str(player_row.get("TeamName", "—")), str(player_row.get("BundleLabel", "")))
-    with k_cols[2]:
-        metric_card("Minutes", f"{mins:,.0f}", "this season")
-    with k_cols[3]:
-        metric_card("Metrics modelled", str(len(metric_vals)), "in simulation")
-    for t in range(n_seasons):
-        with k_cols[4 + t]:
-            row_t = cb.iloc[t + 1] if len(cb) > t + 1 else None
-            if row_t is not None:
-                p50 = row_t["P50"]
-                delta = p50 - 100
-                sign  = "▲" if delta >= 0 else "▼"
-                color = "#3fb34f" if delta >= 0 else "#ee3a27"
-                st.markdown(
-                    f"<div class='metric-card'>"
-                    f"<div class='metric-label'>Season {t+1} median</div>"
-                    f"<div class='metric-value'>{p50:.1f}</div>"
-                    f"<div class='metric-caption' style='color:{color}'>{sign} {abs(delta):.1f}% vs now</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-
-    st.markdown("---")
-
-    tab_fan, tab_scenarios, tab_metrics, tab_similarity, tab_batch = st.tabs([
-        "📈 Fan Chart",
-        "🎯 Scenarios",
-        "📊 Per-Metric Bands",
-        "👥 Similar Trajectories",
-        "🏆 League Rankings",
-    ])
-
-    # ── Tab 1: Fan chart ───────────────────────────────────────────────────────
-    with tab_fan:
-        metric_choice = st.selectbox(
-            "View metric (or composite)",
-            ["Composite (all metrics)"] + list(metric_vals.keys()),
-            key="proj_fan_metric",
-        )
-        chosen = None if metric_choice.startswith("Composite") else metric_choice
-        fig_fan = _fte_fan_chart(proj, chosen)
-        st.pyplot(fig_fan, clear_figure=True)
-
-        # Probability callouts
-        st.markdown("---")
-        p_cols = st.columns(3)
-        comp_final = proj.composite_trajectories[:, -1]
-        with p_cols[0]:
-            prob_up = float((comp_final >= 100).mean() * 100)
-            st.markdown(
-                f"<div class='metric-card positive'>"
-                f"<div class='metric-label'>Probability of improvement</div>"
-                f"<div class='metric-value'>{prob_up:.0f}%</div>"
-                f"<div class='metric-caption'>vs current level by Season {n_seasons}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-        with p_cols[1]:
-            prob_strong = float((comp_final >= 110).mean() * 100)
-            st.markdown(
-                f"<div class='metric-card info'>"
-                f"<div class='metric-label'>Probability of breakout (+10%)</div>"
-                f"<div class='metric-value'>{prob_strong:.0f}%</div>"
-                f"<div class='metric-caption'>composite ≥ 110 by Season {n_seasons}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-        with p_cols[2]:
-            prob_decline = float((comp_final <= 85).mean() * 100)
-            st.markdown(
-                f"<div class='metric-card highlight'>"
-                f"<div class='metric-label'>Probability of significant decline</div>"
-                f"<div class='metric-value'>{prob_decline:.0f}%</div>"
-                f"<div class='metric-caption'>composite ≤ 85 by Season {n_seasons}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-    # ── Tab 2: Scenarios ───────────────────────────────────────────────────────
-    with tab_scenarios:
-        sc_df = proj.scenario_table()
-        if not sc_df.empty:
-            import matplotlib.pyplot as plt
-            fig_sc, ax_sc = plt.subplots(figsize=(9, 4.5), dpi=120)
-            fig_sc.patch.set_facecolor("#f9f8f3")
-            ax_sc.set_facecolor("#f9f8f3")
-            x_sc = list(range(n_seasons + 1))
-            x_labels_sc = ["Now"] + [f"Season {t+1}" for t in range(n_seasons)]
-            colors_sc = {
-                "Breakout":   FTE_PALETTE["breakout"],
-                "Optimistic": "#90c090",
-                "Expected":   FTE_PALETTE["expected"],
-                "Cautious":   "#c0a060",
-                "Decline":    FTE_PALETTE["decline"],
-            }
-            lws = {"Breakout": 2.0, "Optimistic": 1.4, "Expected": 2.5, "Cautious": 1.4, "Decline": 2.0}
-            lss = {"Breakout": "--", "Optimistic": ":", "Expected": "-", "Cautious": ":", "Decline": "--"}
-            for _, sc_row in sc_df.iterrows():
-                label = sc_row["Scenario"]
-                vals  = [sc_row["Now"]] + [sc_row[f"Season {t+1}"] for t in range(n_seasons)]
-                ax_sc.plot(x_sc, vals, color=colors_sc.get(label, "#888"), linewidth=lws.get(label, 1.4),
-                           linestyle=lss.get(label, "-"), label=label, marker="o", markersize=5)
-            ax_sc.axhline(100, color="#cccccc", linewidth=0.8, linestyle="--")
-            ax_sc.set_xticks(x_sc)
-            ax_sc.set_xticklabels(x_labels_sc, fontsize=10, color="#444")
-            ax_sc.tick_params(axis="y", colors="#888", labelsize=9)
-            ax_sc.spines[["top", "right", "left"]].set_visible(False)
-            ax_sc.spines["bottom"].set_color("#ccc")
-            ax_sc.yaxis.grid(True, color="#ccc", linewidth=0.6)
-            ax_sc.set_axisbelow(True)
-            ax_sc.set_ylabel("Relative performance (Now = 100)", fontsize=9, color="#888")
-            ax_sc.legend(frameon=True, facecolor="#fff", edgecolor="#ccc", fontsize=9, labelcolor="#444")
-            ax_sc.set_title(f"Scenario trajectories — {sel_proj_player}", fontsize=11, fontweight="800", color="#1a1a1a", loc="left")
-            fig_sc.tight_layout()
-            st.pyplot(fig_sc, clear_figure=True)
-
-            st.caption("Scenario table")
-            numeric_scenario_cols = [c for c in sc_df.columns if c != "Scenario"]
-            sc_styled = sc_df.copy()
-            sc_styled[numeric_scenario_cols] = sc_styled[numeric_scenario_cols].round(1)
-            st.dataframe(sc_styled, hide_index=True, use_container_width=True)
-
-            # Download
-            st.download_button(
-                "Export scenarios Excel",
-                _to_excel_bytes({"Scenarios": sc_df, "Metric Summary": proj.summary_table()}),
-                f"{sel_proj_player.replace(' ', '_')}_projection.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="proj_dl_xlsx",
-            )
-
-    # ── Tab 3: Per-metric bands ────────────────────────────────────────────────
-    with tab_metrics:
-        fig_bars = _fte_metric_bars(proj)
-        st.pyplot(fig_bars, clear_figure=True)
-        st.caption("Metric summary table (P10 / median / P90 per season)")
-        st.dataframe(proj.summary_table(), hide_index=True, use_container_width=True)
-
-    # ── Tab 4: Similar trajectories ────────────────────────────────────────────
-    with tab_similarity:
-        sim_method_proj = st.radio(
-            "Similarity method", ["Cosine", "Euclidean", "Pearson"],
-            horizontal=True, key="proj_sim_method",
-        )
-        pos_pool = data.loc[data["PositionGroup"].astype(str) == pos].copy()
-        if not pos_pool.empty and sel_proj_metrics:
-            feats_sim = [m for m in sel_proj_metrics if m in pos_pool.columns]
-            if feats_sim:
-                sim_eng_proj = SimilarityEngine(feats_sim)
-                similar_proj = sim_eng_proj.find_similar(
-                    pos_pool, player_row, method=sim_method_proj.lower(), n=12, same_position=True,
-                )
-                if not similar_proj.empty:
-                    st.markdown(
-                        f"<div class='note-box'>Players with the most similar <strong>current profile</strong> to "
-                        f"<strong>{sel_proj_player}</strong> among {pos} peers — "
-                        f"{sim_method_proj} similarity on {len(feats_sim)} metrics.</div>",
-                        unsafe_allow_html=True,
-                    )
-                    disp_sim_cols = [c for c in ["PlayerName", "TeamName", "BundleLabel", "AgeYears",
-                                                  "_similarity"] + feats_sim[:4] if c in similar_proj.columns]
-                    st.dataframe(
-                        similar_proj[disp_sim_cols]
-                        .rename(columns={"PlayerName": "Player", "TeamName": "Team",
-                                         "BundleLabel": "League", "AgeYears": "Age",
-                                         "_similarity": "Similarity"})
-                        .round(3),
-                        hide_index=True, height=420,
-                    )
-
-                    # Run MC for top 3 similar and compare fan chart
-                    with st.expander("Compare fan charts — you + top 3 similar players"):
-                        top3 = similar_proj.head(3)
-                        all_players_comp = [player_row] + [top3.iloc[i] for i in range(len(top3))]
-                        comp_projs = []
-                        for comp_row in all_players_comp:
-                            comp_metric_vals = {m: float(pd.to_numeric(comp_row.get(m), errors="coerce") or 0)
-                                                for m in metric_vals if pd.to_numeric(comp_row.get(m), errors="coerce") > 0}
-                            if not comp_metric_vals:
-                                continue
-                            comp_age = float(pd.to_numeric(comp_row.get("AgeYears"), errors="coerce") or 25)
-                            cp = PlayerProjection(
-                                player_name=str(comp_row.get("PlayerName", "?")),
-                                team=str(comp_row.get("TeamName", "")),
-                                position=str(comp_row.get("PositionGroup", pos)),
-                                current_age=comp_age,
-                                metrics=comp_metric_vals,
-                                minutes=float(pd.to_numeric(comp_row.get("MinutesPlayed", 900), errors="coerce") or 900),
-                                n_seasons=n_seasons, n_simulations=500,
-                            )
-                            cp.run()
-                            comp_projs.append(cp)
-
-                        if comp_projs:
-                            import matplotlib.pyplot as plt
-                            fig_comp, ax_comp = plt.subplots(figsize=(10, 5), dpi=120)
-                            fig_comp.patch.set_facecolor("#f9f8f3")
-                            ax_comp.set_facecolor("#f9f8f3")
-                            colors_comp = [FTE_PALETTE["median"], FTE_PALETTE["breakout"],
-                                           FTE_PALETTE["decline"], "#9e56b6"]
-                            x_comp = list(range(n_seasons + 1))
-                            x_lbl  = ["Now"] + [f"S{t+1}" for t in range(n_seasons)]
-                            for ci, cp in enumerate(comp_projs):
-                                if cp.composite_trajectories is None:
-                                    continue
-                                cb_cp = cp.composite_bands()
-                                if cb_cp.empty:
-                                    continue
-                                med = cb_cp["P50"].tolist()
-                                p10 = cb_cp["P10"].tolist()
-                                p90 = cb_cp["P90"].tolist()
-                                c   = colors_comp[ci % len(colors_comp)]
-                                ax_comp.fill_between(x_comp, p10, p90, color=c, alpha=0.10)
-                                ax_comp.plot(x_comp, med, color=c, linewidth=2.0 if ci == 0 else 1.4,
-                                             label=f"{cp.player_name} (Age {cp.current_age:.0f})",
-                                             marker="o", markersize=4)
-                            ax_comp.axhline(100, color="#ccc", linewidth=0.7, linestyle="--")
-                            ax_comp.set_xticks(x_comp)
-                            ax_comp.set_xticklabels(x_lbl, fontsize=10, color="#444")
-                            ax_comp.tick_params(axis="y", colors="#888", labelsize=9)
-                            ax_comp.spines[["top", "right", "left"]].set_visible(False)
-                            ax_comp.spines["bottom"].set_color("#ccc")
-                            ax_comp.yaxis.grid(True, color="#ccc", linewidth=0.6)
-                            ax_comp.set_axisbelow(True)
-                            ax_comp.set_ylabel("Relative performance (Now = 100)", fontsize=9, color="#888")
-                            ax_comp.legend(frameon=True, facecolor="#fff", edgecolor="#ccc", fontsize=9, labelcolor="#444")
-                            ax_comp.set_title("Projected trajectories — median comparison", fontsize=11, fontweight="800", color="#1a1a1a", loc="left")
-                            fig_comp.tight_layout()
-                            st.pyplot(fig_comp, clear_figure=True)
-
-    # ── Tab 5: League rankings ─────────────────────────────────────────────────
-    with tab_batch:
-        st.markdown(
-            "<div class='note-box'>Batch-project all players in the same position group. "
-            "Shows projected composite P50 (median) for each season alongside current scores. "
-            "Capped at 300 players for performance.</div>",
-            unsafe_allow_html=True,
-        )
-        if st.button("Run league-wide projections", key="proj_batch_run"):
-            pos_pool_batch = data.loc[
-                (data["PositionGroup"].astype(str) == pos) &
-                (pd.to_numeric(data.get("MinutesPlayed", pd.Series(dtype=float)), errors="coerce").fillna(0) >= 400)
-            ].copy()
-            if pos_pool_batch.empty:
-                st.warning("No players found for this position.")
-            else:
-                with st.spinner(f"Projecting {min(len(pos_pool_batch), 300)} {pos} players…"):
-                    batcher = BatchProjector(
-                        metrics=[m for m in (sel_proj_metrics or score_cols_proj) if m in pos_pool_batch.columns],
-                        n_simulations=500,
-                        n_seasons=n_seasons,
-                    )
-                    batch_df = batcher.batch_summary(pos_pool_batch, top_n=300)
-                if batch_df.empty:
-                    st.warning("Batch projection produced no output.")
-                else:
-                    # Highlight the selected player
-                    st.caption(f"{len(batch_df)} {pos} players projected  ·  sorted by Season {n_seasons} median")
-                    sort_col = f"S{n_seasons} P50"
-                    if sort_col in batch_df.columns:
-                        batch_df = batch_df.sort_values(sort_col, ascending=False)
-                    st.dataframe(batch_df, hide_index=True, height=520, use_container_width=True)
-                    st.download_button(
-                        "Export batch projections Excel",
-                        _to_excel_bytes({f"{pos} Projections": batch_df}),
-                        f"{pos}_batch_projections.xlsx",
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="proj_batch_dl",
-                    )
-
-
-def render_setpiece_workspace(_data: pd.DataFrame) -> None:
-    """Set-piece scouting — z-score anomalies, role classification, and similarity search."""
-    import seaborn as sns
-
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>🎯</div>"
-            "<div><div class='sidebar-brand-title'>Set Piece Scout</div>"
-            "<div class='sidebar-brand-meta'>Z-scores · roles · similarity</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='sbar-hdr'>Data source</div>", unsafe_allow_html=True)
-        sp_threshold = st.slider("Anomaly threshold (z)", 0.5, 3.0, 1.5, step=0.1, key="sp_thresh")
-        min_mins     = st.slider("Min minutes played", 0, 3000, 500, step=100, key="sp_min_min")
-
-        st.markdown("<div class='sbar-hdr'>Focus</div>", unsafe_allow_html=True)
-        role_filter = st.multiselect(
-            "Set-piece role",
-            list(SET_PIECE_ROLES.keys()),
-            default=list(SET_PIECE_ROLES.keys()),
-            key="sp_role_filter",
-        )
-        metric_group = st.radio(
-            "Metric group",
-            ["All", "Delivery", "Aerial", "Shooting"],
-            key="sp_metric_group",
-        )
-
-    st.markdown(
-        "<div class='page-header'><div class='page-header-icon'>🎯</div>"
-        "<div><div class='page-header-title'>Set-Piece Intelligence</div>"
-        "<div class='page-header-sub'>Z-score anomaly flagging · role classification · cosine / Euclidean / Pearson similarity</div></div></div>",
-        unsafe_allow_html=True,
-    )
-
-    with st.spinner("Loading Wyscout data…"):
-        ws_all = _load_all_wyscout_for_setpiece()
-
-    if ws_all.empty:
-        st.error("No Wyscout data found in data/Wyscout DB/.")
-        return
-
-    # Filter by minutes
-    if "Minutes played" in ws_all.columns:
-        ws_all = ws_all.loc[pd.to_numeric(ws_all["Minutes played"], errors="coerce").fillna(0) >= min_mins]
-    elif "Minutes played" not in ws_all.columns:
-        pass
-
-    # Determine available set-piece metrics
-    metric_map = {
-        "All":      SET_PIECE_ALL,
-        "Delivery": SET_PIECE_DELIVERY,
-        "Aerial":   SET_PIECE_AERIAL,
-        "Shooting": SET_PIECE_SHOOTING,
-    }
-    selected_metrics = [m for m in metric_map[metric_group] if m in ws_all.columns]
-    if not selected_metrics:
-        st.warning("The selected Wyscout files do not contain any set-piece metrics.")
-        return
-
-    # Run set-piece analyzer
-    analyzer = SetPieceAnalyzer(threshold=sp_threshold)
-    with st.spinner("Computing set-piece z-scores…"):
-        ws_enriched = analyzer.fit_transform(ws_all)
-
-    anomaly_df = analyzer.anomaly_table(ws_enriched, top_n=200)
-
-    # Filter by role
-    if role_filter and "Primary Role" in anomaly_df.columns:
-        anomaly_df = anomaly_df.loc[anomaly_df["Primary Role"].isin(role_filter)]
-
-    # ── KPIs ──────────────────────────────────────────────────────────────────
-    k1, k2, k3, k4 = st.columns(4)
-    total_players  = len(ws_enriched)
-    total_anomalies = int(ws_enriched["_sp_is_anomaly"].sum()) if "_sp_is_anomaly" in ws_enriched.columns else 0
-    role_counts = ws_enriched["_sp_primary_role"].value_counts() if "_sp_primary_role" in ws_enriched.columns else pd.Series(dtype=int)
-
-    with k1:
-        metric_card("Players scanned", f"{total_players:,}", "after minutes filter")
-    with k2:
-        metric_card("Set-piece anomalies", str(total_anomalies), f"peak z ≥ {sp_threshold:.1f}")
-    with k3:
-        top_role = role_counts.idxmax() if not role_counts.empty else "—"
-        metric_card("Dominant role", top_role, "most common SP role")
-    with k4:
-        n_leagues = ws_enriched["_League"].nunique() if "_League" in ws_enriched.columns else 0
-        metric_card("Leagues loaded", str(n_leagues), "Wyscout files combined")
-
-    st.markdown("---")
-
-    tab_anomalies, tab_roles, tab_similarity, tab_zscores, tab_compare, tab_all = st.tabs([
-        "🚨 Anomaly Table",
-        "🎭 Role Leaders",
-        "🔗 Similarity Search",
-        "📊 Z-Score Explorer",
-        "⚖️ Player Comparison",
-        "📋 All Players",
-    ])
-
-    # ── Tab 1: Anomaly Table ──────────────────────────────────────────────────
-    with tab_anomalies:
-        st.markdown(
-            f"<div class='note-box'>Showing <b>{len(anomaly_df)}</b> set-piece anomalies "
-            f"(threshold z ≥ {sp_threshold:.1f}). Sorted by peak z-score.</div>",
-            unsafe_allow_html=True,
-        )
-        if anomaly_df.empty:
-            st.info("No anomalies at the current threshold. Lower the z cutoff in the sidebar.")
-        else:
-            # Colour Peak Z column
-            def _peak_z_color(val: float) -> str:
-                if val >= 2.5:  return "background-color:#7f1d1d; color:#fca5a5"
-                if val >= 1.8:  return "background-color:#78350f; color:#fcd34d"
-                return "background-color:#14532d; color:#86efac"
-
-            display_df = anomaly_df.copy()
-            numeric_cols = display_df.select_dtypes(include=[np.number]).columns
-            display_df[numeric_cols] = display_df[numeric_cols].round(3)
-
+        with ld2:
+            st.markdown("**League table**")
             st.dataframe(
-                display_df,
+                league_df.reset_index(drop=True),
+                use_container_width=True,
+                height=360,
                 hide_index=True,
-                height=min(600, 40 + len(display_df) * 36),
+                column_config={"Density": st.column_config.ProgressColumn("Density %", min_value=0, max_value=100, format="%.1f")},
+            )
+
+    # ── Age distribution of anomalies ─────────────────────────────────────────
+    if "Age" in anomalies.columns or "AgeYears" in anomalies.columns:
+        age_col = "Age" if "Age" in anomalies.columns else "AgeYears"
+        age_s = pd.to_numeric(anomalies[age_col], errors="coerce").dropna()
+        if not age_s.empty:
+            age_df = age_s.value_counts().sort_index().reset_index()
+            age_df.columns = ["Age", "Count"]
+            age_chart = (
+                alt.Chart(age_df)
+                .mark_bar(color="#457b9d", cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                .encode(
+                    x=alt.X("Age:Q", title="Age", axis=alt.Axis(labelColor="#6a7390", gridColor="#1a1f2e")),
+                    y=alt.Y("Count:Q", title="Anomalies", axis=alt.Axis(labelColor="#6a7390", gridColor="#1a1f2e")),
+                    tooltip=["Age", "Count"],
+                )
+                .properties(height=180, title="Age distribution of anomalies")
+                .configure_view(fill="#111520", stroke=None)
+                .configure(background="#111520")
+                .configure_title(color="#6a7390", fontSize=11, anchor="start")
+            )
+            st.altair_chart(age_chart, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Explorer
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🔍 Explorer":
+    st.markdown(
+        "<div class='page-title'>Anomaly Explorer</div>"
+        "<div class='page-sub'>Filter, sort, and drill into the full anomaly dataset</div>",
+        unsafe_allow_html=True,
+    )
+
+    if anomalies.empty:
+        st.info("No anomalies at the current threshold. Adjust the z threshold in the sidebar.")
+        st.stop()
+
+    # ── Filters row ───────────────────────────────────────────────────────────
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        sel_pos = st.multiselect("Position", POSITION_ORDER, default=[], key="exp_pos")
+    with f2:
+        all_types = sorted(anomalies["_anomaly_type"].unique()) if "_anomaly_type" in anomalies.columns else []
+        sel_types = st.multiselect("Anomaly type", all_types, default=[], key="exp_type")
+    with f3:
+        leagues_avail = sorted(anomalies["_League"].unique()) if "_League" in anomalies.columns else []
+        sel_exp_leagues = st.multiselect("League", leagues_avail, default=[], key="exp_leagues")
+    with f4:
+        age_range = st.slider("Age", 15, 45, (16, 36), key="exp_age")
+
+    filtered = anomalies.copy()
+    if sel_pos and "PositionGroup" in filtered.columns:
+        filtered = filtered[filtered["PositionGroup"].isin(sel_pos)]
+    if sel_types and "_anomaly_type" in filtered.columns:
+        filtered = filtered[filtered["_anomaly_type"].isin(sel_types)]
+    if sel_exp_leagues and "_League" in filtered.columns:
+        filtered = filtered[filtered["_League"].isin(sel_exp_leagues)]
+    age_col_f = "Age" if "Age" in filtered.columns else ("AgeYears" if "AgeYears" in filtered.columns else None)
+    if age_col_f:
+        age_s = pd.to_numeric(filtered[age_col_f], errors="coerce")
+        filtered = filtered[age_s.between(age_range[0], age_range[1])]
+
+    filtered = filtered.reset_index(drop=True)
+
+    # Position tabs
+    positions_present = [p for p in POSITION_ORDER if p in filtered.get("PositionGroup", pd.Series()).values]
+    tab_labels = ["All"] + positions_present
+    tabs = st.tabs(tab_labels)
+
+    for tab_widget, label in zip(tabs, tab_labels):
+        with tab_widget:
+            subset = filtered if label == "All" else filtered[filtered["PositionGroup"] == label]
+            st.caption(f"{len(subset):,} anomalies")
+            if subset.empty:
+                st.info("No results for this position.")
+            else:
+                _anomaly_table(subset, height=540)
+
+    # Download
+    st.markdown("---")
+    ec1, ec2 = st.columns(2)
+    with ec1:
+        st.download_button(
+            "⬇️ Download CSV",
+            data=filtered.to_csv(index=False).encode(),
+            file_name="anomalies.csv",
+            mime="text/csv",
+        )
+    with ec2:
+        st.download_button(
+            "⬇️ Download Excel",
+            data=_build_anomaly_excel(filtered, zdf, threshold),
+            file_name="anomaly_report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Player Profile
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "👤 Player Profile":
+    st.markdown(
+        "<div class='page-title'>Player Profile</div>"
+        "<div class='page-sub'>Individual anomaly deep dive — z-score breakdown per position metric</div>",
+        unsafe_allow_html=True,
+    )
+
+    if anomalies.empty:
+        st.info("No anomalies available at the current threshold.")
+        st.stop()
+
+    pc = _player_col(anomalies)
+    tc = _team_col(anomalies)
+
+    options = (
+        anomalies[pc].astype(str)
+        + " | "
+        + anomalies.get(tc, pd.Series("", index=anomalies.index)).astype(str)
+        + " | "
+        + anomalies.get("PositionGroup", pd.Series("", index=anomalies.index)).astype(str)
+    ).tolist()
+
+    col_sel, col_pos_filter = st.columns([3, 1])
+    with col_pos_filter:
+        pos_filter = st.selectbox("Filter by position", ["All"] + POSITION_ORDER, key="profile_pos_f")
+    with col_sel:
+        filtered_opts = options
+        filtered_anom = anomalies.copy()
+        if pos_filter != "All" and "PositionGroup" in anomalies.columns:
+            filtered_anom = anomalies[anomalies["PositionGroup"] == pos_filter]
+            filtered_opts = (
+                filtered_anom[pc].astype(str)
+                + " | "
+                + filtered_anom.get(tc, pd.Series("", index=filtered_anom.index)).astype(str)
+                + " | "
+                + filtered_anom.get("PositionGroup", pd.Series("", index=filtered_anom.index)).astype(str)
+            ).tolist()
+        sel = st.selectbox("Select player", filtered_opts if filtered_opts else ["No anomalies"], key="profile_player")
+
+    if not filtered_opts:
+        st.info("No anomalies for this position.")
+        st.stop()
+
+    sel_name = sel.split(" | ")[0]
+    row = filtered_anom.loc[filtered_anom[pc] == sel_name].iloc[0]
+    pos_group = str(row.get("PositionGroup", ""))
+    atype     = str(row.get("_anomaly_type", ""))
+    acolor    = ANOMALY_COLORS.get(atype, "#888")
+    team      = row.get(tc, "")
+    league    = row.get("_League", "")
+    age       = row.get("Age", row.get("AgeYears", ""))
+    peak_z    = row.get("_peak_z", 0)
+    score     = row.get("_anomaly_score", 0)
+    breadth   = int(row.get("_anomaly_breadth", 0))
+    mins      = row.get("Minutes played", row.get("MinutesPlayed", ""))
+
+    # ── Player header card ────────────────────────────────────────────────────
+    st.markdown(
+        f"<div class='player-card'>"
+        f"<div class='player-name'>{sel_name}</div>"
+        f"<div class='player-meta'>{team}  ·  {league}  ·  {pos_group}  ·  Age {age}  ·  {mins} min</div>"
+        f"<div style='margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;'>"
+        f"<span style='background:{acolor};color:#fff;padding:3px 14px;border-radius:12px;font-size:.72rem;font-weight:700;'>{atype}</span>"
+        f"<span style='color:#6a7390;font-size:.8rem;'>Score <b style='color:{acolor};'>{score:.2f}</b></span>"
+        f"<span style='color:#6a7390;font-size:.8rem;'>Peak Z <b style='color:{acolor};'>{peak_z:.2f}</b></span>"
+        f"<span style='color:#6a7390;font-size:.8rem;'>Anomalous metrics <b style='color:{acolor};'>{breadth}</b></span>"
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Z-score bar chart ─────────────────────────────────────────────────────
+    z_metrics = POSITION_METRICS.get(pos_group, [])
+    z_data = [
+        {"Metric": m, "Z": float(row[f"_z_{m}"]), "Above": float(row[f"_z_{m}"]) >= threshold}
+        for m in z_metrics if f"_z_{m}" in row.index
+    ]
+
+    if z_data:
+        z_df = pd.DataFrame(z_data).sort_values("Z", ascending=False)
+        z_df["fill"] = z_df.apply(
+            lambda r: "#ee3a27" if r["Z"] >= threshold else ("#00c7b7" if r["Z"] >= 0 else "#2a3346"),
+            axis=1,
+        )
+        ch1, ch2 = st.columns([3, 2])
+        with ch1:
+            z_chart = (
+                alt.Chart(z_df)
+                .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
+                .encode(
+                    y=alt.Y("Metric:N", sort=None, title=None,
+                             axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=11)),
+                    x=alt.X("Z:Q", title="Z-score (relative to position peers)",
+                             axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1a1f2e")),
+                    color=alt.Color("fill:N", scale=None, legend=None),
+                    tooltip=["Metric", alt.Tooltip("Z:Q", format=".3f", title="Z-score")],
+                )
+                .properties(
+                    height=max(280, len(z_df) * 28),
+                    title=f"{pos_group} metrics — threshold = {threshold:.1f}",
+                )
+                .configure_view(fill="#111520", stroke=None)
+                .configure(background="#111520")
+                .configure_title(color="#6a7390", fontSize=11, anchor="start")
+            )
+            st.altair_chart(z_chart, use_container_width=True)
+
+        with ch2:
+            # Raw metric values
+            st.markdown("**Raw metric values**")
+            raw_data = []
+            for m in z_metrics:
+                val = row.get(m)
+                if pd.notna(val):
+                    raw_data.append({"Metric": m, "Value": round(float(val), 3)})
+            if raw_data:
+                raw_df = pd.DataFrame(raw_data)
+                st.dataframe(raw_df, use_container_width=True, height=max(280, len(raw_df) * 35 + 60), hide_index=True)
+    else:
+        st.info("No z-score data available for this player's position metrics.")
+
+    # ── Same-position anomaly peers ───────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"**Other {pos_group} anomalies** (top 10 by score)")
+    peers = anomalies[anomalies.get("PositionGroup", pd.Series()) == pos_group]
+    peers = peers[peers[pc] != sel_name].head(10)
+    if not peers.empty:
+        _anomaly_table(peers, height=380)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Similarity Engine
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🔗 Similarity":
+    st.markdown(
+        "<div class='page-title'>Similarity Engine</div>"
+        "<div class='page-sub'>Find statistically similar players using cosine, Pearson, or Euclidean distance</div>",
+        unsafe_allow_html=True,
+    )
+
+    if anomalies.empty:
+        st.info("No anomalies available.")
+        st.stop()
+
+    pc = _player_col(anomalies)
+    tc = _team_col(anomalies)
+
+    options = (
+        anomalies[pc].astype(str)
+        + " | "
+        + anomalies.get(tc, pd.Series("", index=anomalies.index)).astype(str)
+        + " | "
+        + anomalies.get("PositionGroup", pd.Series("", index=anomalies.index)).astype(str)
+    ).tolist()
+
+    sc1, sc2, sc3, sc4 = st.columns([3, 1, 1, 1])
+    with sc1:
+        sel = st.selectbox("Target player (anomaly)", options, key="sim_player")
+    with sc2:
+        n_similar = st.slider("Top N", 5, 30, 10, key="sim_n")
+    with sc3:
+        same_pos = st.checkbox("Same position", value=True, key="sim_pos")
+    with sc4:
+        sim_method = st.selectbox("Method", ["cosine", "pearson", "euclidean"], key="sim_method", label_visibility="collapsed")
+
+    sel_name = sel.split(" | ")[0]
+    target   = anomalies.loc[anomalies[pc] == sel_name].iloc[0]
+    pos_group = str(target.get("PositionGroup", ""))
+    atype     = str(target.get("_anomaly_type", ""))
+    acolor    = ANOMALY_COLORS.get(atype, "#888")
+
+    st.markdown(
+        f"<div style='background:#111520;border-radius:8px;padding:12px 18px;border:1px solid #1a1f2e;margin-bottom:16px;'>"
+        f"<span style='font-weight:700;color:#eef2ff;'>{sel_name}</span>"
+        f"&nbsp;&nbsp;"
+        f"<span style='color:#6a7390;font-size:.8rem;'>{target.get(tc,'')}  ·  {pos_group}  ·  "
+        f"<span style='background:{acolor};color:#fff;padding:1px 8px;border-radius:10px;font-size:.7rem;font-weight:700;'>{atype}</span></span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    feats  = [f for f in SIMILARITY_FEATURES if f in zdf.columns]
+    engine = SimilarityEngine(feats)
+    results = engine.find_similar(zdf, target, method=sim_method, n=n_similar, same_position=same_pos)
+
+    if results.empty:
+        st.info("No similar players found with the current settings.")
+    else:
+        pc_r = _player_col(results)
+        tc_r = _team_col(results)
+        disp_cols = [c for c in [pc_r, tc_r, "PositionGroup", "_League", "Age", "_similarity"] + feats[:8] if c in results.columns]
+        rename = {pc_r: "Player", tc_r: "Team", "_League": "League", "_similarity": "Similarity"}
+        st.dataframe(
+            results[disp_cols].rename(columns=rename).round(3),
+            use_container_width=True,
+            height=420,
+            hide_index=True,
+            column_config={
+                "Similarity": st.column_config.ProgressColumn(
+                    "Similarity", min_value=-1.0, max_value=1.0, format="%.3f"
+                ),
+            },
+        )
+        st.caption(f"{len(results)} similar players · method: {sim_method}")
+
+    # Compare all three methods
+    with st.expander("Compare all three similarity methods"):
+        method_tabs = st.tabs(["Cosine", "Pearson", "Euclidean"])
+        for mt, mn in zip(method_tabs, ["cosine", "pearson", "euclidean"]):
+            with mt:
+                res_m = engine.find_similar(zdf, target, method=mn, n=n_similar, same_position=same_pos)
+                if res_m.empty:
+                    st.info("No results.")
+                else:
+                    pc_m = _player_col(res_m)
+                    disp_m = [c for c in [pc_m, "PositionGroup", "_League", "Age", "_similarity"] if c in res_m.columns]
+                    st.dataframe(
+                        res_m[disp_m].rename(columns={pc_m: "Player", "_League": "League", "_similarity": "Sim"}).round(3),
+                        use_container_width=True,
+                        height=300,
+                        hide_index=True,
+                    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Set Pieces
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "⚽ Set Pieces":
+    st.markdown(
+        "<div class='page-title'>Set Piece Scanner</div>"
+        "<div class='page-sub'>Delivery, aerial, and shooting anomalies — profiled by role</div>",
+        unsafe_allow_html=True,
+    )
+
+    sp_analyzer  = SetPieceAnalyzer(threshold=threshold * 0.85)
+    ws_enriched  = sp_analyzer.fit_transform(df)
+    sp_anom_df   = sp_analyzer.anomaly_table(ws_enriched, top_n=300)
+    role_leaders = sp_analyzer.top_players_by_role(ws_enriched, top_n=25)
+
+    # KPIs
+    n_sp_anom = len(sp_anom_df)
+    n_roles   = len(role_leaders)
+    sp_k1, sp_k2 = st.columns(2)
+    sp_k1.markdown(
+        f"<div class='kpi-card'><div class='kpi-num'>{n_sp_anom}</div>"
+        f"<div class='kpi-label'>Set-piece anomalies</div></div>",
+        unsafe_allow_html=True,
+    )
+    sp_k2.markdown(
+        f"<div class='kpi-card'><div class='kpi-num'>{n_roles}</div>"
+        f"<div class='kpi-label'>Roles profiled</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Overall SP anomaly table
+    if not sp_anom_df.empty:
+        st.markdown("**Set-piece anomaly table** (sorted by peak z)")
+        st.dataframe(sp_anom_df.round(3), use_container_width=True, height=380, hide_index=True)
+    else:
+        st.info("No set-piece anomalies at the current threshold.")
+
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    st.markdown("**Top players by set-piece role**")
+
+    role_names = list(SET_PIECE_ROLES.keys())
+    role_tabs  = st.tabs(role_names)
+    for rtab, role_name in zip(role_tabs, role_names):
+        with rtab:
+            role_df = role_leaders.get(role_name, pd.DataFrame())
+            if role_df.empty:
+                st.info(f"No data for {role_name}.")
+            else:
+                st.dataframe(role_df.round(3), use_container_width=True, height=460, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Export
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "📥 Export":
+    st.markdown(
+        "<div class='page-title'>Export</div>"
+        "<div class='page-sub'>Download the full anomaly report as Excel or CSV</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Summary
+    n_total = len(anomalies)
+    st.markdown(f"**{n_total:,}** anomalies detected at z ≥ {threshold:.1f}")
+
+    if not anomalies.empty and "_anomaly_type" in anomalies.columns:
+        tc = anomalies["_anomaly_type"].value_counts()
+        tc_cols = st.columns(len(tc))
+        for i, (atype, cnt) in enumerate(tc.items()):
+            color = ANOMALY_COLORS.get(atype, "#888")
+            tc_cols[i % len(tc_cols)].markdown(
+                f"<div class='type-card' style='border-top-color:{color};'>"
+                f"<div style='font-size:1.4rem;font-weight:800;color:{color};'>{cnt}</div>"
+                f"<div style='font-size:.6rem;color:#4a5470;text-transform:uppercase;'>{atype}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    ec1, ec2 = st.columns(2)
+    with ec1:
+        st.markdown("**Excel report** — all anomaly types in separate sheets, set pieces, similarity")
+        if n_total > 0:
+            xlsx_bytes = _build_anomaly_excel(anomalies, zdf, threshold)
+            st.download_button(
+                "⬇️ Download Excel (.xlsx)",
+                data=xlsx_bytes,
+                file_name="anomaly_platform_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
-            csv_bytes = display_df.to_csv(index=False).encode()
-            _sp_c1, _sp_c2, _sp_c3 = st.columns(3)
-            with _sp_c1:
-                st.download_button("Export CSV", csv_bytes, "sp_anomalies.csv", "text/csv", key="sp_dl_anom")
-            with _sp_c2:
-                st.download_button(
-                    "Export Excel",
-                    _to_excel_bytes({"SP Anomalies": display_df}),
-                    "sp_anomalies.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="sp_dl_anom_xlsx",
-                )
-            with _sp_c3:
-                # Multi-sheet: anomalies + role leaders combined
-                role_leaders_full = analyzer.top_players_by_role(ws_enriched, top_n=20)
-                full_sheets: dict[str, pd.DataFrame] = {"SP Anomalies": display_df}
-                for role, rdf in role_leaders_full.items():
-                    safe_role = role[:28]
-                    full_sheets[safe_role] = rdf.round(3)
-                st.download_button(
-                    "Export Full Report (Excel)",
-                    _to_excel_bytes(full_sheets),
-                    "sp_full_report.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="sp_dl_full_xlsx",
-                )
-
-    # ── Tab 2: Role Leaders ───────────────────────────────────────────────────
-    with tab_roles:
-        role_leaders = analyzer.top_players_by_role(ws_enriched, top_n=8)
-        if not role_leaders:
-            st.info("No role data available.")
         else:
-            visible_roles = [r for r in role_filter if r in role_leaders]
-            if not visible_roles:
-                visible_roles = list(role_leaders.keys())
-            for i in range(0, len(visible_roles), 3):
-                cols = st.columns(min(3, len(visible_roles) - i))
-                for j, role in enumerate(visible_roles[i:i+3]):
-                    with cols[j]:
-                        st.markdown(f"**{role}**")
-                        df_role = role_leaders[role]
-                        role_col = f"_sp_role_{role}"
-                        show_cols = [c for c in ["Player", "Team", "Age", role_col] if c in df_role.columns]
-                        if show_cols:
-                            st.dataframe(
-                                df_role[show_cols].rename(columns={role_col: "Score"}).round(3),
-                                hide_index=True, height=280,
-                            )
+            st.button("⬇️ Download Excel", disabled=True, use_container_width=True)
 
-    # ── Tab 3: Similarity Search ──────────────────────────────────────────────
-    with tab_similarity:
-        name_col_ws = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
-        if not name_col_ws:
-            st.warning("No player name column found.")
-        else:
-            player_names_ws = sorted(ws_enriched[name_col_ws].dropna().astype(str).unique())
-            c_left, c_right = st.columns([2, 1])
-            with c_left:
-                sel_sp_player = st.selectbox("Select player", player_names_ws, key="sp_sim_player")
-            with c_right:
-                sim_method_sp = st.radio(
-                    "Method",
-                    ["Cosine", "Euclidean", "Pearson"],
-                    horizontal=True,
-                    key="sp_sim_method",
-                )
-
-            target_rows_sp = ws_enriched.loc[ws_enriched[name_col_ws].astype(str) == sel_sp_player]
-            if target_rows_sp.empty:
-                st.info("Player not found.")
-            else:
-                target_sp = target_rows_sp.iloc[0]
-                sp_sim_feats = [m for m in selected_metrics if m in ws_enriched.columns]
-                sim_eng_sp   = SimilarityEngine(sp_sim_feats)
-
-                n_results = st.slider("Results to show", 5, 30, 10, key="sp_n_sim")
-                results_sp = sim_eng_sp.find_similar(
-                    ws_enriched,
-                    target_sp,
-                    method=sim_method_sp.lower(),
-                    n=n_results,
-                    same_position=False,
-                )
-
-                if results_sp.empty:
-                    st.info("No similar players found.")
-                else:
-                    show_sp_cols = [c for c in [name_col_ws, "Team", "Position", "Age", "_League", "_sp_primary_role", "_similarity"] if c in results_sp.columns]
-                    st.caption(
-                        f"Top {n_results} most similar set-piece profiles to **{sel_sp_player}** "
-                        f"({sim_method_sp} similarity on {metric_group.lower()} metrics)"
-                    )
-                    st.dataframe(
-                        results_sp[show_sp_cols].rename(columns={
-                            name_col_ws: "Player", "_League": "League",
-                            "_sp_primary_role": "SP Role", "_similarity": "Similarity",
-                        }).round(3),
-                        hide_index=True, height=400,
-                    )
-
-                # Side-by-side method comparison
-                with st.expander("Compare all three methods"):
-                    all_methods = sim_eng_sp.compare_methods(ws_enriched, target_sp, n=8, same_position=False)
-                    c_c, c_e, c_p = st.columns(3)
-                    for col_w, (mname, mdf) in zip([c_c, c_e, c_p], all_methods.items()):
-                        with col_w:
-                            st.caption(f"**{mname.title()}**")
-                            if mdf.empty:
-                                st.info("No results.")
-                            else:
-                                scols = [c for c in [name_col_ws, "Team", "_similarity"] if c in mdf.columns]
-                                st.dataframe(
-                                    mdf[scols].rename(columns={name_col_ws: "Player", "_similarity": "Sim"}).round(3),
-                                    hide_index=True, height=280,
-                                )
-
-    # ── Tab 4: Z-Score Explorer ───────────────────────────────────────────────
-    with tab_zscores:
-        z_metric_options = [f"_spz_{m}" for m in selected_metrics if f"_spz_{m}" in ws_enriched.columns]
-        label_for_z = {f"_spz_{m}": m for m in selected_metrics}
-        if not z_metric_options:
-            st.info("No z-score columns available.")
-        else:
-            chosen_z = st.selectbox(
-                "Metric",
-                z_metric_options,
-                format_func=lambda c: label_for_z.get(c, c),
-                key="sp_z_metric",
-            )
-            col_data = pd.to_numeric(ws_enriched[chosen_z], errors="coerce").dropna()
-            fig_hist, ax_hist = plt.subplots(figsize=(9, 4), dpi=130)
-            fig_hist.patch.set_facecolor("#f9f8f3")
-            ax_hist.set_facecolor("#ffffff")
-            ax_hist.hist(col_data, bins=35, color="#1478b0", alpha=0.65, edgecolor="#f9f8f3", linewidth=0.8)
-            ax_hist.axvline(sp_threshold, color="#ee3a27", linewidth=2, linestyle="--", label=f"Threshold z={sp_threshold:.1f}")
-            ax_hist.axvline(-sp_threshold, color="#ee3a27", linewidth=1.2, linestyle=":", alpha=0.6)
-            ax_hist.set_title(label_for_z.get(chosen_z, chosen_z), loc="left", fontsize=12, fontweight="bold", color="#1a1a1a")
-            ax_hist.set_xlabel("Z-score", color="#888888")
-            ax_hist.set_ylabel("Players", color="#888888")
-            ax_hist.tick_params(colors="#888888")
-            for spine in ax_hist.spines.values():
-                spine.set_edgecolor("#cccccc")
-            ax_hist.grid(axis="y", color="#eeede8", linewidth=0.7, alpha=0.8)
-            ax_hist.spines[["top", "right"]].set_visible(False)
-            ax_hist.legend(frameon=True, facecolor="#ffffff", edgecolor="#cccccc", labelcolor="#1a1a1a")
-            fig_hist.tight_layout()
-            st.pyplot(fig_hist, clear_figure=True)
-
-            # Top outliers for this metric
-            st.caption(f"Top 15 players by {label_for_z.get(chosen_z, chosen_z)}")
-            name_col_for_z = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
-            if name_col_for_z:
-                top_z_rows = (
-                    ws_enriched[[name_col_for_z, "Team", "Position", "Age", "_League", chosen_z] if "Team" in ws_enriched.columns
-                                 else [name_col_for_z, chosen_z]]
-                    .sort_values(chosen_z, ascending=False)
-                    .head(15)
-                    .round(3)
-                )
-                st.dataframe(top_z_rows.rename(columns={chosen_z: "Z-score"}), hide_index=True, height=360)
-
-    # ── Tab 5: Player Comparison ──────────────────────────────────────────────
-    with tab_compare:
-        name_col_cmp = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
-        if not name_col_cmp:
-            st.info("No player name column.")
-        else:
-            player_names_cmp = sorted(ws_enriched[name_col_cmp].dropna().astype(str).unique())
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                cmp_p1 = st.selectbox("Player A", player_names_cmp, key="sp_cmp_p1")
-            with cc2:
-                cmp_p2 = st.selectbox("Player B", player_names_cmp,
-                                       index=min(1, len(player_names_cmp) - 1), key="sp_cmp_p2")
-
-            r1 = ws_enriched.loc[ws_enriched[name_col_cmp].astype(str) == cmp_p1]
-            r2 = ws_enriched.loc[ws_enriched[name_col_cmp].astype(str) == cmp_p2]
-            if r1.empty or r2.empty:
-                st.info("Select two valid players above.")
-            else:
-                row1, row2 = r1.iloc[0], r2.iloc[0]
-                z_cols_cmp = [f"_spz_{m}" for m in selected_metrics if f"_spz_{m}" in ws_enriched.columns]
-                labels_cmp = [m for m in selected_metrics if f"_spz_{m}" in ws_enriched.columns]
-                v1 = [float(pd.to_numeric(row1.get(zc, 0), errors="coerce") or 0) for zc in z_cols_cmp]
-                v2 = [float(pd.to_numeric(row2.get(zc, 0), errors="coerce") or 0) for zc in z_cols_cmp]
-
-                cmp_df = pd.DataFrame({
-                    "Metric": labels_cmp,
-                    cmp_p1: v1,
-                    cmp_p2: v2,
-                }).set_index("Metric")
-
-                fig_cmp, ax_cmp = plt.subplots(figsize=(10, max(4, len(labels_cmp) * 0.38)), dpi=130)
-                fig_cmp.patch.set_facecolor("#f9f8f3")
-                ax_cmp.set_facecolor("#ffffff")
-                y_pos = np.arange(len(labels_cmp))
-                bar_h = 0.38
-                bars1 = ax_cmp.barh(y_pos + bar_h / 2, v1, bar_h, color="#1478b0", alpha=0.8, label=cmp_p1)
-                bars2 = ax_cmp.barh(y_pos - bar_h / 2, v2, bar_h, color="#f4a261", alpha=0.8, label=cmp_p2)
-                ax_cmp.set_yticks(y_pos)
-                ax_cmp.set_yticklabels(labels_cmp, color="#888888", fontsize=9)
-                ax_cmp.axvline(0, color="#888888", linewidth=0.8)
-                ax_cmp.axvline(sp_threshold, color="#ee3a27", linewidth=1.2, linestyle="--", alpha=0.6)
-                ax_cmp.set_xlabel("Z-score", color="#888888")
-                ax_cmp.set_title("Set-piece z-score comparison", loc="left", fontsize=11, color="#1a1a1a")
-                ax_cmp.tick_params(colors="#888888", labelsize=9)
-                for spine in ax_cmp.spines.values():
-                    spine.set_edgecolor("#cccccc")
-                ax_cmp.legend(frameon=True, facecolor="#ffffff", edgecolor="#cccccc", labelcolor="#1a1a1a", fontsize=9)
-                fig_cmp.tight_layout()
-                st.pyplot(fig_cmp, clear_figure=True)
-
-                # Similarity score between the two
-                if z_cols_cmp:
-                    sim_eng_cmp = SimilarityEngine(z_cols_cmp)
-                    single_row2 = pd.DataFrame([row2])
-                    for mname in ["cosine", "euclidean", "pearson"]:
-                        res = sim_eng_cmp.find_similar(single_row2, row1, method=mname, n=1, same_position=False)
-                        sim_val = float(res["_similarity"].iloc[0]) if not res.empty else float("nan")
-                        st.caption(f"{mname.title()} similarity: **{sim_val:.3f}**")
-
-    # ── Tab 6: All Wyscout Players ────────────────────────────────────────────
-    with tab_all:
-        name_col_all = next((c for c in ["Player", "PlayerName"] if c in ws_enriched.columns), None)
-
-        # ── Filters ────────────────────────────────────────────────────────────
-        fa1, fa2, fa3, fa4 = st.columns(4)
-        with fa1:
-            league_opts = ["All"] + sorted(ws_enriched["_League"].dropna().astype(str).unique()) if "_League" in ws_enriched.columns else ["All"]
-            sel_league_all = st.selectbox("League", league_opts, key="sp_all_league")
-        with fa2:
-            pos_col_all = next((c for c in ["Position", "Pos"] if c in ws_enriched.columns), None)
-            pos_opts_all = ["All"] + sorted(ws_enriched[pos_col_all].dropna().astype(str).unique()) if pos_col_all else ["All"]
-            sel_pos_all = st.selectbox("Position", pos_opts_all, key="sp_all_pos")
-        with fa3:
-            age_col_all = next((c for c in ["Age"] if c in ws_enriched.columns), None)
-            if age_col_all:
-                age_vals = pd.to_numeric(ws_enriched[age_col_all], errors="coerce").dropna()
-                age_range = st.slider("Age range", int(age_vals.min()), int(age_vals.max()),
-                                      (int(age_vals.min()), int(age_vals.max())), key="sp_all_age")
-            else:
-                age_range = None
-        with fa4:
-            sp_role_opts = ["All"] + list(SET_PIECE_ROLES.keys())
-            sel_sp_role_all = st.selectbox("SP Role", sp_role_opts, key="sp_all_role")
-
-        # ── Search ─────────────────────────────────────────────────────────────
-        search_all = st.text_input("Search player or team", "", key="sp_all_search")
-
-        # ── Apply filters ──────────────────────────────────────────────────────
-        view = ws_enriched.copy()
-        if sel_league_all != "All" and "_League" in view.columns:
-            view = view.loc[view["_League"].astype(str) == sel_league_all]
-        if sel_pos_all != "All" and pos_col_all and pos_col_all in view.columns:
-            view = view.loc[view[pos_col_all].astype(str) == sel_pos_all]
-        if age_range and age_col_all and age_col_all in view.columns:
-            age_s = pd.to_numeric(view[age_col_all], errors="coerce")
-            view  = view.loc[age_s.between(age_range[0], age_range[1])]
-        if sel_sp_role_all != "All" and "_sp_primary_role" in view.columns:
-            view = view.loc[view["_sp_primary_role"] == sel_sp_role_all]
-        if search_all:
-            mask = pd.Series(False, index=view.index)
-            for col in ([name_col_all] if name_col_all else []) + (["Team"] if "Team" in view.columns else []):
-                mask |= view[col].astype(str).str.contains(search_all, case=False, na=False)
-            view = view.loc[mask]
-
-        st.caption(f"{len(view):,} players shown")
-
-        # ── Columns to display ─────────────────────────────────────────────────
-        WYSCOUT_TABLE_COLS = [
-            name_col_all, "Team", pos_col_all, "Age", "_League",
-            "Minutes played", "Goals per 90", "xG per 90",
-            "Assists per 90", "xA per 90", "Key passes per 90",
-            "Passes per 90", "Accurate passes, %", "Dribbles per 90",
-            "Successful defensive actions per 90", "Aerial duels won, %",
-            "Crosses per 90", "Corners per 90",
-            "_sp_primary_role", "_sp_composite", "_sp_peak_z",
-        ]
-        disp_cols = [c for c in WYSCOUT_TABLE_COLS if c and c in view.columns]
-        disp_view = (
-            view[disp_cols]
-            .rename(columns={
-                name_col_all: "Player", "_League": "League",
-                pos_col_all: "Position" if pos_col_all else "Position",
-                "_sp_primary_role": "SP Role", "_sp_composite": "SP Score",
-                "_sp_peak_z": "SP Peak Z",
-            })
-            .round(3)
-            .reset_index(drop=True)
-        )
-        st.dataframe(disp_view, hide_index=True, height=560, use_container_width=True)
-
-        # ── Export ─────────────────────────────────────────────────────────────
-        _all_c1, _all_c2 = st.columns(2)
-        with _all_c1:
+    with ec2:
+        st.markdown("**CSV** — flat anomaly table, all columns")
+        if n_total > 0:
             st.download_button(
-                "Export filtered CSV",
-                disp_view.to_csv(index=False).encode(),
-                "wyscout_players.csv", "text/csv",
-                key="sp_all_dl_csv",
+                "⬇️ Download CSV",
+                data=anomalies.to_csv(index=False).encode(),
+                file_name="anomaly_platform.csv",
+                mime="text/csv",
+                use_container_width=True,
             )
-        with _all_c2:
-            st.download_button(
-                "Export filtered Excel",
-                _to_excel_bytes({"Wyscout Players": disp_view}),
-                "wyscout_players.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="sp_all_dl_xlsx",
-            )
+        else:
+            st.button("⬇️ Download CSV", disabled=True, use_container_width=True)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# WATCHLIST workspace
-# ─────────────────────────────────────────────────────────────────────────────
-def render_watchlist_workspace(data: pd.DataFrame) -> None:
-    """Saved anomaly targets with priority flags, notes, and quick stats."""
-    with st.sidebar:
-        st.markdown(
-            "<div class='sidebar-brand'><div class='sidebar-brand-icon'>📋</div>"
-            "<div><div class='sidebar-brand-title'>Watchlist</div>"
-            "<div class='sidebar-brand-meta'>Saved anomaly targets</div></div></div>",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown(
-        "<div class='page-header'><div class='page-header-icon'>📋</div>"
-        "<div><div class='page-header-title'>Anomaly Watchlist</div>"
-        "<div class='page-header-sub'>Saved targets from your anomaly scouting sessions</div></div></div>",
-        unsafe_allow_html=True,
-    )
-
-    shortlist = st.session_state.get("shortlist_data", {})
-    if not shortlist:
-        st.info("Your watchlist is empty. Add players from Deep Scan or Player Intel.")
-        return
-
-    sl_rows = [
-        {"Player": name, "Priority": info.get("priority", "Watch"), "Notes": info.get("notes", ""), "Added": info.get("added", "")}
-        for name, info in shortlist.items()
-    ]
-    sl_df = pd.DataFrame(sl_rows)
-
-    # Enrich with FCHK scores
-    score_cols = [v for v in PIZZA_METRICS.values() if v in data.columns]
-    if score_cols and "PlayerName" in data.columns:
-        enriched = sl_df.merge(
-            data[["PlayerName"] + score_cols + ["PositionGroup", "BundleLabel", "AgeYears"]].rename(columns={"PlayerName": "Player"}),
-            on="Player", how="left",
-        )
-    else:
-        enriched = sl_df
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        metric_card("On watchlist", str(len(enriched)), "saved players")
-    with c2:
-        prios = enriched["Priority"].value_counts().to_dict() if "Priority" in enriched.columns else {}
-        metric_card("Must Scout", str(prios.get("Must scout", 0)), "top priority")
-    with c3:
-        metric_card("Priority", str(prios.get("Priority", 0)), "second tier")
-
-    priority_order = ["Must scout", "Priority", "Shortlist", "Depth", "Watch"]
-    col_config = {}
-    for m in score_cols:
-        lbl = {v: k for k, v in PIZZA_METRICS.items()}.get(m, m)
-        if lbl in enriched.columns:
-            col_config[lbl] = st.column_config.ProgressColumn(lbl, min_value=0, max_value=100, format="%.0f")
-
-    disp_cols = [c for c in ["Player", "Priority", "PositionGroup", "BundleLabel", "AgeYears", "Notes", "Added"] if c in enriched.columns]
-    st.dataframe(enriched[disp_cols].sort_values("Priority", key=lambda s: s.map({p: i for i, p in enumerate(priority_order)}).fillna(99)), hide_index=True, height=500)
-
-    # Quick add
+    # What's in the Excel
     st.markdown("---")
-    ca, cb, cc = st.columns([3, 2, 1])
-    with ca:
-        new_name = st.text_input("Add player to watchlist", key="wl_add_name")
-    with cb:
-        new_prio = st.selectbox("Priority", priority_order, key="wl_add_prio")
-    with cc:
-        st.write("")
-        st.write("")
-        if st.button("Add", key="wl_add_btn") and new_name:
-            add_to_shortlist(new_name, new_prio)
-            st.rerun()
-
-    if st.button("Clear watchlist", key="wl_clear", type="secondary"):
-        clear_shortlist()
-        st.rerun()
-
-    csv_bytes = enriched.to_csv(index=False).encode()
-    _wl_c1, _wl_c2 = st.columns(2)
-    with _wl_c1:
-        st.download_button("Download watchlist CSV", csv_bytes, "watchlist.csv", "text/csv", key="wl_dl")
-    with _wl_c2:
-        st.download_button(
-            "Download watchlist Excel",
-            _to_excel_bytes({"Watchlist": enriched}),
-            "watchlist.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="wl_dl_xlsx",
-        )
-
-
-def render_team_workspace(data: pd.DataFrame) -> None:
-    team_df = add_scouting_fields(data, BALANCED_WEIGHTS)
-    czech_df = czech_market(team_df)
-    hradec_df = hradec_squad(team_df)
-    external_czech = czech_df.loc[~czech_df["TeamName"].isin(hradec_df["TeamName"].unique())].copy()
-
-    with st.sidebar:
-        st.markdown("<div class='sidebar-brand'><div class='sidebar-brand-icon'>🏟</div><div><div class='sidebar-brand-title'>Team Intelligence</div><div class='sidebar-brand-meta'>Squad &amp; Czech market</div></div></div>", unsafe_allow_html=True)
-        st.markdown("<div class='note-box' style='font-size:.69rem;'>Compare Hradec&#39;s squad vs the Czech market to find recruitment priorities.</div>", unsafe_allow_html=True)
-
-    st.markdown(
-        f"<div class='page-header'>"
-        f"<div class='page-header-icon'>🏟</div>"
-        f"<div><div class='page-header-title'>Team Intelligence</div>"
-        f"<div class='page-header-sub'>Squad overview &amp; Czech market comparison · {len(hradec_df):,} Hradec players · {len(external_czech):,} Czech market</div></div>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    h_top = hradec_df.sort_values("ScoutFitScore", ascending=False).head(1)
-    cz_top = external_czech.sort_values("ScoutFitScore", ascending=False).head(1)
-
-    if hradec_df.empty:
-        st.info("No FC Hradec Kralove rows were found in the loaded model outputs.")
-        return
-
-    squad_cols = [
-        "PlayerName",
-        "PositionGroup",
-        "AgeYears",
-        "MinutesPlayed",
-        "ScoutFitScore",
-        "CompositeRecruitmentScore",
-        "ValueRecruitmentScore",
-        "DecisionScore",
-        "Readiness",
-        "RiskBand",
-        "FitDrivers",
-    ]
-    squad_view = hradec_df[[c for c in squad_cols if c in hradec_df.columns]].sort_values("ScoutFitScore", ascending=False).rename(
-        columns={
-            "PlayerName": "Player",
-            "PositionGroup": "Role",
-            "AgeYears": "Age",
-            "MinutesPlayed": "Minutes",
-            "ScoutFitScore": "Fit",
-            "CompositeRecruitmentScore": "Model",
-            "ValueRecruitmentScore": "Value",
-            "DecisionScore": "Decision",
-            "RiskBand": "Risk",
-            "FitDrivers": "Drivers",
-        }
-    )
-    st.subheader("Squad read")
-    st.dataframe(
-        squad_view.round(2),
-        width="stretch",
-        hide_index=True,
-        height=780,
-        column_config={
-            "Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f"),
-            "Model": st.column_config.ProgressColumn("Model", min_value=0, max_value=100, format="%.1f"),
-            "Value": st.column_config.ProgressColumn("Value", min_value=0, max_value=100, format="%.1f"),
-        },
-    )
-
-    role_summary = (
-        czech_df.groupby("PositionGroup")
-        .agg(CzechPlayers=("PlayerName", "count"), CzechMedianFit=("ScoutFitScore", "median"), CzechMedianValue=("ValueRecruitmentScore", "median"))
-        .join(
-            hradec_df.groupby("PositionGroup")
-            .agg(HradecPlayers=("PlayerName", "count"), HradecMedianFit=("ScoutFitScore", "median"), HradecMedianValue=("ValueRecruitmentScore", "median")),
-            how="left",
-        )
-        .fillna({"HradecPlayers": 0})
-        .reset_index()
-    )
-    role_summary["FitGap"] = (role_summary["HradecMedianFit"] - role_summary["CzechMedianFit"]).round(1)
-    role_summary["ValueGap"] = (role_summary["HradecMedianValue"] - role_summary["CzechMedianValue"]).round(1)
-    role_summary["NeedSignal"] = np.select(
-        [
-            role_summary["HradecPlayers"].eq(0),
-            role_summary["FitGap"].lt(-6),
-            role_summary["ValueGap"].lt(-6),
-        ],
-        ["No depth", "Fit gap", "Value gap"],
-        default="Stable",
-    )
-
-    left, right = st.columns([1, 1])
-    with left:
-        st.subheader("Role gaps")
-        st.dataframe(
-            role_summary.rename(columns={"PositionGroup": "Role"}).round(1),
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "CzechMedianFit": st.column_config.ProgressColumn("Czech fit", min_value=0, max_value=100, format="%.1f"),
-                "HradecMedianFit": st.column_config.ProgressColumn("Hradec fit", min_value=0, max_value=100, format="%.1f"),
-            },
-        )
-    with right:
-        st.subheader("Immediate team signals")
-        facts = [
-            f"Best internal model signal: {h_top.iloc[0]['PlayerName']} ({h_top.iloc[0]['PositionGroup']}, fit {h_top.iloc[0]['ScoutFitScore']:.1f}).",
-            f"Best Czech external signal: {cz_top.iloc[0]['PlayerName']} ({cz_top.iloc[0]['TeamName']}, fit {cz_top.iloc[0]['ScoutFitScore']:.1f})." if not cz_top.empty else "No external Czech target found.",
-            f"Hradec median age: {hradec_df['AgeYears'].median():.1f}; Czech market median age: {czech_df['AgeYears'].median():.1f}.",
-            f"Hradec U23 players: {int(hradec_df['IsU23Target'].fillna(False).sum())}; Czech U23 market: {int(czech_df['IsU23Target'].fillna(False).sum())}.",
-        ]
-        st.markdown("<div class='section-card'>" + "".join(f"<div class='metric-caption'>{escape(fact)}</div>" for fact in facts) + "</div>", unsafe_allow_html=True)
-
-    external_cols = [
-        "PlayerName",
-        "TeamName",
-        "PositionGroup",
-        "AgeYears",
-        "MinutesPlayed",
-        "ScoutFitScore",
-        "ValueRecruitmentScore",
-        "DecisionScore",
-        "Readiness",
-        "RiskBand",
-        "FitDrivers",
-    ]
-    with st.expander("Czech league watchlist", expanded=True):
-        watch = external_czech.sort_values(["ScoutFitScore", "ValueRecruitmentScore"], ascending=False).head(30)
-        watch_view = watch[[c for c in external_cols if c in watch.columns]].rename(
-            columns={
-                "PlayerName": "Player",
-                "TeamName": "Team",
-                "PositionGroup": "Role",
-                "AgeYears": "Age",
-                "MinutesPlayed": "Minutes",
-                "ScoutFitScore": "Fit",
-                "ValueRecruitmentScore": "Value",
-                "DecisionScore": "Decision",
-                "RiskBand": "Risk",
-                "FitDrivers": "Drivers",
-            }
-        )
-        st.dataframe(
-            watch_view.round(2),
-            width="stretch",
-            hide_index=True,
-            height=780,
-            column_config={"Fit": st.column_config.ProgressColumn("Fit", min_value=0, max_value=100, format="%.1f")},
-        )
-
-    with st.expander("Czech league detail", expanded=False):
-        league_summary = (
-            czech_df.groupby(["LeagueLabel", "PositionGroup"])
-            .agg(
-                Players=("PlayerName", "count"),
-                MedianFit=("ScoutFitScore", "median"),
-                MedianValue=("ValueRecruitmentScore", "median"),
-                MedianAge=("AgeYears", "median"),
-                U23=("IsU23Target", lambda x: x.fillna(False).astype(bool).sum()),
-            )
-            .round(1)
-            .reset_index()
-            .sort_values(["LeagueLabel", "MedianFit"], ascending=[True, False])
-        )
-        st.dataframe(league_summary, width="stretch", hide_index=True)
-
-
-st.markdown(
-    """
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Atlas+Grotesk:wght@400;500;700;900&family=Bitter:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-    /* ── DESIGN TOKENS — FiveThirtyEight-inspired ───────────────── */
-    :root {
-        --fte-red:    #ee3a27;
-        --fte-blue:   #1478b0;
-        --fte-orange: #f68f26;
-        --fte-green:  #3fb34f;
-        --fte-purple: #9e56b6;
-        --fte-gray1:  #1a1a1a;
-        --fte-gray2:  #444444;
-        --fte-gray3:  #888888;
-        --fte-gray4:  #cccccc;
-        --fte-gray5:  #eeede8;
-        --fte-bg:     #f9f8f3;
-        --fte-white:  #ffffff;
-
-        /* Keep backward-compat tokens pointing to new palette */
-        --teal:      #1478b0;
-        --teal-hi:   #1889c6;
-        --teal-dim:  rgba(20,120,176,.08);
-        --teal-glow: rgba(20,120,176,.14);
-        --ink:       #1a1a1a;
-        --muted:     #888888;
-        --faint:     #aaaaaa;
-        --border:    rgba(0,0,0,.10);
-        --border-hi: rgba(0,0,0,.18);
-        --surface:   #ffffff;
-        --raised:    #f2f1ec;
-        --bg:        #f9f8f3;
-        --nav-bg:    #1a1a1a;
-        --amber:     #f68f26;
-        --red:       #ee3a27;
-        --green:     #3fb34f;
-        --shadow-sm: 0 1px 3px rgba(0,0,0,.10);
-        --shadow:    0 4px 16px rgba(0,0,0,.12);
-        --radius:    4px;
-        --radius-sm: 3px;
-        --radius-pill: 999px;
-    }
-
-    /* ── RESET & BASE ────────────────────────────────────────── */
-    html, body, .stApp {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        background: var(--fte-bg) !important;
-        color: var(--fte-gray1) !important;
-        -webkit-font-smoothing: antialiased !important;
-    }
-    header[data-testid="stHeader"],
-    div[data-testid="stToolbar"] { display: none !important; }
-    .block-container {
-        padding-top: 0 !important;
-        padding-bottom: 5rem !important;
-        max-width: 100% !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-    }
-    div[data-testid="stVerticalBlock"] { gap: 0 !important; }
-    div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .25rem !important; }
-    div[data-testid="stTabsContent"] > div[data-testid="stVerticalBlock"] > div.element-container { margin-bottom: .4rem !important; }
-    div[data-testid="stMetric"] { margin-bottom: 0 !important; }
-    [data-testid="stDataFrame"] > div { width: 100% !important; }
-    h1, h2, h3 { font-family: 'Inter', sans-serif !important; }
-    h2 { font-size: .6rem !important; font-weight: 700 !important;
-         text-transform: uppercase; letter-spacing: .15em;
-         color: var(--fte-gray3) !important; border-bottom: 2px solid var(--fte-gray1) !important;
-         padding-bottom: 5px; margin-bottom: 10px !important; }
-    h3 { font-size: .82rem !important; font-weight: 700 !important; color: var(--fte-gray1) !important; margin-bottom: 5px !important; }
-
-    /* ── TOP NAV — FTE dark bar ──────────────────────────────── */
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) {
-        background: #1a1a1a !important;
-        border-bottom: 3px solid var(--fte-red) !important;
-        border-radius: 0 !important;
-        margin-left: -2rem !important; margin-right: -2rem !important;
-        margin-top: 0 !important; margin-bottom: 0 !important;
-        padding: 0 2rem !important;
-        gap: 0 !important; align-items: stretch !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button {
-        all: unset !important; box-sizing: border-box !important;
-        cursor: pointer !important; display: flex !important;
-        align-items: center !important; justify-content: center !important;
-        width: 100% !important; height: 48px !important; padding: 0 8px !important;
-        font-family: 'Inter', sans-serif !important;
-        font-size: .7rem !important; font-weight: 500 !important;
-        color: #aaaaaa !important; letter-spacing: .04em !important;
-        text-transform: uppercase !important;
-        border-bottom: 3px solid transparent !important;
-        transition: color .12s, border-color .12s !important;
-        user-select: none !important; white-space: nowrap !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button[kind="primary"] {
-        color: #ffffff !important; font-weight: 700 !important;
-        border-bottom-color: var(--fte-red) !important;
-    }
-    [data-testid="stHorizontalBlock"]:has([class*="st-key-workspace_main"]) .stButton > button:hover {
-        color: #ffffff !important;
-    }
-    .app-nav-brand { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 4px; }
-    .app-nav-emoji { font-size: 1.25rem; line-height: 1; }
-    .app-nav-name  { font-size: .85rem; font-weight: 900; color: #ffffff; letter-spacing: -.01em; text-transform: uppercase; }
-    .app-nav-tagline { font-size: .55rem; color: #888888; margin-top: 1px; text-transform: uppercase; letter-spacing: .06em; }
-
-    /* ── PAGE HEADER — editorial style ───────────────────────── */
-    .page-header {
-        display: flex; align-items: flex-start; gap: 0;
-        padding: 32px 0 16px; border-bottom: 3px solid var(--fte-gray1);
-        margin-bottom: 28px; flex-direction: column;
-    }
-    .page-header-icon { display: none; }
-    .page-header-title  {
-        font-size: 2rem; font-weight: 900; color: var(--fte-gray1);
-        letter-spacing: -.04em; line-height: 1.1;
-        border-left: 5px solid var(--fte-red); padding-left: 12px;
-    }
-    .page-header-sub    { font-size: .75rem; color: var(--fte-gray3); margin-top: 6px; padding-left: 17px; font-style: italic; }
-
-    /* ── SIDEBAR — light with FTE accent ────────────────────── */
-    section[data-testid="stSidebar"] {
-        background: #ffffff !important;
-        border-right: 2px solid var(--fte-gray1) !important;
-    }
-    section[data-testid="stSidebar"] .block-container {
-        padding-top: 1.5rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
-        font-size: .62rem !important; font-weight: 700 !important;
-        color: var(--fte-gray2) !important; text-transform: uppercase !important;
-        letter-spacing: .1em !important; margin-bottom: 2px !important;
-    }
-    .sidebar-brand {
-        display: flex; align-items: center; gap: 9px;
-        padding: 0 0 16px 0; border-bottom: 2px solid var(--fte-gray1); margin-bottom: 14px;
-    }
-    .sidebar-brand-icon  { font-size: 1.25rem; flex-shrink: 0; }
-    .sidebar-brand-title { color: var(--fte-gray1) !important; font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
-    .sidebar-brand-meta  { color: var(--fte-red) !important; font-size: .57rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: .08em; margin-top: 1px; }
-    .sbar-hdr {
-        color: var(--fte-gray3); font-size: .52rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: .18em;
-        margin: 18px 0 4px; padding-bottom: 5px;
-        border-bottom: 1px solid var(--fte-gray4);
-    }
-    .sbar-active-bar {
-        background: rgba(238,58,39,.07); border: 1px solid rgba(238,58,39,.25);
-        border-radius: 2px; padding: 6px 10px;
-        font-size: .62rem; font-weight: 600; color: var(--fte-red);
-        margin: 8px 0; display: flex; align-items: center; gap: 6px;
-    }
-
-    /* ── WIDGETS: MULTISELECT ────────────────────────────────── */
-    .stMultiSelect [data-baseweb="select"] > div:first-child {
-        background: var(--surface) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius) !important;
-        min-height: 36px !important; gap: 3px !important;
-    }
-    .stMultiSelect [data-baseweb="select"] > div:first-child:focus-within {
-        border-color: rgba(20,120,176,.5) !important;
-        box-shadow: 0 0 0 3px var(--teal-dim) !important;
-    }
-    .stMultiSelect [data-baseweb="tag"] {
-        background: var(--raised) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius-pill) !important;
-        height: 20px !important; margin: 2px 0 !important;
-    }
-    .stMultiSelect [data-baseweb="tag"] [data-testid="stMultiSelectChipText"] {
-        font-size: .62rem !important; font-weight: 600 !important;
-        color: var(--muted) !important;
-    }
-    .stMultiSelect [data-baseweb="tag"] span[role="presentation"] { color: var(--faint) !important; }
-    .stMultiSelect input { color: var(--ink) !important; font-size: .73rem !important; }
-
-    /* ── WIDGETS: SELECTBOX ──────────────────────────────────── */
-    .stSelectbox [data-baseweb="select"] > div:first-child {
-        background: var(--surface) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius) !important;
-        min-height: 36px !important;
-    }
-    .stSelectbox [data-baseweb="select"] > div:first-child:focus-within {
-        border-color: rgba(20,120,176,.5) !important;
-        box-shadow: 0 0 0 3px var(--teal-dim) !important;
-    }
-    [data-baseweb="popover"] { z-index: 9999 !important; }
-    [data-baseweb="menu"] ul {
-        background: var(--raised) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius) !important;
-        box-shadow: var(--shadow) !important;
-        overflow: hidden !important;
-    }
-    [data-baseweb="menu"] li[role="option"] {
-        font-size: .73rem !important; color: var(--muted) !important;
-        background: transparent !important; border-radius: 0 !important;
-    }
-    [data-baseweb="menu"] li[role="option"]:hover,
-    [data-baseweb="menu"] li[aria-selected="true"] {
-        background: var(--teal-dim) !important; color: var(--teal-hi) !important;
-    }
-
-    /* ── WIDGETS: NUMBER INPUT ───────────────────────────────── */
-    [data-testid="stNumberInput"] > div {
-        border-radius: var(--radius) !important;
-        border: 1px solid var(--border-hi) !important;
-        background: var(--surface) !important;
-        overflow: hidden !important;
-    }
-    [data-testid="stNumberInput"] input {
-        background: transparent !important; color: var(--ink) !important;
-        font-size: .79rem !important;
-    }
-    [data-testid="stNumberInput"] button {
-        all: unset !important; color: var(--faint) !important;
-        padding: 0 8px !important; cursor: pointer !important;
-        font-size: .9rem !important;
-    }
-    [data-testid="stNumberInput"] button:hover { color: var(--teal-hi) !important; }
-
-    /* ── WIDGETS: SLIDER ─────────────────────────────────────── */
-    [data-testid="stSlider"] [data-baseweb="slider"] { padding: 8px 0 !important; }
-    [data-testid="stSlider"] [role="slider"] {
-        background: var(--teal) !important;
-        border: 2px solid var(--bg) !important;
-        width: 14px !important; height: 14px !important;
-        border-radius: 50% !important;
-        box-shadow: 0 0 0 3px var(--teal-dim) !important;
-    }
-    [data-testid="stSlider"] > div > div > div { height: 3px !important; }
-
-    /* ── WIDGETS: TOGGLE ─────────────────────────────────────── */
-    [data-testid="stToggle"] p { font-size: .72rem !important; font-weight: 500 !important; color: var(--muted) !important; }
-
-    /* ── WIDGETS: CHECKBOX ───────────────────────────────────── */
-    .stCheckbox label { font-size: .72rem !important; color: var(--muted) !important; gap: 7px !important; }
-    .stCheckbox [data-testid="stCheckboxValue"] {
-        background: var(--surface) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: 4px !important;
-    }
-    .stCheckbox [data-testid="stCheckboxValue"][aria-checked="true"] {
-        background: var(--teal) !important; border-color: var(--teal) !important;
-    }
-
-    /* ── WIDGETS: RADIO ──────────────────────────────────────── */
-    .stRadio label { font-size: .72rem !important; color: var(--muted) !important; }
-    .stRadio [data-testid="stMarkdownContainer"] p { font-size: .72rem !important; color: var(--muted) !important; }
-
-    /* ── WIDGETS: SEGMENTED CONTROL ─────────────────────────── */
-    [data-testid="stSegmentedControl"] {
-        background: var(--surface) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
-        padding: 3px !important; gap: 2px !important;
-    }
-    [data-testid="stSegmentedControl"] label {
-        border-radius: var(--radius-sm) !important;
-        font-size: .67rem !important; font-weight: 600 !important;
-        color: var(--faint) !important; padding: 5px 12px !important;
-        border: none !important; background: transparent !important;
-        transition: all .12s !important;
-    }
-    [data-testid="stSegmentedControl"] label:has(input:checked) {
-        background: var(--teal-dim) !important; color: var(--teal-hi) !important;
-        border: 1px solid rgba(20,120,176,.25) !important;
-    }
-    [data-testid="stSegmentedControl"] input { display: none !important; }
-
-    /* ── WIDGETS: TEXT INPUT ─────────────────────────────────── */
-    .stTextInput > div > div {
-        background: var(--surface) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius) !important;
-    }
-    .stTextInput input {
-        background: transparent !important; color: var(--ink) !important;
-        font-size: .79rem !important; padding: 7px 12px !important;
-    }
-    .stTextInput input::placeholder { color: var(--faint) !important; }
-    .stTextInput > div > div:focus-within {
-        border-color: var(--teal) !important;
-        box-shadow: 0 0 0 3px var(--teal-dim) !important;
-    }
-
-    /* ── WIDGETS: BUTTONS ────────────────────────────────────── */
-    .stButton > button, .stDownloadButton > button {
-        font-family: 'Inter', sans-serif !important;
-        border-radius: var(--radius-pill) !important;
-        border: 1px solid var(--border-hi) !important;
-        background: var(--surface) !important;
-        color: var(--muted) !important;
-        font-size: .71rem !important; font-weight: 600 !important;
-        min-height: 33px !important; padding: 0 16px !important;
-        letter-spacing: .01em !important; transition: all .15s !important;
-    }
-    .stButton > button[kind="primary"] {
-        background: var(--teal-dim) !important;
-        border-color: rgba(20,120,176,.4) !important;
-        color: var(--teal-hi) !important;
-    }
-    .stButton > button:hover, .stDownloadButton > button:hover {
-        border-color: rgba(20,120,176,.5) !important;
-        color: var(--teal-hi) !important;
-        background: var(--teal-dim) !important;
-    }
-
-    /* ── WIDGETS: EXPANDER ───────────────────────────────────── */
-    .stExpander {
-        border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
-        background: var(--surface) !important;
-        margin-bottom: 6px !important; overflow: hidden !important;
-    }
-    .stExpander details summary {
-        font-family: 'Inter', sans-serif !important;
-        font-size: .72rem !important; font-weight: 600 !important;
-        color: var(--muted) !important; padding: 10px 14px !important;
-    }
-    .stExpander details summary:hover { color: var(--ink) !important; background: var(--raised) !important; }
-    .stExpander details[open] summary { border-bottom: 1px solid var(--border) !important; color: var(--ink) !important; }
-    .stExpander details > div[data-testid="stExpanderDetails"] { padding: 12px 14px !important; }
-
-    /* ── ALERTS / INFO / SUCCESS / WARNING ───────────────────── */
-    [data-testid="stAlert"] {
-        background: var(--surface) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius) !important;
-        font-size: .73rem !important;
-    }
-    [data-testid="stAlert"][kind="info"] { border-left: 3px solid var(--teal) !important; }
-    [data-testid="stAlert"][kind="warning"] { border-left: 3px solid var(--amber) !important; }
-    [data-testid="stAlert"][kind="error"] { border-left: 3px solid var(--red) !important; }
-    [data-testid="stAlert"][kind="success"] { border-left: 3px solid var(--green) !important; }
-
-    /* ── TABS ────────────────────────────────────────────────── */
-    div[data-testid="stTabs"] {
-        border-bottom: 1px solid var(--border) !important;
-        margin-bottom: 0 !important;
-    }
-    div[data-testid="stTabs"] button {
-        font-family: 'Inter', sans-serif !important;
-        font-size: .71rem !important; font-weight: 500 !important;
-        color: var(--faint) !important; padding: 8px 16px !important;
-        border-radius: 0 !important; background: transparent !important;
-        transition: color .12s !important;
-    }
-    div[data-testid="stTabs"] button[aria-selected="true"] {
-        color: var(--ink) !important; font-weight: 700 !important;
-        border-bottom: 2px solid var(--fte-red) !important;
-    }
-    div[data-testid="stTabs"] button:hover { color: var(--ink) !important; }
-    div[data-testid="stTabsContent"] { padding-top: 16px !important; }
-
-    /* ── METRIC TILES ────────────────────────────────────────── */
-    [data-testid="stMetric"] {
-        background: var(--surface) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
-        padding: 14px 16px !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: .58rem !important; font-weight: 700 !important;
-        text-transform: uppercase !important; letter-spacing: .12em !important;
-        color: var(--faint) !important;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 1.45rem !important; font-weight: 800 !important;
-        color: var(--ink) !important; line-height: 1.15 !important;
-    }
-
-    /* ── DATA FRAME ──────────────────────────────────────────── */
-    [data-testid="stDataFrame"] {
-        border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
-        overflow: hidden !important;
-    }
-
-    /* ── ALERTS / INFO ───────────────────────────────────────── */
-    [data-testid="stAlert"] {
-        background: var(--surface) !important;
-        border: 1px solid var(--border-hi) !important;
-        border-radius: var(--radius) !important;
-        font-size: .73rem !important;
-    }
-
-    /* ── CUSTOM HTML COMPONENTS — FTE editorial ─────────────── */
-    .metric-card {
-        background: #ffffff; border: 1px solid var(--fte-gray4);
-        border-top: 4px solid var(--fte-gray1); border-radius: 0;
-        padding: 14px 16px;
-    }
-    .metric-label   { color: var(--fte-gray3); font-size: .56rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
-    .metric-value   { color: var(--fte-gray1); font-size: 1.5rem; font-weight: 900; line-height: 1.1; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
-    .metric-caption { color: var(--fte-gray3); font-size: .65rem; }
-    .metric-card.highlight { border-top-color: var(--fte-red); }
-    .metric-card.positive  { border-top-color: var(--fte-green); }
-    .metric-card.info      { border-top-color: var(--fte-blue); }
-
-    .note-box {
-        background: #fff9f0; border: 1px solid #f0c080;
-        border-left: 4px solid var(--fte-orange);
-        border-radius: 0; padding: 10px 14px; font-size: .74rem; color: var(--fte-gray2);
-        line-height: 1.6; margin: 4px 0;
-    }
-    .section-card {
-        background: #ffffff; border: 1px solid var(--fte-gray4);
-        border-radius: 0; padding: 16px 20px;
-        border-left: 4px solid var(--fte-gray1);
-    }
-    .profile-card {
-        background: #ffffff; border: 1px solid var(--fte-gray4);
-        border-left: 4px solid var(--fte-red);
-        border-radius: 0; padding: 16px 20px; margin-bottom: 12px;
-    }
-    .profile-name { color: var(--fte-gray1); font-size: 1.1rem; font-weight: 900; letter-spacing: -.02em; }
-    /* FTE-style projection band labels */
-    .proj-label-breakout  { color: var(--fte-green);  font-weight: 700; }
-    .proj-label-expected  { color: var(--fte-gray1);  font-weight: 700; }
-    .proj-label-decline   { color: var(--fte-red);    font-weight: 700; }
-    .profile-meta { color: var(--muted); font-size: .71rem; margin-top: 3px; margin-bottom: 8px; }
-
-    .pill-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
-    .pill {
-        background: var(--raised); border: 1px solid var(--border-hi);
-        color: var(--faint); border-radius: 99px; padding: 2px 10px;
-        font-size: .61rem; font-weight: 600; letter-spacing: .01em;
-    }
-    .pill.teal  { background: var(--teal-dim); border-color: rgba(20,120,176,.25); color: var(--teal-hi); }
-    .pill.amber { background: rgba(240,160,42,.08); border-color: rgba(240,160,42,.25); color: var(--amber); }
-    .pill.red   { background: rgba(247,88,96,.08); border-color: rgba(247,88,96,.25); color: var(--red); }
-
-    .intel-strip {
-        border: 1px solid var(--border); border-left: 2px solid var(--teal);
-        background: var(--surface); border-radius: var(--radius);
-        padding: 10px 14px; margin: 0 0 8px;
-        display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    }
-    .intel-strip-title { color: var(--ink); font-size: .8rem; font-weight: 700; }
-    .intel-strip-meta  { color: var(--faint); font-size: .6rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-
-    .workspace-label {
-        color: var(--teal); font-size: .55rem; font-weight: 700;
-        letter-spacing: .16em; text-transform: uppercase;
-        margin: 4px 0 8px; padding: 4px 0 4px 10px;
-        border-left: 2px solid var(--teal); background: var(--teal-dim);
-        border-radius: 0 4px 4px 0;
-    }
-    .page-title    { font-size: 1.1rem; font-weight: 800; color: var(--ink); letter-spacing: -.02em; margin: 0 0 2px; }
-    .page-subtitle { font-size: .69rem; color: var(--faint); margin-bottom: 16px; line-height: 1.5; }
-
-    .gap-sm { margin-top: 8px; }
-    .gap-md { margin-top: 18px; }
-</style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# Load persistent shortlist from disk on first run
-if "shortlist_data" not in st.session_state:
-    st.session_state["shortlist_data"] = _load_shortlist_file()
-    st.session_state["shortlist_players"] = list(st.session_state["shortlist_data"].keys())
-
-if "active_workspace" not in st.session_state:
-    st.session_state["active_workspace"] = "Command"
-
-render_workspace_nav("main")
-
-active_workspace = st.session_state.get("active_workspace", "Command")
-data, _active_source = get_active_data()
-model_metadata = load_model_metadata()
-
-if active_workspace == "Command":
-    render_command_workspace(data)
-    st.stop()
-elif active_workspace == "Deep Scan":
-    render_deep_scan_workspace(data)
-    st.stop()
-elif active_workspace == "Cross-Source":
-    render_cross_source_workspace(data)
-    st.stop()
-elif active_workspace == "Player Intel":
-    render_player_intel_workspace(data)
-    st.stop()
-elif active_workspace == "Projections":
-    render_projections_workspace(data, source=_active_source)
-    st.stop()
-elif active_workspace == "Watchlist":
-    render_watchlist_workspace(data)
-    st.stop()
-elif active_workspace == "Set Piece":
-    render_setpiece_workspace(data)
-    st.stop()
-
-# Legacy routing kept for any deep-linked pages
-_rec_file = _model_file("recruitment")
-_data_updated = "unknown"
-if _rec_file.exists():
-    from datetime import datetime as _dt
-    _data_updated = _dt.fromtimestamp(_rec_file.stat().st_mtime).strftime("%-d %b %Y")
-if active_workspace not in ("Command", "Deep Scan", "Cross-Source", "Player Intel", "Projections", "Watchlist", "Set Piece"):
-    st.markdown(f"<div class='workspace-label'>{active_workspace} workspace</div>", unsafe_allow_html=True)
-    st.markdown(
-        f'<div class="section-card">'
-            f'<div class="metric-label">Coming next</div>'
-            f'<div class="metric-value" style="font-size:1.45rem;">{active_workspace}</div>'
-            f'<div class="metric-caption">This workspace is being built. Use the navigation above to switch between workspaces.</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    st.stop()
-
-if "quick_mode" not in st.session_state:
-    st.session_state["quick_mode"] = "Full board"
-if "shortlist_players" not in st.session_state:
-    st.session_state["shortlist_players"] = []
-
-outfield_data = data.loc[~data["PositionGroup"].astype(str).eq("GK")].copy()
-
-st.markdown(
-    f"<div class='page-header'>"
-    f"<div class='page-header-icon'>🎯</div>"
-    f"<div><div class='page-header-title'>Recruitment Board</div>"
-    f"<div class='page-header-sub'>Player quality rankings, profiles and signing cases · {len(outfield_data):,} outfield players</div></div>"
-    f"</div>",
-    unsafe_allow_html=True,
-)
-quick_modes = ["Full board", "U23 quality", "Elite quality", "Reliable quality"]
-if st.session_state["quick_mode"] not in quick_modes:
-    st.session_state["quick_mode"] = "Full board"
-
-preset_weights = {
-    "Balanced quality": {"Composite": 3, "Decision": 2, "Value": 0, "Success": 1, "Reliability": 2, "Risk penalty": 1},
-    "Technique": {"Composite": 2, "Decision": 3, "Value": 0, "Success": 1, "Reliability": 1, "Risk penalty": 1},
-    "Ready quality": {"Composite": 3, "Decision": 3, "Value": 0, "Success": 1, "Reliability": 3, "Risk penalty": 2},
-    "Upside quality": {"Composite": 2, "Decision": 2, "Value": 0, "Success": 2, "Reliability": 1, "Risk penalty": 0},
-}
-
-with st.sidebar:
-    st.markdown(
-        f"""<div class="sidebar-brand">
-            <div class="sidebar-brand-icon">⚽</div>
-            <div>
-                <div class="sidebar-brand-title">Recruitment IQ</div>
-                <div class="sidebar-brand-meta">{len(outfield_data):,} outfield players</div>
-            </div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-    model_preset = st.segmented_control("Quality lens", list(preset_weights), default="Balanced quality", width="stretch")
-    defaults = preset_weights[model_preset]
-    with st.expander("Lens weights", expanded=False):
-        weights = {
-            "Composite": st.slider("Model quality", 0, 5, defaults["Composite"]),
-            "Decision": st.slider("Decision quality", 0, 5, defaults["Decision"]),
-            "Value": 0,
-            "Success": st.slider("Success probability", 0, 5, defaults["Success"]),
-            "Reliability": st.slider("Reliability", 0, 5, defaults["Reliability"]),
-            "Risk penalty": st.slider("Risk penalty", 0, 5, defaults["Risk penalty"]),
-        }
-
-df = add_scouting_fields(outfield_data, weights)
-position_groups = sorted(df["PositionGroup"].dropna().astype(str).unique())
-bundle_groups = sorted(df["BundleLabel"].dropna().astype(str).unique())
-archetype_groups = sorted(df["Archetype"].dropna().astype(str).unique())
-
-with st.sidebar:
-    # ── Search ──────────────────────────────────────────────────
-    search = st.text_input("Search", key="search_filter", placeholder="🔍  Search player or club…", label_visibility="collapsed")
-
-    # ── Positions ───────────────────────────────────────────────
-    st.markdown("<div class='sbar-hdr'>Positions</div>", unsafe_allow_html=True)
-    saved_positions = st.session_state.get("positions_filter")
-    if saved_positions and any(p not in position_groups for p in saved_positions):
-        st.session_state["positions_filter"] = position_groups
-    positions = st.multiselect("Roles", position_groups, default=position_groups, key="positions_filter")
-    _profile_opts: list[str] = []
-    for _p in positions:
-        _profile_opts.extend(POSITION_PROFILES.get(_p, []))
-    _profile_opts = sorted(set(_profile_opts))
-    if _profile_opts:
-        profiles = st.multiselect("Player profiles", _profile_opts, default=_profile_opts, key="profiles_filter")
-    else:
-        profiles = []
-
-    # ── Market ──────────────────────────────────────────────────
-    st.markdown("<div class='sbar-hdr'>Market</div>", unsafe_allow_html=True)
-    bundles = st.multiselect("Leagues", bundle_groups, default=bundle_groups, key="bundles_filter")
-    if "CountryLabel" in df.columns:
-        _country_opts = sorted(df["CountryLabel"].dropna().astype(str).replace("", "Unknown").unique())
-        countries = st.multiselect("Country", _country_opts, default=_country_opts, key="countries_filter")
-    else:
-        _country_opts: list[str] = []
-        countries = []
-    archetypes = st.multiselect("Archetypes", archetype_groups, default=archetype_groups, key="archetypes_filter")
-
-    # ── Player criteria ──────────────────────────────────────────
-    st.markdown("<div class='sbar-hdr'>Player criteria</div>", unsafe_allow_html=True)
-    u23_only = st.toggle("U23 only", value=False, key="u23_filter")
-    age_range = st.slider(
-        "Age",
-        float(np.floor(df["AgeYears"].min())),
-        float(np.ceil(df["AgeYears"].max())),
-        (float(np.floor(df["AgeYears"].min())), float(np.ceil(df["AgeYears"].max()))),
-        step=0.5,
-        key="age_filter",
-    )
-    minutes_range = st.slider(
-        "Min. minutes",
-        int(df["MinutesPlayed"].min()),
-        int(df["MinutesPlayed"].max()),
-        (900, int(df["MinutesPlayed"].max())),
-        step=100,
-        key="minutes_filter",
-    )
-
-    # ── Score thresholds (collapsed) ────────────────────────────
-    _q_floor_val     = st.session_state.get("quality_floor", 35)
-    _fit_floor_val   = st.session_state.get("fit_floor", 35)
-    _rel_floor_val   = st.session_state.get("reliability_floor", 45)
-    _risk_val        = st.session_state.get("max_risk", 18.0)
-    _thresh_modified = sum([
-        _q_floor_val != 35,
-        _fit_floor_val != 35,
-        _rel_floor_val != 45,
-        float(_risk_val) != 18.0,
-    ])
-    _thresh_lbl = f"⚙ Thresholds  ({_thresh_modified} modified)" if _thresh_modified else "⚙ Thresholds"
-    with st.expander(_thresh_lbl, expanded=bool(_thresh_modified)):
-        quality_floor     = st.slider("Quality floor", 0, 100, 35, key="quality_floor")
-        role_floor        = st.slider("Role-fit floor", 0, 100, 35, key="fit_floor")
-        reliability_floor = st.slider("Reliability floor", 0, 100, 45, key="reliability_floor")
-        max_risk          = st.slider("Max risk/90", 0.0, 25.0, 18.0, step=0.5, key="max_risk")
-
-    # ── Active filters count + Reset ────────────────────────────
-    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
-    _active_count = sum([
-        len(positions) < len(position_groups),
-        bool(_profile_opts) and len(profiles) < len(_profile_opts),
-        len(bundles) < len(bundle_groups),
-        len(archetypes) < len(archetype_groups),
-        bool(_country_opts) and len(countries) < len(_country_opts),
-        bool(u23_only),
-        age_range[0] > float(np.floor(df["AgeYears"].min())),
-        age_range[1] < float(np.ceil(df["AgeYears"].max())),
-        minutes_range[0] > int(df["MinutesPlayed"].min()),
-        quality_floor != 35,
-        role_floor != 35,
-        reliability_floor != 45,
-        float(max_risk) != 18.0,
-        bool(search),
-    ])
-    if _active_count:
-        st.markdown(
-            f"<div class='sbar-active-bar'>⚡ {_active_count} active filter{'s' if _active_count != 1 else ''} — board is narrowed</div>",
-            unsafe_allow_html=True,
-        )
-    st.button("✕  Reset all filters", on_click=reset_filters, type="secondary", width="stretch", key="sidebar_reset_btn")
-
-    # ── Quick view ──────────────────────────────────────────────
-    st.markdown("<div class='sbar-hdr'>Quick view</div>", unsafe_allow_html=True)
-    _qm_sidebar = st.session_state.get("quick_mode", "Full board")
-    _qs_cols = st.columns(2)
-    with _qs_cols[0]:
-        st.button("Full board",  key="qm_full",     type="primary" if _qm_sidebar == "Full board"       else "secondary", width="stretch", on_click=set_quick_mode, args=("Full board",))
-        st.button("Elite",       key="qm_elite",    type="primary" if _qm_sidebar == "Elite quality"    else "secondary", width="stretch", on_click=set_quick_mode, args=("Elite quality",))
-    with _qs_cols[1]:
-        st.button("U23",         key="qm_u23",      type="primary" if _qm_sidebar == "U23 quality"      else "secondary", width="stretch", on_click=set_quick_mode, args=("U23 quality",))
-        st.button("Reliable",    key="qm_reliable", type="primary" if _qm_sidebar == "Reliable quality" else "secondary", width="stretch", on_click=set_quick_mode, args=("Reliable quality",))
-
-mask = (
-    df["PositionGroup"].astype(str).isin(positions)
-    & df["BundleLabel"].astype(str).isin(bundles)
-    & df["Archetype"].astype(str).isin(archetypes)
-    & df["AgeYears"].between(age_range[0], age_range[1])
-    & df["MinutesPlayed"].between(minutes_range[0], minutes_range[1])
-    & df["QualityScore"].ge(quality_floor)
-    & df["RoleFitScore"].ge(role_floor)
-    & df["PerformanceReliabilityScore"].ge(reliability_floor)
-    & df["SecurityRisk_per90"].le(max_risk)
-)
-if u23_only and "IsU23Target" in df:
-    mask &= df["IsU23Target"].fillna(False).astype(bool)
-if countries and "CountryLabel" in df.columns:
-    mask &= df["CountryLabel"].astype(str).replace("", "Unknown").isin(countries)
-if profiles and "PlayerProfile" in df.columns:
-    mask &= df["PlayerProfile"].isin(profiles)
-if search:
-    haystack = (df["PlayerName"].fillna("").astype(str) + " " + df["TeamName"].fillna("").astype(str)).str.lower()
-    mask &= haystack.str.contains(search.lower(), regex=False)
-
-filtered = df.loc[mask].sort_values(["QualityScore", "RoleFitScore", "ProfileScore"], ascending=False)
-leader = filtered.head(1)
-leader_name = "No player" if leader.empty else str(leader.iloc[0]["PlayerName"])
-leader_score = "n/a" if leader.empty else f"{leader.iloc[0]['QualityScore']:.1f}"
-best_role = "n/a" if filtered.empty else filtered.groupby("PositionGroup")["QualityScore"].median().sort_values(ascending=False).index[0]
-high_quality_count = 0 if filtered.empty else int(filtered["QualityTier"].isin(["High quality", "Elite"]).sum())
-median_quality = "n/a" if filtered.empty else f"{filtered['QualityScore'].median():.1f}"
-median_impact = "n/a" if filtered.empty else f"{filtered['ProfileScore'].median():.1f}"
-
-if filtered.empty:
-    st.markdown(
-        "<div class='intel-strip' style='border-left-color:var(--amber);margin-top:12px;'>"
-        "<div>"
-        "<div class='intel-strip-title' style='color:var(--amber);'>No players match the current filters</div>"
-        "<div class='intel-strip-meta' style='margin-top:4px;'>Try: lowering Quality floor · broadening Roles · increasing Age range · using Reset all filters in the sidebar</div>"
-        "</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-    st.stop()
-
-_shortlist_count = len(st.session_state.get("shortlist_players", []))
-
-quality_tab, profile_tab, player_tab, compare_tab, hradec_tab, intel_tab, case_tab, export_tab = st.tabs(
-    ["📊 Quality Board", "🎭 Profile Search", "🔬 Player Lab", "⚖️ Compare", "🎯 Hradec Targets", "🌍 League Intel", "💼 Case Analysis", "📥 Export"]
-)
-
-with quality_tab:
-    # Position focus
-    _pos_options = ["All positions"] + sorted(filtered["PositionGroup"].dropna().astype(str).unique().tolist())
-    _pos_focus = st.segmented_control("Position", _pos_options, default="All positions", key="pos_focus_rail", label_visibility="collapsed")
-    _tab_filtered = filtered.loc[filtered["PositionGroup"].eq(_pos_focus)].copy() if _pos_focus and _pos_focus != "All positions" else filtered
-
-    _sl_badge = f"  ·  <strong style='color:var(--teal);'>★ {_shortlist_count} shortlisted</strong>" if _shortlist_count else ""
-    st.markdown(
-        f"<div style='font-size:.68rem;color:var(--faint);margin-bottom:6px;'>"
-        f"<strong style='color:var(--ink);'>{len(_tab_filtered):,}</strong> players{_sl_badge}"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    quality_cols = [
-        "PlayerName",
-        "TeamName",
-        "PositionGroup",
-        "BundleLabel",
-        "AgeYears",
-        "MinutesPlayed",
-        "QualityScore",
-        "QualityTier",
-        "RoleFitScore",
-        "ProfileScore",
-        "DecisionScore",
-        "PerformanceReliabilityScore",
-        "Readiness",
-        "RiskBand",
-        "Archetype",
-        "QualityDrivers",
-    ]
-    quality_board = _tab_filtered[[c for c in quality_cols if c in _tab_filtered.columns]].rename(
-        columns={
-            "PlayerName": "Player",
-            "TeamName": "Team",
-            "PositionGroup": "Role",
-            "BundleLabel": "League",
-            "AgeYears": "Age",
-            "MinutesPlayed": "Minutes",
-            "QualityScore": "Quality",
-            "QualityTier": "Tier",
-            "RoleFitScore": "Role Fit",
-            "ProfileScore": "Impact",
-            "DecisionScore": "Decision",
-            "PerformanceReliabilityScore": "Reliability",
-            "RiskBand": "Risk",
-            "QualityDrivers": "Drivers",
-        }
-    )
-    # Tier distribution pills
-    _tier_order = ["Elite", "High quality", "Standard", "Developing"]
-    _tier_cls   = {"Elite": "teal", "High quality": "teal", "Standard": "", "Developing": ""}
-    _tcounts    = _tab_filtered["QualityTier"].value_counts().to_dict() if "QualityTier" in _tab_filtered.columns else {}
-    _empty_str  = ""
-    _tier_pills = "".join(
-        f'<span class="pill {_tier_cls.get(t, _empty_str)}">{t}: {_tcounts.get(t,0)}</span>'
-        for t in _tier_order if _tcounts.get(t, 0) > 0
-    )
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'
-        f'<span style="color:var(--faint);font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;">Tiers:</span>'
-        f'<div class="pill-row" style="margin:0;">{_tier_pills}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.dataframe(
-        quality_board.round(2),
-        width="stretch",
-        hide_index=True,
-        height=780,
-        column_config={
-            "Quality":     st.column_config.ProgressColumn("Quality",     min_value=0, max_value=100, format="%.1f"),
-            "Role Fit":    st.column_config.ProgressColumn("Role Fit",    min_value=0, max_value=100, format="%.1f"),
-            "Impact":      st.column_config.ProgressColumn("Impact",      min_value=0, max_value=100, format="%.1f"),
-            "Decision":    st.column_config.ProgressColumn("Decision",    min_value=0, max_value=100, format="%.1f"),
-            "Reliability": st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
-            "Age":         st.column_config.NumberColumn("Age", format="%.1f"),
-            "Minutes":     st.column_config.NumberColumn("Minutes", format="%d"),
-        },
-    )
-
-with profile_tab:
-    _all_positions = sorted(PROFILE_WEIGHTS.keys())
-    _prof_pos_col, _prof_pick_col = st.columns([1, 2], gap="small")
-    with _prof_pos_col:
-        _target_pos = st.selectbox("Position", ["—"] + _all_positions, key="profile_target_pos", label_visibility="visible")
-    with _prof_pick_col:
-        _profile_options = list(PROFILE_WEIGHTS.get(_target_pos, {}).keys()) if _target_pos != "—" else []
-        _target_profile = st.selectbox(
-            "Profile",
-            ["—"] + _profile_options,
-            key="profile_target_name",
-            disabled=_target_pos == "—",
-            label_visibility="visible",
-        )
-
-    if _target_pos == "—" or _target_profile == "—":
-        st.markdown(
-            "<div class='note-box'>Select a <strong>position</strong> and a <strong>player profile</strong> above "
-            "to rank every player in that position by how closely they fit the profile, "
-            "scored using z-scores within the position pool.</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        _pos_pool = filtered.loc[filtered["PositionGroup"].astype(str).eq(_target_pos)].copy()
-        if _pos_pool.empty:
-            st.info(f"No {_target_pos} players in the current filtered set.")
-        else:
-            _pos_pool["ProfileFit"] = calc_profile_fit(_pos_pool, _target_pos, _target_profile)
-            _pos_pool = _pos_pool.sort_values("ProfileFit", ascending=False)
-
-            # Header strip showing profile definition
-            _pw = PROFILE_WEIGHTS[_target_pos][_target_profile]
-            _drivers = " · ".join(f"{k.replace('Score','').replace('CreativeProgression','Creativity').replace('DefensiveDisruption','Defence').replace('ScoringThreat','Scoring').replace('ExpectedThreat','xThreat').replace('BallSecurity','Security').replace('PerformanceReliability','Reliability').replace('Pressing','Press')} ×{v}" for k, v in _pw.items())
-            st.markdown(
-                f"<div class='note-box'><strong style='color:var(--teal-hi);'>{_target_profile}</strong> "
-                f"<span style='color:var(--muted);'>({_target_pos})</span>"
-                f"<br><span style='color:var(--faint);font-size:.7rem;'>Profile drivers: {_drivers}</span><br>"
-                f"<span style='color:var(--faint);font-size:.7rem;'>"
-                f"Z-score scaled: 50 = position average · 65 = top 16% · 80 = top 2%"
-                f"</span></div>",
-                unsafe_allow_html=True,
-            )
-
-            _prof_board_cols = [
-                "PlayerName", "TeamName", "BundleLabel", "AgeYears", "MinutesPlayed",
-                "ProfileFit", "QualityScore", "QualityTier", "Archetype",
-            ] + [c for c in _pw.keys() if c in _pos_pool.columns]
-            _prof_board = _pos_pool[[c for c in _prof_board_cols if c in _pos_pool.columns]].rename(columns={
-                "PlayerName": "Player", "TeamName": "Team", "BundleLabel": "League",
-                "AgeYears": "Age", "MinutesPlayed": "Minutes",
-                "QualityScore": "Quality", "QualityTier": "Tier",
-                "ScoringThreatScore": "Scoring", "ExpectedThreatScore": "xThreat",
-                "CreativeProgressionScore": "Creativity", "DefensiveDisruptionScore": "Defence",
-                "PressingScore": "Press", "BallSecurityScore": "Security",
-                "DecisionScore": "Decision", "PerformanceReliabilityScore": "Reliability",
-            })
-            _prof_col_cfg = {
-                "ProfileFit": st.column_config.ProgressColumn("Profile Fit ▼", min_value=0, max_value=100, format="%.1f"),
-                "Quality":    st.column_config.ProgressColumn("Quality",       min_value=0, max_value=100, format="%.1f"),
-                "Age":        st.column_config.NumberColumn("Age", format="%.1f"),
-                "Minutes":    st.column_config.NumberColumn("Minutes", format="%d"),
-            }
-            for _dc in ["Scoring", "xThreat", "Creativity", "Defence", "Press", "Security", "Decision", "Reliability"]:
-                if _dc in _prof_board.columns:
-                    _prof_col_cfg[_dc] = st.column_config.ProgressColumn(_dc, min_value=0, max_value=100, format="%.1f")
-            st.dataframe(_prof_board.round(2), width="stretch", hide_index=True, height=780, column_config=_prof_col_cfg)
-
-with player_tab:
-    st.markdown("<div class='workspace-label'>🔬 Player Lab — deep dive profile & radar</div>", unsafe_allow_html=True)
-    _plab_sorted = filtered.sort_values("QualityScore", ascending=False)
-    _plab_labels = (
-        _plab_sorted["PlayerName"].fillna("").astype(str) + "  ·  "
-        + _plab_sorted["TeamName"].fillna("").astype(str) + "   ["
-        + _plab_sorted["PositionGroup"].fillna("").astype(str) + "  "
-        + _plab_sorted["AgeYears"].round(1).astype(str) + "y  Q "
-        + _plab_sorted["QualityScore"].round(0).astype(int).astype(str) + "]"
-    ).tolist()
-    player_options = _plab_sorted.copy()
-    player_options["_label"] = _plab_labels
-    selected_label = st.selectbox("Select player", _plab_labels)
-    player = player_options.loc[player_options["_label"].eq(selected_label)].iloc[0]
-    _risk_cls = {"Low": "teal", "Moderate": "amber", "Elevated": "amber", "High": "red"}.get(str(player.get("RiskBand", "")), "")
-    st.markdown(
-        f"""<div class="profile-card">
-            <div class="profile-name">{escape(str(player['PlayerName']))}</div>
-            <div class="profile-meta">{escape(str(player['TeamName']))} · {escape(str(player['BundleLabel']))} · {escape(str(player['PositionGroup']))} · {player['AgeYears']:.1f} yrs · {int(player['MinutesPlayed']):,} min</div>
-            <div class="pill-row">
-                <span class="pill teal">Quality {player['QualityScore']:.1f}</span>
-                <span class="pill">{escape(str(player['QualityTier']))}</span>
-                <span class="pill">{escape(str(player['Archetype']))}</span>
-                <span class="pill {_risk_cls}">{escape(str(player['RiskBand']))} risk</span>
-            </div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-    metric_cols = st.columns(5)
-    metric_cols[0].metric("Quality", f"{player['QualityScore']:.1f}")
-    metric_cols[1].metric("Role Fit", f"{player['RoleFitScore']:.1f}")
-    metric_cols[2].metric("Impact", f"{player['ProfileScore']:.1f}")
-    metric_cols[3].metric("Decision", f"{player['DecisionScore']:.1f}")
-    metric_cols[4].metric("Position Pctl", f"{percentile_rank(df.loc[df['PositionGroup'].eq(player['PositionGroup']), 'QualityScore'], player['QualityScore']):.0f}")
-    _pnote = profile_note(player)
-    _pstrengths = player_strengths(player)
-    st.markdown(
-        f'<div class="note-box">'
-        f'<strong style="color:var(--teal);">Profile:</strong> {escape(_pnote)}<br>'
-        f'<strong style="color:var(--teal);">Strengths:</strong> {escape(_pstrengths)}<br>'
-        f'<strong style="color:var(--muted);">Drivers:</strong> {escape(str(player["QualityDrivers"]))} &nbsp;·&nbsp; '
-        f'Reliability: {escape(str(player["Readiness"]))} &nbsp;·&nbsp; Risk: {escape(str(player["RiskBand"]))}'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    # Style profile — surface model style columns when available
-    _primary_style = str(player.get("PrimaryPlayerStyle", "") or "").strip()
-    _secondary_style = str(player.get("SecondaryPlayerStyle", "") or "").strip()
-    _style_summary = str(player.get("PlayerStyleSummary", "") or "").strip()
-    _why_club = str(player.get("WhyThisClubStyle", "") or "").strip()
-    _smart_top3 = str(player.get("SmartClubTop3", "") or "").strip()
-    _closeness_tier = str(player.get("SmartClubClosenessTier", "") or "").strip()
-    _has_style_data = any(v and v not in ("nan", "None") for v in [_primary_style, _style_summary, _why_club, _smart_top3])
-    if _has_style_data:
-        _style_parts = []
-        if _primary_style and _primary_style not in ("nan", "None"):
-            _sty = escape(_primary_style)
-            if _secondary_style and _secondary_style not in ("nan", "None"):
-                _sty += f' <span style="color:var(--muted);">· {escape(_secondary_style)}</span>'
-            _style_parts.append(f'<strong style="color:var(--teal);">Playing style:</strong> {_sty}')
-        if _style_summary and _style_summary not in ("nan", "None"):
-            _style_parts.append(f'<span style="color:var(--muted);font-size:.8rem;">{escape(_style_summary)}</span>')
-        if _why_club and _why_club not in ("nan", "None"):
-            _style_parts.append(f'<strong style="color:var(--teal);">Hradec fit:</strong> {escape(_why_club)}')
-        if _smart_top3 and _smart_top3 not in ("nan", "None"):
-            _tier_badge = f' <span class="pill">{escape(_closeness_tier)}</span>' if _closeness_tier and _closeness_tier not in ("nan","None") else ""
-            _style_parts.append(f'<strong style="color:var(--muted);">Style clubs:</strong> {escape(_smart_top3)}{_tier_badge}')
-        st.markdown(
-            '<div class="note-box" style="margin-top:6px;border-left-color:rgba(13,158,125,.5);">'
-            + '<br>'.join(_style_parts)
-            + '</div>',
-            unsafe_allow_html=True,
-        )
-    _sl_add_cols = st.columns([1, 1, 2])
-    with _sl_add_cols[0]:
-        _sl_priority = st.selectbox("Priority", ["Watch", "Hot", "Observed"], key=f"sl_pri_{selected_label[:20]}")
-    with _sl_add_cols[1]:
-        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-        if st.button("➕ Add to shortlist", type="primary", width="stretch"):
-            _sl_notes_val = st.session_state.get(f"sl_notes_{selected_label[:20]}", "")
-            add_to_shortlist(player["PlayerName"], priority=_sl_priority, notes=_sl_notes_val)
-            st.success(f"Added {player['PlayerName']} to shortlist as {_sl_priority}")
-    with _sl_add_cols[2]:
-        st.text_input("Scout note (optional)", key=f"sl_notes_{selected_label[:20]}", placeholder="E.g. Watched vs Sparta, strong in press…")
-    _card_notes = st.session_state.get(f"sl_notes_{selected_label[:20]}", "")
-    st.download_button(
-        "📄 Download player card PDF",
-        data=build_player_card_pdf(player, df.loc[df["PositionGroup"].eq(player["PositionGroup"])], scout_notes=_card_notes),
-        file_name=f"fchk_player_{player['PlayerName'].replace(' ', '_').lower()}.pdf",
-        mime="application/pdf",
-        width="stretch",
-    )
-    lab_left, lab_right = st.columns([1, 1])
-    with lab_left:
-        st.pyplot(render_player_pizza(df.loc[df["PositionGroup"].eq(player["PositionGroup"])], player), clear_figure=True)
-    with lab_right:
-        st.markdown("<div class='workspace-label' style='font-size:.58rem;margin-bottom:8px;'>Top per-90 metrics</div>", unsafe_allow_html=True)
-        per90_cols = [c for c in filtered.columns if c.endswith("_per90") or c.startswith("Imp_")]
-        _per90_labels = {c: c.replace("_per90","").replace("Imp_","").replace("_"," ").title() for c in per90_cols}
-        per90 = (
-            pd.DataFrame({"Metric": [_per90_labels[c] for c in per90_cols], "Value": [float(player[c]) for c in per90_cols], "Pctile": [percentile_rank(filtered[c].dropna(), float(player[c])) for c in per90_cols]})
-            .sort_values("Value", ascending=False).head(20).round(2)
-        )
-        st.dataframe(
-            per90,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Value": st.column_config.NumberColumn("Value", format="%.2f"),
-                "Pctile": st.column_config.ProgressColumn("Pctile %", min_value=0, max_value=100, format="%.0f"),
-            },
-        )
-    # AI Scout Report
-    _api_key_set = bool(os.getenv("ANTHROPIC_API_KEY", ""))
-    _report_key = f"scout_report_{player['PlayerName']}"
-    with st.expander("🤖 AI Scout Report" + (" (set ANTHROPIC_API_KEY to enable)" if not _api_key_set else ""), expanded=False):
-        if not _api_key_set:
-            st.info("Set the ANTHROPIC_API_KEY environment variable to generate AI scouting reports.")
-        else:
-            if st.button("Generate scout report", key=f"gen_report_{selected_label[:20]}", type="primary"):
-                with st.spinner("Writing report…"):
-                    _report = generate_scout_report(player, df)
-                    st.session_state[_report_key] = _report
-            if _report_key in st.session_state:
-                st.markdown(
-                    f'<div class="note-box" style="font-size:.82rem;line-height:1.7;">{escape(st.session_state[_report_key])}</div>',
-                    unsafe_allow_html=True,
-                )
-
-    # Age-quality development curve
-    _age_pos_df = df.loc[df["PositionGroup"].eq(player["PositionGroup"]) & df["QualityScore"].notna() & df["AgeYears"].notna()][["PlayerName","AgeYears","QualityScore"]].copy()
-    if len(_age_pos_df) > 10:
-        _age_base = (
-            alt.Chart(_age_pos_df)
-            .mark_circle(opacity=0.25, size=28, color="#2e4a6e")
-            .encode(
-                x=alt.X("AgeYears:Q", title="Age", scale=alt.Scale(domain=[16, 38]), axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d", titleColor="#8fa3b1")),
-                y=alt.Y("QualityScore:Q", title="Quality", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d", titleColor="#8fa3b1")),
-                tooltip=["PlayerName:N", alt.Tooltip("AgeYears:Q", format=".1f", title="Age"), alt.Tooltip("QualityScore:Q", format=".1f", title="Quality")],
-            )
-        )
-        _age_trend = (
-            alt.Chart(_age_pos_df)
-            .transform_regression("AgeYears", "QualityScore", method="poly", order=3)
-            .mark_line(color="#f5a623", opacity=0.55, strokeWidth=2, strokeDash=[5, 3])
-            .encode(x="AgeYears:Q", y="QualityScore:Q")
-        )
-        _age_highlight = (
-            alt.Chart(pd.DataFrame([{"AgeYears": float(player["AgeYears"]), "QualityScore": float(player["QualityScore"]), "Name": str(player["PlayerName"])}]))
-            .mark_circle(opacity=1, size=130, color="#10d4aa")
-            .encode(
-                x="AgeYears:Q", y="QualityScore:Q",
-                tooltip=[alt.Tooltip("Name:N"), alt.Tooltip("AgeYears:Q", format=".1f", title="Age"), alt.Tooltip("QualityScore:Q", format=".1f", title="Quality")],
-            )
-        )
-        _age_label = (
-            alt.Chart(pd.DataFrame([{"AgeYears": float(player["AgeYears"]), "QualityScore": float(player["QualityScore"]), "Name": str(player["PlayerName"])}]))
-            .mark_text(color="#10d4aa", fontSize=11, dx=10, dy=-8, align="left")
-            .encode(x="AgeYears:Q", y="QualityScore:Q", text="Name:N")
-        )
-        _age_chart = (
-            (_age_base + _age_trend + _age_highlight + _age_label)
-            .properties(height=260, title=alt.TitleParams(f"{player['PositionGroup']} age–quality curve (all leagues)", color="#8fa3b1", fontSize=11))
-            .configure_view(fill="#ffffff", stroke=None)
-            .configure(background="#f9f8f3")
-        )
-        st.altair_chart(_age_chart, width="stretch")
-
-    comparable = similar_players(df, player, same_position=True, n=12)
-    st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:14px 0 8px;'>Closest quality profiles</div>", unsafe_allow_html=True)
-    similar_cols = ["PlayerName", "TeamName", "PositionGroup", "AgeYears", "MinutesPlayed", "SimilarityScore", "QualityScore", "RoleFitScore", "ProfileScore", "Archetype"]
-    st.dataframe(
-        comparable[[c for c in similar_cols if c in comparable.columns]].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","MinutesPlayed":"Minutes","SimilarityScore":"Similarity","QualityScore":"Quality","RoleFitScore":"Role Fit","ProfileScore":"Impact"}).round(2),
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Quality":   st.column_config.ProgressColumn("Quality",   min_value=0, max_value=100, format="%.1f"),
-            "Role Fit":  st.column_config.ProgressColumn("Role Fit",  min_value=0, max_value=100, format="%.1f"),
-            "Impact":    st.column_config.ProgressColumn("Impact",    min_value=0, max_value=100, format="%.1f"),
-            "Similarity":st.column_config.ProgressColumn("Similarity",min_value=0, max_value=1,   format="%.2f"),
-            "Age":       st.column_config.NumberColumn("Age", format="%.1f"),
-            "Minutes":   st.column_config.NumberColumn("Minutes", format="%d"),
-        },
-    )
-
-with hradec_tab:
-    st.markdown("<div class='workspace-label'>🎯 Hradec Kralove — best external targets</div>", unsafe_allow_html=True)
-    targets_df = hradec_recruitment_targets(df, top_n=60)
-    if targets_df.empty:
-        st.info("No external targets found — check that the model data includes players outside Hradec.")
-    else:
-        hm_cols = st.columns(4)
-        priority_count = (targets_df["PositionNeed"].str.startswith("🔴")).sum()
-        with hm_cols[0]:
-            metric_card("Targets ranked", f"{len(targets_df)}", "by Hradec fit score")
-        with hm_cols[1]:
-            metric_card("High-need positions", f"{priority_count}", "🔴 roles to fill")
-        with hm_cols[2]:
-            top_t = targets_df.iloc[0]
-            metric_card("Top target", str(top_t["PlayerName"]), f"{top_t['PositionGroup']} · {top_t['HradecTargetScore']:.1f}")
-        with hm_cols[3]:
-            metric_card("Median target score", f"{targets_df['HradecTargetScore'].median():.1f}", "vs 0–100 scale")
-
-        st.markdown(
-            "<div class='note-box'>Targets scored on: quality (38%) + smart-club style fit (16%) + transfer value (18%) + age/resale (12%) + reliability (16%), "
-            "with bonus weight for positions where Hradec is thin or below Czech market median.</div>",
-            unsafe_allow_html=True,
-        )
-
-        # Position filter chips
-        pos_options = sorted(targets_df["PositionGroup"].dropna().astype(str).unique())
-        sel_pos = st.multiselect("Filter by position", pos_options, default=pos_options, key="hradec_pos_filter")
-        targets_view = targets_df.loc[targets_df["PositionGroup"].astype(str).isin(sel_pos)].copy()
-
-        board_cols = [c for c in [
-            "PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears",
-            "HradecTargetScore", "PositionNeed", "QualityScore", "ValueRecruitmentScore",
-            "AgeResaleScore", "SmartClubScore", "PerformanceReliabilityScore",
-            "RiskBand", "Archetype", "WhyThisClubStyle",
-        ] if c in targets_view.columns]
-
-        st.dataframe(
-            targets_view[board_cols].rename(columns={
-                "PlayerName": "Player", "TeamName": "Team", "PositionGroup": "Role",
-                "BundleLabel": "League", "AgeYears": "Age",
-                "HradecTargetScore": "Hradec Fit ▼", "PositionNeed": "Need",
-                "QualityScore": "Quality", "ValueRecruitmentScore": "Value",
-                "AgeResaleScore": "Resale", "SmartClubScore": "Style Fit",
-                "PerformanceReliabilityScore": "Reliability", "RiskBand": "Risk",
-                "WhyThisClubStyle": "Why Hradec",
-            }).round(1),
-            width="stretch",
-            hide_index=True,
-            height=780,
-            column_config={
-                "Hradec Fit ▼": st.column_config.ProgressColumn("Hradec Fit ▼", min_value=0, max_value=130, format="%.1f"),
-                "Quality":      st.column_config.ProgressColumn("Quality", min_value=0, max_value=100, format="%.1f"),
-                "Value":        st.column_config.ProgressColumn("Value",   min_value=0, max_value=100, format="%.1f"),
-                "Resale":       st.column_config.ProgressColumn("Resale",  min_value=0, max_value=100, format="%.1f"),
-                "Style Fit":    st.column_config.ProgressColumn("Style Fit", min_value=0, max_value=100, format="%.1f"),
-                "Reliability":  st.column_config.ProgressColumn("Reliability", min_value=0, max_value=100, format="%.1f"),
-                "Age":          st.column_config.NumberColumn("Age", format="%.1f"),
-            },
-        )
-
-        # Position need chart
-        _need_df = (
-            targets_view.groupby("PositionGroup")
-            .agg(Count=("PlayerName","count"), AvgFit=("HradecTargetScore","mean"), Need=("PositionNeed","first"))
-            .reset_index().sort_values("AvgFit", ascending=False)
-        )
-        if not _need_df.empty:
-            _need_chart = (
-                alt.Chart(_need_df)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    y=alt.Y("PositionGroup:N", sort="-x", title=None,
-                            axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=12)),
-                    x=alt.X("AvgFit:Q", title="Average Hradec Fit Score",
-                            scale=alt.Scale(domain=[0,100]),
-                            axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                    color=alt.Color("AvgFit:Q",
-                                    scale=alt.Scale(domain=[30,90], range=["#1e3a5f","#10d4aa"]),
-                                    legend=None),
-                    tooltip=[
-                        alt.Tooltip("PositionGroup:N", title="Position"),
-                        alt.Tooltip("Count:Q", title="Candidates"),
-                        alt.Tooltip("AvgFit:Q", format=".1f", title="Avg Fit Score"),
-                        alt.Tooltip("Need:N", title="Squad need"),
-                    ],
-                )
-                .properties(height=240, title=alt.TitleParams("Avg Hradec fit by position", color="#8fa3b1", fontSize=12))
-                .configure_view(fill="#ffffff", stroke=None)
-                .configure(background="#f9f8f3")
-            )
-            st.altair_chart(_need_chart, width="stretch")
-
-        # Best XI
-        xi_order = ["CB", "CB", "FB", "FB", "DM", "CM", "AM", "W", "W", "ST"]
-        xi_used: set[str] = set()
-        xi_rows = []
-        for slot in xi_order:
-            cands = targets_view.loc[targets_view["PositionGroup"].eq(slot) & ~targets_view["PlayerName"].isin(xi_used)]
-            if cands.empty:
-                continue
-            pick = cands.iloc[0]
-            xi_used.add(pick["PlayerName"])
-            xi_rows.append({
-                "Role": slot, "Player": pick["PlayerName"], "Team": pick["TeamName"],
-                "Age": round(pick["AgeYears"], 1), "Hradec Fit": round(pick["HradecTargetScore"], 1),
-                "Quality": round(pick["QualityScore"], 1), "Need": pick.get("PositionNeed", ""),
-            })
-        if xi_rows:
-            st.subheader("Suggested Best XI from targets")
-            st.dataframe(pd.DataFrame(xi_rows), width="stretch", hide_index=True)
-
-with intel_tab:
-    st.markdown("<div class='workspace-label'>🌍 League & market intelligence</div>", unsafe_allow_html=True)
-
-    # ── European market map ─────────────────────────────────────
-    st.subheader("European scout priority map")
-    market_df = european_market_map_frame(df, metric="QualityScore")
-    if not market_df.empty:
-        map_col, map_info_col = st.columns([2.2, 1])
-        with map_col:
-            try:
-                st.altair_chart(render_european_map(market_df), width="stretch")
-            except Exception as e:
-                st.warning(f"Map could not render: {e}")
-        with map_info_col:
-            st.markdown("<div class='note-box'>Bubble size = player count. Colour = scout priority score (quality + high-quality share + depth). Labels show countries with priority ≥ 55.</div>", unsafe_allow_html=True)
-            top_markets = market_df.head(8)[["Country", "Players", "MedianScore", "GoScore", "Recommendation"]].rename(
-                columns={"MedianScore": "Median Q", "GoScore": "Priority"}
-            )
-            st.dataframe(top_markets.round(1), width="stretch", hide_index=True)
-
-    # ── League quality bar chart ────────────────────────────────
-    st.subheader("Quality by league")
-    league_summary = (
-        filtered.groupby("BundleLabel")
-        .agg(
-            Players=("PlayerName", "count"),
-            MedianQuality=("QualityScore", "median"),
-            MedianRoleFit=("RoleFitScore", "median"),
-            EliteCount=("QualityTier", lambda x: x.isin(["Elite", "High quality"]).sum()),
-            MedianAge=("AgeYears", "median"),
-        )
-        .round(1)
-        .reset_index()
-        .sort_values("MedianQuality", ascending=False)
-    )
-    league_summary["ElitePct"] = (league_summary["EliteCount"] / league_summary["Players"] * 100).round(1)
-
-    if not league_summary.empty:
-        top30 = league_summary.head(30)
-        bar_chart = (
-            alt.Chart(top30)
-            .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
-            .encode(
-                y=alt.Y("BundleLabel:N", sort="-x", title=None, axis=alt.Axis(labelColor="#8fa3b1", labelFontSize=11)),
-                x=alt.X("MedianQuality:Q", title="Median quality score", scale=alt.Scale(domain=[0, 80]),
-                         axis=alt.Axis(labelColor="#8fa3b1", titleColor="#8fa3b1", gridColor="#1e2d3d")),
-                color=alt.Color("ElitePct:Q", scale=alt.Scale(domain=[0, 30], range=["#1e2d3d", "#00d4a8"]),
-                                 legend=alt.Legend(title="Elite %", labelColor="#8fa3b1", titleColor="#8fa3b1")),
-                tooltip=[
-                    alt.Tooltip("BundleLabel:N", title="League"),
-                    alt.Tooltip("Players:Q", title="Players"),
-                    alt.Tooltip("MedianQuality:Q", format=".1f", title="Median quality"),
-                    alt.Tooltip("ElitePct:Q", format=".1f", title="Elite %"),
-                    alt.Tooltip("MedianAge:Q", format=".1f", title="Median age"),
-                ],
-            )
-            .properties(height=max(320, len(top30) * 20))
-            .configure_view(fill="#ffffff", stroke=None)
-            .configure(background="#f9f8f3")
-        )
-        st.altair_chart(bar_chart, width="stretch")
-
-    # ── Full league table ───────────────────────────────────────
-    with st.expander("Full league table", expanded=False):
-        st.dataframe(
-            league_summary.rename(columns={"BundleLabel": "League", "MedianQuality": "Median Q",
-                                            "MedianRoleFit": "Median Fit", "EliteCount": "Elite",
-                                            "ElitePct": "Elite %", "MedianAge": "Median Age"}).round(1),
-            width="stretch", hide_index=True,
-            column_config={
-                "Median Q":   st.column_config.ProgressColumn("Median Q",   min_value=0, max_value=100, format="%.1f"),
-                "Median Fit": st.column_config.ProgressColumn("Median Fit", min_value=0, max_value=100, format="%.1f"),
-            },
-        )
-
-    # ── Score distribution ──────────────────────────────────────
-    st.subheader("Score distribution (filtered players)")
-    dist_col1, dist_col2 = st.columns(2)
-    with dist_col1:
-        dist_metric = st.selectbox("Metric", ["QualityScore", "RoleFitScore", "ProfileScore",
-                                               "DecisionScore", "PerformanceReliabilityScore",
-                                               "CompositeRecruitmentScore"], key="dist_metric_intel")
-        st.pyplot(render_score_distribution(filtered, dist_metric), clear_figure=True, width="stretch")
-    with dist_col2:
-        st.pyplot(render_position_boxplot(filtered, dist_metric), clear_figure=True, width="stretch")
-
-    # ── League heatmap ──────────────────────────────────────────
-    with st.expander("League depth heatmap", expanded=False):
-        hm_metric = st.selectbox("Heatmap metric", ["QualityScore", "RoleFitScore", "CompositeRecruitmentScore"], key="hm_metric")
-        st.pyplot(render_league_heatmap(filtered, hm_metric), clear_figure=True, width="stretch")
-
-with compare_tab:
-    st.markdown("<div class='workspace-label'>⚖️ Side-by-side comparison</div>", unsafe_allow_html=True)
-    compare_options = filtered.assign(_label=filtered["PlayerName"] + " | " + filtered["TeamName"] + " | " + filtered["PositionGroup"]).sort_values("QualityScore", ascending=False)["_label"].tolist()
-    selected_compare = st.multiselect("Select 2-4 players", compare_options, default=compare_options[: min(3, len(compare_options))], max_selections=4)
-    compare_names = [label.split(" | ")[0] for label in selected_compare]
-    compare_df = filtered.loc[filtered["PlayerName"].isin(compare_names)].sort_values("QualityScore", ascending=False)
-    if len(compare_df) < 2:
-        st.info("Pick at least two players to compare.")
-    else:
-        # Per-player profile cards
-        _card_cols = st.columns(len(compare_df))
-        for _ci, (_ci_idx, _cp) in enumerate(compare_df.iterrows()):
-            with _card_cols[_ci]:
-                _cp_risk_cls = {"Low":"teal","Moderate":"amber","Elevated":"amber","High":"red"}.get(str(_cp.get("RiskBand","")), "")
-                st.markdown(
-                    f'<div class="profile-card">'
-                    f'<div class="profile-name">{escape(str(_cp["PlayerName"]))}</div>'
-                    f'<div class="profile-meta">{escape(str(_cp["TeamName"]))} · {escape(str(_cp["PositionGroup"]))} · {_cp["AgeYears"]:.0f} yrs</div>'
-                    f'<div class="pill-row">'
-                    f'<span class="pill teal">Q {_cp["QualityScore"]:.1f}</span>'
-                    f'<span class="pill">Fit {_cp["RoleFitScore"]:.1f}</span>'
-                    f'<span class="pill {_cp_risk_cls}">{escape(str(_cp.get("RiskBand","?")))}</span>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-        # Side-by-side radar charts for exactly 2 players
-        if len(compare_df) == 2:
-            _radar_cols = st.columns(2)
-            for _ri, (_, _rp) in enumerate(compare_df.iterrows()):
-                with _radar_cols[_ri]:
-                    _rp_pos_df = df.loc[df["PositionGroup"].eq(_rp["PositionGroup"])]
-                    st.pyplot(render_player_pizza(_rp_pos_df, _rp), clear_figure=True)
-            st.markdown("<div class='workspace-label' style='font-size:.58rem;margin:6px 0 6px;'>Score breakdown</div>", unsafe_allow_html=True)
-
-        compare_scores = compare_df[["PlayerName", "QualityScore", "RoleFitScore", "ProfileScore", "DecisionScore", "PerformanceReliabilityScore"]].melt(id_vars="PlayerName", var_name="Metric", value_name="Score")
-        compare_chart = (
-            alt.Chart(compare_scores)
-            .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
-            .encode(
-                x=alt.X("Metric:N", title=None, axis=alt.Axis(labelAngle=-30, labelColor="#8fa3b1", gridColor="#1e2d3d")),
-                y=alt.Y("Score:Q", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(labelColor="#8fa3b1", gridColor="#1e2d3d")),
-                color=alt.Color("PlayerName:N", title="Player",
-                                scale=alt.Scale(range=["#00d4a8","#f59e0b","#8b5cf6","#ef4444"])),
-                xOffset="PlayerName:N",
-                tooltip=["PlayerName", "Metric", alt.Tooltip("Score:Q", format=".1f")],
-            )
-            .properties(height=420)
-            .configure_view(fill="#ffffff", stroke=None)
-            .configure(background="#f9f8f3")
-        )
-        st.altair_chart(compare_chart, width="stretch")
-
-with case_tab:
-    st.markdown("<div class='workspace-label'>💼 Case Analysis — transfer value, resale &amp; style fit</div>", unsafe_allow_html=True)
-    render_case_analysis_tab(filtered)
-
-with export_tab:
-    st.markdown("<div class='workspace-label'>📥 Export — board CSV, PDF report, shortlist</div>", unsafe_allow_html=True)
-    export_cols = [c for c in ["PlayerName", "TeamName", "PositionGroup", "BundleLabel", "AgeYears", "MinutesPlayed", "QualityScore", "QualityTier", "RoleFitScore", "ProfileScore", "DecisionScore", "PerformanceReliabilityScore", "Readiness", "RiskBand", "Archetype", "QualityDrivers", "RiskFlags"] if c in filtered.columns]
-    export_df = filtered[export_cols].round(3)
-    shortlist_df = df.loc[df["PlayerName"].isin(st.session_state.get("shortlist_players", []))].sort_values("QualityScore", ascending=False)
-    export_left, export_right = st.columns([1, 1])
-    with export_left:
-        st.download_button("Download board CSV", data=export_df.to_csv(index=False).encode("utf-8"), file_name="fchk_quality_board.csv", mime="text/csv", width="stretch")
-    with export_right:
-        st.download_button("Download board PDF", data=build_pdf(filtered, "FCHK Quality Scouting Report", scope_note=f"{len(filtered):,} outfield players · {model_preset} lens", top_n=75), file_name="fchk_quality_scouting_report.pdf", mime="application/pdf", type="primary", width="stretch")
-    _sl_data = st.session_state.get("shortlist_data", {})
-    _sl_names = list(_sl_data.keys())
-    shortlist_df = df.loc[df["PlayerName"].isin(_sl_names)].sort_values("QualityScore", ascending=False)
-    if not shortlist_df.empty:
-        st.markdown(
-            f'<div class="workspace-label" style="font-size:.58rem;margin:18px 0 8px;">'
-            f'Shortlist — {len(shortlist_df)} player{"s" if len(shortlist_df)!=1 else ""}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        # Merge in priority/notes/added from shortlist_data
-        _sl_meta = pd.DataFrame([
-            {"PlayerName": k, "Priority": v.get("priority","Watch"), "Notes": v.get("notes",""), "Added": v.get("added","")}
-            for k, v in _sl_data.items()
-        ])
-        shortlist_enriched = shortlist_df.merge(_sl_meta, on="PlayerName", how="left")
-        sl_cols = [c for c in ["PlayerName","TeamName","PositionGroup","AgeYears","QualityScore","QualityTier","RoleFitScore","RiskBand","Priority","Notes","Added"] if c in shortlist_enriched.columns]
-        _priority_order = {"Hot": 0, "Watch": 1, "Observed": 2}
-        shortlist_enriched["_pri_ord"] = shortlist_enriched["Priority"].map(_priority_order).fillna(3)
-        shortlist_enriched = shortlist_enriched.sort_values(["_pri_ord", "QualityScore"], ascending=[True, False])
-        st.dataframe(
-            shortlist_enriched[sl_cols].rename(columns={"PlayerName":"Player","TeamName":"Team","PositionGroup":"Role","AgeYears":"Age","QualityScore":"Quality","QualityTier":"Tier","RoleFitScore":"Role Fit","RiskBand":"Risk"}).round(2),
-            width="stretch", hide_index=True,
-            column_config={
-                "Quality":  st.column_config.ProgressColumn("Quality",  min_value=0, max_value=100, format="%.1f"),
-                "Role Fit": st.column_config.ProgressColumn("Role Fit", min_value=0, max_value=100, format="%.1f"),
-                "Age":      st.column_config.NumberColumn("Age", format="%.1f"),
-                "Priority": st.column_config.SelectboxColumn("Priority", options=["Hot","Watch","Observed"], width="small"),
-                "Notes":    st.column_config.TextColumn("Notes", width="medium"),
-            },
-        )
-        sl_exp_left, sl_exp_right = st.columns(2)
-        _sl_csv_cols = [c for c in export_cols if c in shortlist_enriched.columns]
-        with sl_exp_left:
-            st.download_button("Download shortlist CSV", data=shortlist_enriched[_sl_csv_cols + [c for c in ["Priority","Notes","Added"] if c in shortlist_enriched.columns]].to_csv(index=False).encode("utf-8"), file_name="fchk_shortlist.csv", mime="text/csv", width="stretch")
-        with sl_exp_right:
-            if st.button("Clear shortlist", width="stretch"):
-                clear_shortlist()
-                st.rerun()
+    st.markdown("""
+**Excel sheets included:**
+- **Overview** — summary stats and anomaly type counts
+- **All Anomalies** — complete ranked list (up to 2,000)
+- **Hidden Gems** — low-exposure, high-signal players
+- **Specialist Elite** — elite in 1–2 metrics
+- **Multi-dimensional** — 4+ metrics above threshold
+- **Age-adjusted Gems** — ≤23 anomalies
+- **Consistent Overperformer** — broad positive signal
+- **Set Piece Anomalies** — set-piece outliers
+""")
