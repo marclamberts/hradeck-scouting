@@ -298,13 +298,6 @@ def generate_radar(player_name: str, team: str, df: pd.DataFrame,
     ax.plot(theta_r, [inner_r] * 360, color="#CCBFA8", linewidth=1, zorder=2)
 
     # ── Title block ───────────────────────────────────────────────────────────
-    # P11 logo placeholder (text-based)
-    ax_title.text(0.02, 0.88, "P11", fontsize=22, fontweight="black",
-                  color="white", va="top",
-                  bbox=dict(boxstyle="round,pad=0.3", facecolor="#1B78D0",
-                            edgecolor="none"),
-                  transform=ax_title.transAxes)
-
     # Player name | team
     display_name = f"{player_name.split()[0][0]}. {' '.join(player_name.split()[1:])}" \
         if len(player_name.split()) > 1 else player_name
