@@ -1253,6 +1253,201 @@ def draw_derived_table(ax, player_vals, db_pcts, lg_ranks, specs, title_shown=Fa
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
 
 
+def calc_war(player, pool_lg, pool_db):
+    """
+    Simplified football WAR for wide attackers.
+    Replacement = 15th-percentile Czech First League wide attacker.
+    3 goal-equivalents ≈ 1 win (conservative Czech league estimate).
+    """
+    GOALS_PER_WIN   = 3.0
+    REPL_PERCENTILE = 15
+
+    def _rates(df):
+        xg = df["xG per 90"].fillna(0)            if "xG per 90"                 in df.columns else 0
+        xa = df["xA per 90"].fillna(0)            if "xA per 90"                 in df.columns else 0
+        sa = df["Shot assists per 90"].fillna(0)  if "Shot assists per 90"        in df.columns else 0
+        pr = df["Progressive runs per 90"].fillna(0) if "Progressive runs per 90" in df.columns else 0
+        d  = df["Dribbles per 90"].fillna(0)      if "Dribbles per 90"            in df.columns else 0
+        dp = df["Successful dribbles, %"].fillna(50) if "Successful dribbles, %"  in df.columns else 50
+        off   = xg + xa * 0.85 + sa * 0.28
+        carry = pr * 0.025 + (d * dp / 100) * 0.015
+        return off, carry, off + carry
+
+    def _pval(col, default=0.0):
+        v = player.get(col, default)
+        return float(v) if pd.notna(v) else default
+
+    # Pool rates (vectorized)
+    lg_off, lg_carry, lg_tot = _rates(pool_lg)
+    db_off, db_carry, db_tot = _rates(pool_db)
+
+    repl = float(np.percentile(lg_tot.dropna(), REPL_PERCENTILE))
+
+    # Player rates
+    p_off   = _pval("xG per 90") + _pval("xA per 90") * 0.85 + _pval("Shot assists per 90") * 0.28
+    p_carry = _pval("Progressive runs per 90") * 0.025 + \
+              (_pval("Dribbles per 90") * _pval("Successful dribbles, %", 50) / 100) * 0.015
+    p_tot   = p_off + p_carry
+
+    minutes = _pval("Minutes played", 593)
+    n90     = minutes / 90.0
+    war     = (p_tot - repl) * n90 / GOALS_PER_WIN
+
+    # Pool WARs for distribution
+    lg_min  = pool_lg["Minutes played"].fillna(450) if "Minutes played" in pool_lg.columns \
+              else pd.Series([450] * len(pool_lg))
+    db_min  = pool_db["Minutes played"].fillna(450) if "Minutes played" in pool_db.columns \
+              else pd.Series([450] * len(pool_db))
+
+    lg_wars = ((lg_tot - repl) * (lg_min / 90.0) / GOALS_PER_WIN).dropna().values
+    db_wars = ((db_tot - repl) * (db_min / 90.0) / GOALS_PER_WIN).dropna().values
+
+    pct_lg  = float(percentileofscore(lg_wars, war, kind="rank"))
+    pct_db  = float(percentileofscore(db_wars, war, kind="rank"))
+    rank_lg = int(np.sum(lg_wars < war)) + 1
+
+    return {
+        "war": war, "offensive": p_off, "carrying": p_carry,
+        "player_rate": p_tot, "repl_level": repl,
+        "var_per_90": p_tot - repl, "nineties": n90, "minutes": minutes,
+        "pct_lg": pct_lg, "pct_db": pct_db,
+        "rank_lg": rank_lg, "n_lg": len(lg_wars),
+        "lg_wars": lg_wars, "db_wars": db_wars,
+        "repl_off": float(np.percentile(lg_off.dropna(), REPL_PERCENTILE)),
+        "repl_carry": float(np.percentile(lg_carry.dropna(), REPL_PERCENTILE)),
+        "GOALS_PER_WIN": GOALS_PER_WIN,
+    }
+
+
+def draw_war_banner(ax, wd):
+    ax.set_facecolor(PANEL)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.axis("off")
+    _inner_title(ax, "WAR — WINS ABOVE REPLACEMENT",
+                 "vs 15th-percentile Czech First League wide attacker  ·  3 goals ≈ 1 win")
+
+    war   = wd["war"]
+    c_war = pct_colour(wd["pct_db"])
+
+    # ── Left: big WAR number ─────────────────────────────────────────────────
+    # Background circle
+    ax.add_patch(mpatches.Circle(
+        (0.115, 0.46), 0.100,
+        facecolor=SURFACE2, edgecolor=c_war, linewidth=1.5,
+        transform=ax.transAxes, clip_on=True))
+    ax.text(0.115, 0.50, f"{war:+.2f}",
+            ha="center", va="center", transform=ax.transAxes,
+            color=c_war, fontsize=19, fontweight="bold")
+    ax.text(0.115, 0.14, "Wins Above\nReplacement",
+            ha="center", va="center", transform=ax.transAxes,
+            color=TEXT_MED, fontsize=6.5, linespacing=1.3)
+
+    # ── Middle: component breakdown ───────────────────────────────────────────
+    mid_x0, mid_x1 = 0.26, 0.62
+    bw = mid_x1 - mid_x0
+
+    components = [
+        ("Offensive",          wd["offensive"],  wd["repl_off"],  "#DC2626"),
+        ("Carrying",           wd["carrying"],   wd["repl_carry"],"#D97706"),
+    ]
+    comp_ys = [0.68, 0.44]
+
+    for (label, pv, rv, cc), cy in zip(components, comp_ys):
+        ax.text(mid_x0, cy + 0.08, label, ha="left", va="center",
+                transform=ax.transAxes, color=TEXT_MED, fontsize=7, fontweight="bold")
+        # Track
+        ax.add_patch(mpatches.Rectangle(
+            (mid_x0, cy - 0.04), bw, 0.090,
+            facecolor=SURFACE2, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+        # Scale so max ≈ full bar (use max of player + repl as scale)
+        scale = max(pv, rv, 0.01) * 1.5
+        # Replacement marker
+        rx = mid_x0 + bw * min(rv / scale, 1.0)
+        ax.plot([rx, rx], [cy - 0.04, cy + 0.05], color=TEXT_DIM, lw=1.0, ls="--", zorder=3)
+        ax.text(rx, cy + 0.07, "repl.", ha="center", va="bottom",
+                transform=ax.transAxes, color=TEXT_DIM, fontsize=4.8)
+        # Player bar
+        px = mid_x0 + bw * min(pv / scale, 1.0)
+        ax.add_patch(mpatches.Rectangle(
+            (mid_x0, cy - 0.04), px - mid_x0, 0.090,
+            facecolor=cc, edgecolor="none", alpha=0.72,
+            transform=ax.transAxes, clip_on=True))
+        # value labels
+        sign = "+" if pv >= rv else ""
+        ax.text(mid_x1 + 0.015, cy + 0.02, f"{sign}{pv - rv:+.3f}",
+                ha="left", va="center", transform=ax.transAxes,
+                color=cc, fontsize=7, fontweight="bold")
+        ax.text(mid_x1 + 0.015, cy - 0.04, "above repl.",
+                ha="left", va="center", transform=ax.transAxes,
+                color=TEXT_DIM, fontsize=5.2)
+
+    # Methodology note
+    ax.text((mid_x0 + mid_x1) / 2, 0.11,
+            f"Rate/90: {wd['player_rate']:.3f}  ·  Repl. level: {wd['repl_level']:.3f}  "
+            f"·  {wd['nineties']:.1f} × 90s  ·  ÷ {wd['GOALS_PER_WIN']:.0f} goals/win",
+            ha="center", va="center", transform=ax.transAxes,
+            color=TEXT_DIM, fontsize=5.5)
+
+    # ── Right: mini KDE distribution ─────────────────────────────────────────
+    kde_ax_x0, kde_ax_x1 = 0.69, 0.99
+    kde_w = kde_ax_x1 - kde_ax_x0
+    lg_w  = wd["lg_wars"]
+    war_v = wd["war"]
+
+    if len(lg_w) > 4:
+        lo = np.percentile(lg_w, 2); hi = np.percentile(lg_w, 98)
+        xs = np.linspace(lo, hi, 200)
+        try:
+            kde = gaussian_kde(lg_w, bw_method=0.45)
+            ys  = kde(xs)
+            peak = max(ys.max(), 1e-9)
+            # normalise y to [0, 0.78] axes fraction, baseline at 0.18
+            base_y, top_y = 0.18, 0.88
+            def ty(y_raw): return base_y + (y_raw / peak) * (top_y - base_y)
+
+            # Map x to axes fraction
+            def tx(x_raw): return kde_ax_x0 + (x_raw - lo) / max(hi - lo, 1e-9) * kde_w
+
+            x_ax  = [tx(x) for x in xs]
+            y_ax  = [ty(y) for y in ys]
+            x_fill = x_ax + [x_ax[-1], x_ax[0]]
+            y_fill = y_ax + [base_y, base_y]
+
+            ax.fill(x_fill, y_fill, transform=ax.transAxes, color=LEAGUE_C, alpha=0.15, zorder=1)
+            ax.plot(x_ax, y_ax, transform=ax.transAxes, color=LEAGUE_C, lw=1.2, zorder=2)
+
+            # Player line
+            if lo <= war_v <= hi:
+                vx = tx(war_v)
+                ax.plot([vx, vx], [base_y, top_y * 0.92], transform=ax.transAxes,
+                        color=PLAYER_C, lw=2.0, zorder=4)
+                y_at = ty(float(kde([war_v])[0]))
+                ax.scatter([vx], [y_at], transform=ax.transAxes,
+                           color=PLAYER_C, s=30, zorder=5, linewidths=0)
+                ax.text(vx, top_y * 0.94, f"{war_v:+.2f}",
+                        ha="center", va="bottom", transform=ax.transAxes,
+                        color=PLAYER_C, fontsize=6.5, fontweight="bold")
+
+            # Axis label
+            ax.text((kde_ax_x0 + kde_ax_x1) / 2, base_y - 0.06,
+                    "WAR distribution · Czech First League",
+                    ha="center", va="top", transform=ax.transAxes,
+                    color=TEXT_DIM, fontsize=5.2)
+        except Exception:
+            pass
+
+    # Right-side rank badge
+    ax.text(kde_ax_x1 - 0.01, 0.15,
+            f"Rank  {wd['rank_lg']} / {wd['n_lg']}\n"
+            f"{wd['pct_lg']:.0f}th  League\n"
+            f"{wd['pct_db']:.0f}th  Database",
+            ha="right", va="bottom", transform=ax.transAxes,
+            color=TEXT_MED, fontsize=6.5, linespacing=1.5, fontweight="bold")
+
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+
 def draw_page3_header(ax):
     _off(ax)
     ax.add_patch(mpatches.Rectangle(
@@ -1268,23 +1463,24 @@ def draw_page3_header(ax):
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
 
-def make_page3(player, pool_db, pool_lg, player_vals, db_pcts, lg_ranks):
+def make_page3(player, pool_db, pool_lg, player_vals, db_pcts, lg_ranks, war_data):
     fig3 = plt.figure(figsize=(8.27, 11.69), facecolor=BG)
 
     outer3 = gridspec.GridSpec(
-        3, 1, figure=fig3,
+        4, 1, figure=fig3,
         left=0.04, right=0.97,
         top=0.975, bottom=0.022,
-        height_ratios=[0.055, 0.380, 0.535],
+        height_ratios=[0.055, 0.175, 0.330, 0.415],
         hspace=0.18,
     )
 
     draw_page3_header(fig3.add_subplot(outer3[0]))
-    draw_composite_cards(fig3.add_subplot(outer3[1]), player_vals, db_pcts, lg_ranks)
+    draw_war_banner(fig3.add_subplot(outer3[1]), war_data)
+    draw_composite_cards(fig3.add_subplot(outer3[2]), player_vals, db_pcts, lg_ranks)
 
     # Derived metrics — 2 columns
     drv_gs = gridspec.GridSpecFromSubplotSpec(
-        1, 2, subplot_spec=outer3[2], wspace=0.10,
+        1, 2, subplot_spec=outer3[3], wspace=0.10,
     )
     draw_derived_table(fig3.add_subplot(drv_gs[0]), player_vals, db_pcts, lg_ranks,
                        DERIVED_LEFT, title_shown=True)
@@ -1416,10 +1612,15 @@ def main():
     fig2 = make_page2(player, pool_cl, pool_lg, pool_tier, pool_db,
                       pc_cl, pc_lg, pc_ti, pc_db)
 
-    # Build page 3 composites
+    # Build page 3 composites + WAR
     print("  Computing composite metrics …")
     player_vals, db_pcts3, lg_ranks3 = calc_composites(player, pool_db, pool_lg)
-    fig3 = make_page3(player, pool_db, pool_lg, player_vals, db_pcts3, lg_ranks3)
+    print("  Computing WAR …")
+    war_data = calc_war(player, pool_lg, pool_db)
+    print(f"  WAR = {war_data['war']:+.3f}  "
+          f"(League rank {war_data['rank_lg']}/{war_data['n_lg']}  ·  "
+          f"DB {war_data['pct_db']:.0f}th pctile)")
+    fig3 = make_page3(player, pool_db, pool_lg, player_vals, db_pcts3, lg_ranks3, war_data)
 
     png  = OUT_DIR / "D_Barat_Scouting_Report.png"
     png2 = OUT_DIR / "D_Barat_Scouting_Report_P2.png"
