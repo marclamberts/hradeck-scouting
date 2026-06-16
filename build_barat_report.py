@@ -896,6 +896,415 @@ def make_page2(player, pool_cl, pool_lg, pool_tier, pool_db,
     return fig2
 
 
+# ── Page 3: composite & derived metrics ────────────────────────────────────────
+
+def _g(row, col):
+    """Safe float getter from Series or dict."""
+    v = row.get(col, np.nan) if hasattr(row, "get") else np.nan
+    return float(v) if pd.notna(v) else np.nan
+
+
+def _composite_carrying(r):
+    d = _g(r, "Dribbles per 90"); dp = _g(r, "Successful dribbles, %")
+    pr = _g(r, "Progressive runs per 90"); ac = _g(r, "Accelerations per 90")
+    parts = []
+    if pd.notna(d) and pd.notna(dp): parts.append(d * dp / 100)
+    if pd.notna(pr): parts.append(pr)
+    if pd.notna(ac): parts.append(ac * 0.5)
+    return sum(parts) if parts else np.nan
+
+def _composite_threat(r):
+    xg = _g(r, "xG per 90"); sh = _g(r, "Shots per 90"); bx = _g(r, "Touches in box per 90")
+    parts = []
+    if pd.notna(xg): parts.append(xg * 2.0)
+    if pd.notna(sh): parts.append(sh * 0.3)
+    if pd.notna(bx): parts.append(bx * 0.2)
+    return sum(parts) if parts else np.nan
+
+def _composite_creation(r):
+    xa = _g(r, "xA per 90"); sa = _g(r, "Shot assists per 90")
+    kp = _g(r, "Key passes per 90"); cr = _g(r, "Crosses per 90")
+    ca = _g(r, "Accurate crosses, %")
+    parts = []
+    if pd.notna(xa): parts.append(xa * 2.0)
+    if pd.notna(sa): parts.append(sa * 0.8)
+    if pd.notna(kp): parts.append(kp * 0.5)
+    if pd.notna(cr) and pd.notna(ca): parts.append(cr * ca / 100)
+    return sum(parts) if parts else np.nan
+
+def _composite_duels(r):
+    od = _g(r, "Offensive duels won, %"); dd = _g(r, "Defensive duels won, %")
+    ae = _g(r, "Aerial duels won, %")
+    vals = [v for v in [od, dd, ae * 0.7 if pd.notna(ae) else np.nan] if pd.notna(v)]
+    return float(np.mean(vals)) if vals else np.nan
+
+def _composite_defwork(r):
+    da = _g(r, "Successful defensive actions per 90"); ic = _g(r, "Interceptions per 90")
+    parts = [v for v in [da, ic] if pd.notna(v)]
+    return sum(parts) if parts else np.nan
+
+def _composite_war(r):
+    ca = _composite_carrying(r); th = _composite_threat(r)
+    cr = _composite_creation(r); du = _composite_duels(r); dw = _composite_defwork(r)
+    # normalise duels (already in %-space ~50) by /100 to bring to ~0.5 range
+    du_n = du / 100 if pd.notna(du) else np.nan
+    parts = [(ca, 0.30), (th, 0.25), (cr, 0.30), (du_n, 0.10), (dw, 0.05)]
+    valid = [(v, w) for v, w in parts if pd.notna(v)]
+    if not valid: return np.nan
+    tw = sum(w for _, w in valid)
+    return sum(v * w for v, w in valid) / tw
+
+
+# Each entry: (display_name, subtitle/formula, cat_colour_key, fn)
+COMPOSITE_SPECS = [
+    ("Wide Attacker\nRating",  "Carrying 30 · Threat 25 · Creation 30 · Duels 10 · Def 5",
+     "Carrying",  _composite_war),
+    ("Carrying\nPower",        "Eff. Dribbles + Prog. Runs + 0.5×Accelerations",
+     "Carrying",  _composite_carrying),
+    ("Goal Threat\nIndex",     "2×xG/90  +  0.3×Shots/90  +  0.2×BoxTouch/90",
+     "Threat",    _composite_threat),
+    ("Creative\nDanger",       "2×xA  +  0.8×ShotAssist  +  0.5×KP  +  AccCrosses",
+     "Creation",  _composite_creation),
+    ("Duel\nAuthority",        "Mean of Off%, Def%, 0.7×Aerial% duel win rates",
+     "Duels",     _composite_duels),
+    ("Defensive\nWork",        "Def. Actions/90  +  Interceptions/90",
+     "Defending", _composite_defwork),
+]
+
+
+def _derived_xg_per_shot(r):
+    xg = _g(r, "xG per 90"); sh = _g(r, "Shots per 90")
+    return xg / sh if (pd.notna(xg) and pd.notna(sh) and sh > 0) else np.nan
+
+def _derived_g_minus_xg(r):
+    g = _g(r, "Goals per 90"); xg = _g(r, "xG per 90")
+    return g - xg if (pd.notna(g) and pd.notna(xg)) else np.nan
+
+def _derived_eff_dribbles(r):
+    d = _g(r, "Dribbles per 90"); dp = _g(r, "Successful dribbles, %")
+    return d * dp / 100 if (pd.notna(d) and pd.notna(dp)) else np.nan
+
+def _derived_acc_crosses(r):
+    c = _g(r, "Crosses per 90"); ca = _g(r, "Accurate crosses, %")
+    return c * ca / 100 if (pd.notna(c) and pd.notna(ca)) else np.nan
+
+def _derived_xa_per_kp(r):
+    xa = _g(r, "xA per 90"); kp = _g(r, "Key passes per 90")
+    return xa / kp if (pd.notna(xa) and pd.notna(kp) and kp > 0) else np.nan
+
+def _derived_box_to_shot(r):
+    sh = _g(r, "Shots per 90"); bx = _g(r, "Touches in box per 90")
+    return sh / bx if (pd.notna(sh) and pd.notna(bx) and bx > 0) else np.nan
+
+def _derived_prog_carry(r):
+    pr = _g(r, "Progressive runs per 90"); ac = _g(r, "Accelerations per 90")
+    parts = [v for v in [pr, ac] if pd.notna(v)]
+    return sum(parts) if parts else np.nan
+
+def _derived_involvement(r):
+    ps = _g(r, "Passes per 90"); rp = _g(r, "Received passes per 90")
+    d  = _g(r, "Dribbles per 90"); du_raw = _g(r, "Offensive duels per 90") if "Offensive duels per 90" in (r.index if hasattr(r, "index") else {}) else np.nan
+    parts = [v for v in [ps, rp, d] if pd.notna(v)]
+    return sum(parts) if parts else np.nan
+
+def _derived_duel_overall(r):
+    return _composite_duels(r)
+
+def _derived_shot_conv(r):
+    g = _g(r, "Goals per 90"); sh = _g(r, "Shots per 90")
+    return g / sh if (pd.notna(g) and pd.notna(sh) and sh > 0) else np.nan
+
+def _derived_def_intensity(r):
+    da = _g(r, "Successful defensive actions per 90")
+    ic = _g(r, "Interceptions per 90"); fo = _g(r, "Fouls per 90")
+    parts = [v for v in [da, ic, fo] if pd.notna(v)]
+    return sum(parts) if parts else np.nan
+
+def _derived_press_resist(r):
+    dp = _g(r, "Successful dribbles, %"); od = _g(r, "Offensive duels won, %")
+    vals = [v for v in [dp, od] if pd.notna(v)]
+    return float(np.mean(vals)) if vals else np.nan
+
+
+# (display_name, short_formula, cat, fn, fmt_str)
+DERIVED_LEFT = [
+    ("xG per Shot",           "xG/90 ÷ Shots/90",              "Threat",    _derived_xg_per_shot,   "{:.3f}"),
+    ("G − xG (per 90)",       "Goals/90 minus xG/90",           "Threat",    _derived_g_minus_xg,    "{:+.3f}"),
+    ("Effective Dribbles",    "Dribbles/90 × Success%",         "Carrying",  _derived_eff_dribbles,  "{:.2f}"),
+    ("Accurate Crosses/90",   "Crosses/90 × Accuracy%",         "Creation",  _derived_acc_crosses,   "{:.2f}"),
+    ("xA per Key Pass",       "xA/90 ÷ KeyPass/90",             "Creation",  _derived_xa_per_kp,     "{:.3f}"),
+    ("Box→Shot Rate",         "Shots/90 ÷ BoxTouches/90",       "Threat",    _derived_box_to_shot,   "{:.2f}"),
+    ("Ball Progression/90",   "Prog. Runs + Accelerations",     "Carrying",  _derived_prog_carry,    "{:.2f}"),
+    ("Involvement Index",     "Passes + Received + Dribbles",   "Creation",  _derived_involvement,   "{:.1f}"),
+]
+
+DERIVED_RIGHT = [
+    ("Overall Duel Win%",     "Mean(Off%, Def%, 0.7×Aerial%)",  "Duels",     _derived_duel_overall,  "{:.1f}%"),
+    ("Shot Conversion",       "Goals/90 ÷ Shots/90",            "Threat",    _derived_shot_conv,     "{:.3f}"),
+    ("Def. Intensity/90",     "DefActions + Intercepts + Fouls","Defending", _derived_def_intensity, "{:.2f}"),
+    ("Press Resistance",      "Mean(Drib%, OffDuel%)",          "Carrying",  _derived_press_resist,  "{:.1f}%"),
+    ("Carrying Power",        "Eff.Drib + ProgRuns + 0.5×Accel","Carrying", _composite_carrying,    "{:.2f}"),
+    ("Creative Danger",       "2×xA + 0.8×SA + 0.5×KP + AccCr","Creation", _composite_creation,    "{:.2f}"),
+    ("Goal Threat Index",     "2×xG + 0.3×Shots + 0.2×BxTch",  "Threat",    _composite_threat,      "{:.2f}"),
+    ("Duel Authority",        "Weighted duel win rate index",    "Duels",     _composite_duels,       "{:.1f}%"),
+]
+
+
+def _pool_derived(pool, fn):
+    """Apply a derived metric function to every row in a pool, return array of floats."""
+    vals = []
+    for _, row in pool.iterrows():
+        v = fn(row)
+        if pd.notna(v):
+            vals.append(v)
+    return np.array(vals)
+
+
+def calc_composites(player, pool_db, pool_lg):
+    """Return (player_vals, db_pcts, lg_ranks) dicts for composite + derived specs."""
+    all_specs = (
+        [(s[0].replace("\n", " "), s[3]) for s in COMPOSITE_SPECS] +
+        [(s[0], s[3]) for s in DERIVED_LEFT + DERIVED_RIGHT]
+    )
+    player_vals = {}
+    db_pcts     = {}
+    lg_ranks    = {}
+
+    for name, fn in all_specs:
+        pv   = fn(player)
+        d_vs = _pool_derived(pool_db, fn)
+        l_vs = _pool_derived(pool_lg, fn)
+
+        player_vals[name] = pv
+        db_pcts[name] = percentileofscore(d_vs, pv, kind="rank") \
+                        if (len(d_vs) and pd.notna(pv)) else 50.0
+
+        # League rank: how many are strictly worse + 1
+        if len(l_vs) and pd.notna(pv):
+            rank = int(np.sum(l_vs < pv)) + 1
+            lg_ranks[name] = (rank, len(l_vs))
+        else:
+            lg_ranks[name] = (None, len(l_vs))
+
+    return player_vals, db_pcts, lg_ranks
+
+
+def draw_composite_cards(ax, player_vals, db_pcts, lg_ranks):
+    ax.set_facecolor(BG)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.axis("off")
+    _inner_title(ax, "COMPOSITE METRIC SCORES",
+                 "Custom indices derived from raw Wyscout stats · benchmarked vs full database")
+
+    n_cols, n_rows = 3, 2
+    # card layout in axes fraction
+    pad_x, pad_y = 0.02, 0.06
+    cw = (1.0 - pad_x * (n_cols + 1)) / n_cols
+    ch = (0.88 - pad_y * (n_rows + 1)) / n_rows  # 0.88 leaves room for inner title
+
+    for idx, (name, subtitle, cat_key, fn) in enumerate(COMPOSITE_SPECS):
+        col = idx % n_cols
+        row = idx // n_cols
+        x0 = pad_x + col * (cw + pad_x)
+        y0 = (0.88 - pad_y) - row * (ch + pad_y) - ch
+
+        c_cat = CAT_COLOURS.get(cat_key, ACCENT)
+        key   = name.replace("\n", " ")
+        pv    = player_vals.get(key, np.nan)
+        pct   = db_pcts.get(key, 50.0)
+        rank, n_lg = lg_ranks.get(key, (None, 0))
+        bar_c = pct_colour(pct)
+
+        # Card background
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (x0, y0), cw, ch, boxstyle="round,pad=0.005",
+            facecolor=PANEL, edgecolor=BORDER, linewidth=0.6,
+            transform=ax.transAxes, clip_on=True))
+
+        # Top colour stripe
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (x0, y0 + ch - 0.028), cw, 0.028, boxstyle="round,pad=0.002",
+            facecolor=c_cat, edgecolor="none", alpha=0.15,
+            transform=ax.transAxes, clip_on=True))
+        ax.add_patch(mpatches.Rectangle(
+            (x0, y0 + ch - 0.028), 0.005, 0.028,
+            facecolor=c_cat, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+
+        # Metric name
+        ax.text(x0 + 0.008, y0 + ch - 0.014, name,
+                ha="left", va="center", transform=ax.transAxes,
+                color=TEXT, fontsize=6.2, fontweight="bold", linespacing=1.2)
+
+        # Score value (large)
+        if pd.notna(pv):
+            val_txt = f"{pv:.2f}"
+        else:
+            val_txt = "—"
+        ax.text(x0 + cw / 2, y0 + ch * 0.54, val_txt,
+                ha="center", va="center", transform=ax.transAxes,
+                color=bar_c, fontsize=17, fontweight="bold")
+
+        # Subtitle / formula
+        ax.text(x0 + cw / 2, y0 + ch * 0.30, subtitle,
+                ha="center", va="center", transform=ax.transAxes,
+                color=TEXT_DIM, fontsize=4.8, style="italic", wrap=True)
+
+        # Mini percentile bar
+        bar_y  = y0 + 0.020
+        bar_h2 = 0.014
+        bw = cw - 0.014
+        ax.add_patch(mpatches.Rectangle(
+            (x0 + 0.007, bar_y), bw, bar_h2,
+            facecolor=SURFACE2, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+        ax.add_patch(mpatches.Rectangle(
+            (x0 + 0.007, bar_y), bw * pct / 100, bar_h2,
+            facecolor=bar_c, edgecolor="none", alpha=0.80,
+            transform=ax.transAxes, clip_on=True))
+
+        # Percentile label
+        rank_txt = f"Rank {rank}/{n_lg} · {pct:.0f}th %ile DB" \
+                   if rank else f"{pct:.0f}th %ile vs DB"
+        ax.text(x0 + cw / 2, y0 + 0.005, rank_txt,
+                ha="center", va="bottom", transform=ax.transAxes,
+                color=TEXT_DIM, fontsize=4.8)
+
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+
+def draw_derived_table(ax, player_vals, db_pcts, lg_ranks, specs, title_shown=False):
+    ax.set_facecolor(BG)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.axis("off")
+
+    if title_shown:
+        _inner_title(ax, "DERIVED EFFICIENCY METRICS",
+                     "Computed ratios & indices not directly available in Wyscout")
+
+    top_y = 0.92 if title_shown else 0.97
+    rows  = np.linspace(top_y, 0.03, len(specs))
+    rh    = abs(rows[0] - rows[1]) if len(rows) > 1 else 0.08
+
+    dot_x  = 0.03
+    lbl_x  = 0.08
+    fml_x  = 0.08
+    val_x  = 0.56
+    bar_x0 = 0.62
+    bar_x1 = 0.84
+    pct_x  = 0.86
+    rk_x   = 0.99
+
+    for i, (name, formula, cat_key, fn, fmt) in enumerate(specs):
+        ry  = rows[i]
+        c_c = CAT_COLOURS.get(cat_key, TEXT_DIM)
+
+        if i % 2 == 0:
+            ax.add_patch(mpatches.Rectangle(
+                (0, ry - rh * 0.48), 1.0, rh,
+                facecolor=SURFACE2, edgecolor="none",
+                transform=ax.transAxes, clip_on=True))
+
+        ax.add_patch(mpatches.Circle(
+            (dot_x, ry), rh * 0.20,
+            facecolor=c_c, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+
+        ax.text(lbl_x, ry + rh * 0.14, name,
+                ha="left", va="center", transform=ax.transAxes,
+                color=TEXT, fontsize=6.2, fontweight="bold")
+        ax.text(fml_x, ry - rh * 0.16, formula,
+                ha="left", va="center", transform=ax.transAxes,
+                color=TEXT_DIM, fontsize=4.8, style="italic")
+
+        pv  = player_vals.get(name, np.nan)
+        raw_s = fmt.format(pv) if pd.notna(pv) else "—"
+        pct = db_pcts.get(name, 50.0)
+        bar_c = pct_colour(pct)
+
+        ax.text(val_x, ry, raw_s, ha="right", va="center",
+                transform=ax.transAxes, color=TEXT, fontsize=6.5, fontweight="bold")
+
+        bw = bar_x1 - bar_x0
+        ax.add_patch(mpatches.Rectangle(
+            (bar_x0, ry - rh * 0.20), bw, rh * 0.40,
+            facecolor=SURFACE2, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+        ax.add_patch(mpatches.Rectangle(
+            (bar_x0, ry - rh * 0.20), bw * pct / 100, rh * 0.40,
+            facecolor=bar_c, edgecolor="none", alpha=0.78,
+            transform=ax.transAxes, clip_on=True))
+
+        ax.text(pct_x, ry, f"{pct:.0f}th", ha="left", va="center",
+                transform=ax.transAxes, color=bar_c, fontsize=5.8, fontweight="bold")
+
+        rank, n_pool = lg_ranks.get(name, (None, 0))
+        rk_txt = f"{rank}/{n_pool}" if rank else "—"
+        ax.text(rk_x, ry, rk_txt, ha="right", va="center",
+                transform=ax.transAxes, color=TEXT_DIM, fontsize=5.5)
+
+    # Column headers at top
+    hdr_y = top_y + rh * 0.65
+    for x, lbl, ha_ in [(val_x, "VALUE", "right"), (pct_x, "DB %ILE", "left"),
+                         (rk_x, "LG RANK", "right")]:
+        ax.text(x, hdr_y, lbl, ha=ha_, va="center", transform=ax.transAxes,
+                color=TEXT_DIM, fontsize=5.0, fontweight="bold")
+
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+
+def draw_page3_header(ax):
+    _off(ax)
+    ax.add_patch(mpatches.Rectangle(
+        (-0.018, 0.0), 0.007, 1.0,
+        facecolor=ACCENT, edgecolor="none",
+        transform=ax.transAxes, clip_on=False,
+    ))
+    ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
+            transform=ax.transAxes, color=TEXT, fontsize=22, fontweight="bold")
+    ax.text(0.0, 0.30,
+            "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  Page 3 of 3",
+            ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8)
+    ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
+
+
+def make_page3(player, pool_db, pool_lg, player_vals, db_pcts, lg_ranks):
+    fig3 = plt.figure(figsize=(8.27, 11.69), facecolor=BG)
+
+    outer3 = gridspec.GridSpec(
+        3, 1, figure=fig3,
+        left=0.04, right=0.97,
+        top=0.975, bottom=0.022,
+        height_ratios=[0.055, 0.380, 0.535],
+        hspace=0.18,
+    )
+
+    draw_page3_header(fig3.add_subplot(outer3[0]))
+    draw_composite_cards(fig3.add_subplot(outer3[1]), player_vals, db_pcts, lg_ranks)
+
+    # Derived metrics — 2 columns
+    drv_gs = gridspec.GridSpecFromSubplotSpec(
+        1, 2, subplot_spec=outer3[2], wspace=0.10,
+    )
+    draw_derived_table(fig3.add_subplot(drv_gs[0]), player_vals, db_pcts, lg_ranks,
+                       DERIVED_LEFT, title_shown=True)
+    draw_derived_table(fig3.add_subplot(drv_gs[1]), player_vals, db_pcts, lg_ranks,
+                       DERIVED_RIGHT, title_shown=False)
+
+    # Footer
+    fig3.text(0.04, 0.007,
+              "Data: Wyscout  ·  Czech Fortuna Liga 2025/26  ·  FCHK Scouting",
+              ha="left", va="bottom", color=TEXT_DIM, fontsize=6.5)
+    fig3.text(0.97, 0.007, "hradeck-scouting",
+              ha="right", va="bottom", color=TEXT_DIM, fontsize=6.5)
+    fig3.add_artist(plt.Line2D(
+        [0.04, 0.97], [0.019, 0.019],
+        transform=fig3.transFigure, color=BORDER, lw=0.7,
+    ))
+
+    return fig3
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -1007,22 +1416,30 @@ def main():
     fig2 = make_page2(player, pool_cl, pool_lg, pool_tier, pool_db,
                       pc_cl, pc_lg, pc_ti, pc_db)
 
+    # Build page 3 composites
+    print("  Computing composite metrics …")
+    player_vals, db_pcts3, lg_ranks3 = calc_composites(player, pool_db, pool_lg)
+    fig3 = make_page3(player, pool_db, pool_lg, player_vals, db_pcts3, lg_ranks3)
+
     png  = OUT_DIR / "D_Barat_Scouting_Report.png"
     png2 = OUT_DIR / "D_Barat_Scouting_Report_P2.png"
+    png3 = OUT_DIR / "D_Barat_Scouting_Report_P3.png"
     pdf  = OUT_DIR / "D_Barat_Scouting_Report.pdf"
 
-    fig.savefig(png,  dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    fig.savefig(png,   dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
     fig2.savefig(png2, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    fig3.savefig(png3, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
 
     with PdfPages(pdf) as pp:
         pp.savefig(fig,  bbox_inches="tight", facecolor=BG, edgecolor="none")
         pp.savefig(fig2, bbox_inches="tight", facecolor=BG, edgecolor="none")
+        pp.savefig(fig3, bbox_inches="tight", facecolor=BG, edgecolor="none")
 
-    plt.close(fig)
-    plt.close(fig2)
+    plt.close(fig); plt.close(fig2); plt.close(fig3)
     print(f"  Saved → {png}")
     print(f"  Saved → {png2}")
-    print(f"  Saved → {pdf}  (2 pages)")
+    print(f"  Saved → {png3}")
+    print(f"  Saved → {pdf}  (3 pages)")
 
 
 if __name__ == "__main__":
