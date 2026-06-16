@@ -1,6 +1,7 @@
 """
 build_barat_report.py  —  A4 portrait, professional edition v3
 All section labels drawn INSIDE axes · two-pass bars · fixed table columns
+Page 2: peer comparison + full statistical profile
 """
 from __future__ import annotations
 import warnings; warnings.filterwarnings("ignore")
@@ -14,6 +15,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
+from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import percentileofscore, gaussian_kde, norm
 from pathlib import Path
 
@@ -578,6 +580,322 @@ def draw_bench_table(ax, player, pc_cl, pc_lg, pc_ti, pc_db,
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
 
 
+# ── Page 2 constants ───────────────────────────────────────────────────────────
+
+PEER_TABLE_COLS = [
+    ("Dribbles per 90",          "Drib/90"),
+    ("xG per 90",                "xG/90"),
+    ("Crosses per 90",           "Cross/90"),
+    ("xA per 90",                "xA/90"),
+    ("Progressive runs per 90",  "PrgR/90"),
+    ("Successful dribbles, %",   "Drib%"),
+    ("Offensive duels won, %",   "OffDuel%"),
+]
+
+ALL_STATS_LEFT = [
+    ("Goals per 90",              "Goals / 90",         "Threat"),
+    ("xG per 90",                 "xG / 90",            "Threat"),
+    ("Shots per 90",              "Shots / 90",         "Threat"),
+    ("Shots on target, %",        "Shots on Target %",  "Threat"),
+    ("Touches in box per 90",     "Box Touches / 90",   "Threat"),
+    ("Dribbles per 90",           "Dribbles / 90",      "Carrying"),
+    ("Successful dribbles, %",    "Dribble Success %",  "Carrying"),
+    ("Progressive runs per 90",   "Prog. Runs / 90",    "Carrying"),
+    ("Accelerations per 90",      "Accelerations / 90", "Carrying"),
+    ("xA per 90",                 "xA / 90",            "Creation"),
+    ("Assists per 90",            "Assists / 90",       "Creation"),
+    ("Shot assists per 90",       "Shot Assists / 90",  "Creation"),
+    ("Key passes per 90",         "Key Passes / 90",    "Creation"),
+]
+
+ALL_STATS_RIGHT = [
+    ("Crosses per 90",                    "Crosses / 90",        "Creation"),
+    ("Accurate crosses, %",               "Cross Acc. %",        "Creation"),
+    ("Passes per 90",                     "Passes / 90",         "Creation"),
+    ("Accurate passes, %",                "Pass Acc. %",         "Creation"),
+    ("Long passes per 90",                "Long Passes / 90",    "Creation"),
+    ("Accurate long passes, %",           "Long Pass Acc. %",    "Creation"),
+    ("Received passes per 90",            "Received / 90",       "Creation"),
+    ("Offensive duels won, %",            "Off. Duels Won %",    "Duels"),
+    ("Defensive duels won, %",            "Def. Duels Won %",    "Duels"),
+    ("Aerial duels won, %",               "Aerial Won %",        "Duels"),
+    ("Successful defensive actions per 90","Def. Actions / 90",  "Defending"),
+    ("Interceptions per 90",              "Interceptions / 90",  "Defending"),
+    ("Fouls per 90",                      "Fouls / 90",          "Defending"),
+]
+
+
+# ── Page 2 helpers ─────────────────────────────────────────────────────────────
+
+def find_peers(player, pool_lg, n=8):
+    """Return n most similar players in pool_lg (excl. the player) by z-score dist."""
+    sim_cols = [m for m, *_ in BAR_METRICS if m in pool_lg.columns]
+    pool = pool_lg.copy()
+    # exclude the player themselves
+    player_name = str(player.get("Player", ""))
+    pool = pool[~pool["Player"].astype(str).str.startswith("D. Bar")]
+
+    means = pool[sim_cols].mean()
+    stds  = pool[sim_cols].std().replace(0, 1e-9)
+
+    def zrow(row):
+        return [(row.get(c, np.nan) - means[c]) / stds[c] for c in sim_cols]
+
+    pz = np.array(zrow(player))
+    dists = []
+    for _, row in pool.iterrows():
+        rz = np.array(zrow(row))
+        mask = ~(np.isnan(pz) | np.isnan(rz))
+        if mask.sum() < 3:
+            dists.append(np.inf)
+        else:
+            dists.append(float(np.linalg.norm(pz[mask] - rz[mask])))
+    pool = pool.copy()
+    pool["_dist"] = dists
+    return pool.nsmallest(n, "_dist").reset_index(drop=True)
+
+
+def draw_page2_header(ax, player):
+    _off(ax)
+    ax.add_patch(mpatches.Rectangle(
+        (-0.018, 0.0), 0.007, 1.0,
+        facecolor=ACCENT, edgecolor="none",
+        transform=ax.transAxes, clip_on=False,
+    ))
+    ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
+            transform=ax.transAxes, color=TEXT, fontsize=22, fontweight="bold")
+    ax.text(0.0, 0.30,
+            "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  Page 2 of 2",
+            ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8)
+    ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
+
+
+def draw_peers(ax, player, pool_lg, pc_lg):
+    ax.set_facecolor(PANEL)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.axis("off")
+
+    _inner_title(ax, "PEER COMPARISON",
+                 "Top 8 most similar wide attackers · Czech Fortuna Liga · z-score distance")
+
+    peers = find_peers(player, pool_lg, n=8)
+
+    # Build display header
+    fixed_hdrs = ["PLAYER", "TEAM", "AGE", "MIN"]
+    metric_hdrs = [lbl for _, lbl in PEER_TABLE_COLS]
+    all_hdrs = fixed_hdrs + metric_hdrs
+
+    # Column x-positions (fractions)
+    col_xs = [0.00, 0.24, 0.38, 0.44, 0.50] + \
+             list(np.linspace(0.56, 0.99, len(metric_hdrs) + 1)[:-1])
+    col_xs.append(1.00)  # right edge sentinel
+
+    n_rows = 1 + len(peers)   # header + peers
+    # add player row at top
+    rows_y = np.linspace(0.86, 0.04, n_rows + 1)
+    rh = abs(rows_y[0] - rows_y[1])
+
+    def col_cx(ci):
+        return (col_xs[ci] + col_xs[ci + 1]) / 2
+
+    # ── Header row ──────────────────────────────────────────────────────────
+    ax.add_patch(mpatches.Rectangle(
+        (col_xs[0], rows_y[0] - rh * 0.48),
+        col_xs[-1] - col_xs[0], rh,
+        facecolor=SURFACE2, edgecolor="none",
+        transform=ax.transAxes, clip_on=True))
+
+    for ci, hdr in enumerate(all_hdrs):
+        ax.text(col_xs[ci] if ci < 2 else col_cx(ci), rows_y[0],
+                hdr, ha="left" if ci < 2 else "center", va="center",
+                transform=ax.transAxes, color=TEXT_DIM,
+                fontsize=5.5, fontweight="bold")
+
+    ax.plot([col_xs[0], col_xs[-1]], [rows_y[0] - rh * 0.50] * 2,
+            transform=ax.transAxes, color=BORDER, lw=0.8)
+
+    # ── Barát row (highlighted) ─────────────────────────────────────────────
+    ry = rows_y[1]
+    ax.add_patch(mpatches.Rectangle(
+        (col_xs[0], ry - rh * 0.48),
+        col_xs[-1] - col_xs[0], rh,
+        facecolor="#EEF2FF", edgecolor=ACCENT, linewidth=0.6,
+        transform=ax.transAxes, clip_on=True))
+
+    p_name = str(player.get("Player", "D. Barát"))
+    p_team = str(player.get("Team within selected timeframe", "Slovácko"))
+    p_age  = str(int(player.get("Age", 19))) if pd.notna(player.get("Age", np.nan)) else "—"
+    p_min  = str(int(player.get("Minutes played", 593))) \
+             if pd.notna(player.get("Minutes played", np.nan)) else "—"
+
+    fixed_vals = [p_name, p_team, p_age, p_min]
+    for ci, v in enumerate(fixed_vals):
+        ax.text(col_xs[ci] + 0.005, ry, v,
+                ha="left", va="center",
+                transform=ax.transAxes, color=TEXT,
+                fontsize=6.5 if ci == 0 else 6, fontweight="bold" if ci == 0 else "normal")
+
+    for mi, (col, _lbl) in enumerate(PEER_TABLE_COLS):
+        ci = 4 + mi
+        raw = float(player.get(col, np.nan))
+        txt = (f"{raw:.1f}%" if "%" in _lbl else f"{raw:.2f}") if pd.notna(raw) else "—"
+        c   = pct_colour(pc_lg.get(col, 50.0))
+        ax.text(col_cx(ci), ry, txt,
+                ha="center", va="center",
+                transform=ax.transAxes, color=c,
+                fontsize=6.5, fontweight="bold")
+
+    ax.plot([col_xs[0], col_xs[-1]], [ry - rh * 0.50] * 2,
+            transform=ax.transAxes, color=BORDER, lw=0.5)
+
+    # ── Peer rows ───────────────────────────────────────────────────────────
+    for ri, (_, peer) in enumerate(peers.iterrows()):
+        ry = rows_y[ri + 2]
+        if (ri + 1) % 2 == 0:
+            ax.add_patch(mpatches.Rectangle(
+                (col_xs[0], ry - rh * 0.48),
+                col_xs[-1] - col_xs[0], rh,
+                facecolor=SURFACE2, edgecolor="none",
+                transform=ax.transAxes, clip_on=True))
+
+        nm  = str(peer.get("Player", ""))[:22]
+        tm  = str(peer.get("Team within selected timeframe", ""))[:14]
+        age = str(int(peer.get("Age", 0))) if pd.notna(peer.get("Age", np.nan)) else "—"
+        mn  = str(int(peer.get("Minutes played", 0))) \
+              if pd.notna(peer.get("Minutes played", np.nan)) else "—"
+
+        for ci, v in enumerate([nm, tm, age, mn]):
+            ax.text(col_xs[ci] + 0.005, ry, v,
+                    ha="left", va="center",
+                    transform=ax.transAxes, color=TEXT_MED,
+                    fontsize=6 if ci == 0 else 5.8)
+
+        for mi, (col, _lbl) in enumerate(PEER_TABLE_COLS):
+            ci = 4 + mi
+            raw = float(peer.get(col, np.nan))
+            txt = (f"{raw:.1f}%" if "%" in _lbl else f"{raw:.2f}") if pd.notna(raw) else "—"
+            # colour relative to league pool
+            vals_lg = pool_lg[col].dropna().values if col in pool_lg.columns else np.array([])
+            p_score = percentileofscore(vals_lg, raw, kind="rank") if (len(vals_lg) and pd.notna(raw)) else 50.0
+            ax.text(col_cx(ci), ry, txt,
+                    ha="center", va="center",
+                    transform=ax.transAxes, color=pct_colour(p_score),
+                    fontsize=5.8)
+
+        ax.plot([col_xs[0], col_xs[-1]], [ry - rh * 0.50] * 2,
+                transform=ax.transAxes, color=BORDER, lw=0.3)
+
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+
+def draw_stats_col(ax, player, pool_db, stats, title_shown=False):
+    """Draw one column of the full statistical profile."""
+    ax.set_facecolor(BG)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.axis("off")
+
+    if title_shown:
+        _inner_title(ax, "FULL STATISTICAL PROFILE",
+                     "Value  ·  mini-bar coloured by database percentile")
+
+    n    = len(stats)
+    rows = np.linspace(0.90 if title_shown else 0.97, 0.02, n)
+    rh   = abs(rows[0] - rows[1]) if n > 1 else 0.06
+
+    dot_x   = 0.03
+    lbl_x   = 0.08
+    val_x   = 0.52
+    bar_x0  = 0.58
+    bar_x1  = 0.86
+    pct_x   = 0.90
+
+    for i, (col, lbl, cat) in enumerate(stats):
+        ry = rows[i]
+        c_cat = CAT_COLOURS.get(cat, TEXT_DIM)
+
+        if i % 2 == 0:
+            ax.add_patch(mpatches.Rectangle(
+                (0, ry - rh * 0.48), 1.0, rh,
+                facecolor=SURFACE2, edgecolor="none",
+                transform=ax.transAxes, clip_on=True))
+
+        # Category dot
+        ax.add_patch(mpatches.Circle(
+            (dot_x, ry), rh * 0.22,
+            facecolor=c_cat, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+
+        # Label
+        ax.text(lbl_x, ry, lbl, ha="left", va="center",
+                transform=ax.transAxes, color=TEXT_MED, fontsize=6.0)
+
+        # Value
+        raw = float(player.get(col, np.nan)) if col in player.index else np.nan
+        raw_s = (f"{raw:.1f}%" if col.endswith(", %") or col.endswith(", %")
+                 else f"{raw:.2f}") if pd.notna(raw) else "—"
+        ax.text(val_x, ry, raw_s, ha="right", va="center",
+                transform=ax.transAxes, color=TEXT, fontsize=6.5, fontweight="bold")
+
+        # Mini gradient bar
+        vals_db = pool_db[col].dropna().values if col in pool_db.columns else np.array([])
+        p_score = percentileofscore(vals_db, raw, kind="rank") \
+                  if (len(vals_db) and pd.notna(raw)) else 50.0
+        bar_c = pct_colour(p_score)
+        bw = bar_x1 - bar_x0
+        ax.add_patch(mpatches.Rectangle(
+            (bar_x0, ry - rh * 0.22), bw, rh * 0.44,
+            facecolor=SURFACE2, edgecolor="none",
+            transform=ax.transAxes, clip_on=True))
+        ax.add_patch(mpatches.Rectangle(
+            (bar_x0, ry - rh * 0.22), bw * p_score / 100, rh * 0.44,
+            facecolor=bar_c, edgecolor="none", alpha=0.78,
+            transform=ax.transAxes, clip_on=True))
+
+        # Percentile text
+        ax.text(pct_x, ry, f"{p_score:.0f}th", ha="left", va="center",
+                transform=ax.transAxes, color=bar_c, fontsize=6.0, fontweight="bold")
+
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+
+
+def make_page2(player, pool_cl, pool_lg, pool_tier, pool_db,
+               pc_cl, pc_lg, pc_ti, pc_db):
+    fig2 = plt.figure(figsize=(8.27, 11.69), facecolor=BG)
+
+    outer2 = gridspec.GridSpec(
+        3, 1, figure=fig2,
+        left=0.04, right=0.97,
+        top=0.975, bottom=0.022,
+        height_ratios=[0.055, 0.375, 0.535],
+        hspace=0.18,
+    )
+
+    draw_page2_header(fig2.add_subplot(outer2[0]), player)
+    draw_peers(fig2.add_subplot(outer2[1]), player, pool_lg, pc_lg)
+
+    # Full stats — 2 columns
+    stats_gs = gridspec.GridSpecFromSubplotSpec(
+        1, 2, subplot_spec=outer2[2], wspace=0.10,
+    )
+    draw_stats_col(fig2.add_subplot(stats_gs[0]), player, pool_db,
+                   ALL_STATS_LEFT, title_shown=True)
+    draw_stats_col(fig2.add_subplot(stats_gs[1]), player, pool_db,
+                   ALL_STATS_RIGHT, title_shown=False)
+
+    # Footer
+    fig2.text(0.04, 0.007,
+              "Data: Wyscout  ·  Czech Fortuna Liga 2025/26  ·  FCHK Scouting",
+              ha="left", va="bottom", color=TEXT_DIM, fontsize=6.5)
+    fig2.text(0.97, 0.007, "hradeck-scouting",
+              ha="right", va="bottom", color=TEXT_DIM, fontsize=6.5)
+    fig2.add_artist(plt.Line2D(
+        [0.04, 0.97], [0.019, 0.019],
+        transform=fig2.transFigure, color=BORDER, lw=0.7,
+    ))
+
+    return fig2
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -676,13 +994,35 @@ def main():
         transform=fig.transFigure, color=BORDER, lw=0.7,
     ))
 
-    png = OUT_DIR / "D_Barat_Scouting_Report.png"
-    pdf = OUT_DIR / "D_Barat_Scouting_Report.pdf"
-    fig.savefig(png, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
-    fig.savefig(pdf, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    # Build page 2
+    keys2 = list({m for m, *_ in ALL_STATS_LEFT + ALL_STATS_RIGHT} | set(keys))
+    pc_cl2 = calc_pcts(player, pool_cl,   keys2)
+    pc_lg2 = calc_pcts(player, pool_lg,   keys2)
+    pc_ti2 = calc_pcts(player, pool_tier, keys2)
+    pc_db2 = calc_pcts(player, pool_db,   keys2)
+    # merge into existing dicts
+    pc_cl.update(pc_cl2); pc_lg.update(pc_lg2)
+    pc_ti.update(pc_ti2); pc_db.update(pc_db2)
+
+    fig2 = make_page2(player, pool_cl, pool_lg, pool_tier, pool_db,
+                      pc_cl, pc_lg, pc_ti, pc_db)
+
+    png  = OUT_DIR / "D_Barat_Scouting_Report.png"
+    png2 = OUT_DIR / "D_Barat_Scouting_Report_P2.png"
+    pdf  = OUT_DIR / "D_Barat_Scouting_Report.pdf"
+
+    fig.savefig(png,  dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    fig2.savefig(png2, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+
+    with PdfPages(pdf) as pp:
+        pp.savefig(fig,  bbox_inches="tight", facecolor=BG, edgecolor="none")
+        pp.savefig(fig2, bbox_inches="tight", facecolor=BG, edgecolor="none")
+
     plt.close(fig)
+    plt.close(fig2)
     print(f"  Saved → {png}")
-    print(f"  Saved → {pdf}")
+    print(f"  Saved → {png2}")
+    print(f"  Saved → {pdf}  (2 pages)")
 
 
 if __name__ == "__main__":
