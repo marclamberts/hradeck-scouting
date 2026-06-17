@@ -1,6 +1,6 @@
 """
-build_barat_full_report.py — 5-page scouting report for D. Barát
-Pages: Title · 1 Profile · 2 Stats · 3 Advanced · 4 Physical
+build_barat_full_report.py — 6-page scouting report for D. Barát
+Pages: Title · 1 Profile · 2 Stats · 3 Advanced · 4 Physical · 5 FCHK Model V3
 Saves: reports/D_Barat_Scouting_Report_Full.pdf  (+ individual PNGs)
 """
 from __future__ import annotations
@@ -100,7 +100,7 @@ def draw_page4_header(ax):
             transform=ax.transAxes, color=TEXT, fontsize=22, fontweight="bold")
     ax.text(0.0, 0.30,
             "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  "
-            "Physical Profile  ·  Page 4 of 4",
+            "Physical Profile  ·  Page 4 of 5",
             ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
@@ -408,16 +408,19 @@ def make_title_page(n_lg, n_db):
     contents = [
         ("1", "Profile Overview",
          "Profile fit · KDE distributions · Percentile bars · Benchmark table",
-         "Page 1 of 4"),
+         "Page 1 of 5"),
         ("2", "Statistical Analysis",
          "Peer comparison · Full statistical profile (26 Wyscout metrics)",
-         "Page 2 of 4"),
+         "Page 2 of 5"),
         ("3", "Advanced Analytics",
          "WAR · Composite scores · Derived efficiency metrics",
-         "Page 3 of 4"),
+         "Page 3 of 5"),
         ("4", "Physical Profile",
          "SkillCorner: sprint mechanics · speed grades · physical distributions",
-         "Page 4 of 4"),
+         "Page 4 of 5"),
+        ("5", "FCHK Model V3",
+         "Component scores · Smart club closeness · Recruitment signals",
+         "Page 5 of 5"),
     ]
 
     entry_h = 0.068
@@ -556,6 +559,250 @@ def make_page1(player, pool_cl, pool_lg, pool_tier, pool_db,
     return fig
 
 
+# ── FCHK Model V3 data ────────────────────────────────────────────────────────
+
+FCHK_V3_PATH = "data/FCHK Model V3 - Recruitment Scores.xlsx"
+
+MODEL_SCORES = [
+    ("AttackingScore",       "Attacking"),
+    ("CreationScore",        "Creation"),
+    ("DefendingScore",       "Defending"),
+    ("PhysicalScore",        "Physical"),
+    ("BallSecurityScore",    "Ball Security"),
+    ("GoalsAddedScore",      "Goals Added"),
+    ("xThreatScore",         "xThreat"),
+    ("MultiPhaseImpactScore","Multi-Phase"),
+    ("DevelopmentValueScore","Dev. Value"),
+]
+
+SMART_CLUBS = [
+    ("PozzoTradingScore",          "Pozzo Trading"),
+    ("BenficaAcademyUpsideScore",  "Benfica Academy"),
+    ("DortmundOpportunityScore",   "Dortmund"),
+    ("PortugueseTradingScore",     "Portuguese Trading"),
+    ("RedBullScore",               "Red Bull"),
+    ("AZScore",                    "AZ"),
+    ("ToulouseDataValueScore",     "Toulouse"),
+    ("BenhamScore",                "Brentford / Benham"),
+    ("CopenhagenIntegrationScore", "Copenhagen"),
+    ("BrightonBrentfordScore",     "Brighton"),
+]
+
+KEY_PILLS = [
+    ("CompositeRecruitmentScore", "Composite Score",    ""),
+    ("ValueRecruitmentScore",     "Value Score",        ""),
+    ("AgeResaleScore",            "Age Resale",         ""),
+    ("DevelopmentValueScore",     "Dev. Value",         ""),
+    ("SuccessProbability",        "Success Prob.",      "%"),
+    ("SampleConfidence",          "Confidence",         "%"),
+]
+
+
+def load_fchk_model() -> dict:
+    df = pd.read_excel(FCHK_V3_PATH, sheet_name="Recruitment Scores")
+    row = df[df["PlayerName"] == "Daniel Barat"].iloc[0]
+    return row.to_dict()
+
+
+def make_page5(model: dict) -> plt.Figure:
+    """FCHK Model V3 page — component scores, smart club closeness, key signals."""
+    fig = plt.figure(figsize=(8.27, 11.69), facecolor=BG)
+
+    outer = gridspec.GridSpec(
+        5, 1, figure=fig,
+        left=0.06, right=0.97,
+        top=0.975, bottom=0.022,
+        height_ratios=[0.070, 0.115, 0.360, 0.320, 0.115],
+        hspace=0.28,
+    )
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    ax_hdr = fig.add_subplot(outer[0])
+    _off(ax_hdr)
+    ax_hdr.add_patch(mpatches.FancyBboxPatch(
+        (0, 0), 1, 1, transform=ax_hdr.transAxes,
+        boxstyle="round,pad=0", fc=ACCENT, ec="none", zorder=0,
+    ))
+    ax_hdr.text(0.012, 0.54, "FCHK MODEL V3", transform=ax_hdr.transAxes,
+                fontsize=10, fontweight="bold", color="white", va="center")
+    version = str(model.get("ModelVersion", "V3")).split(" ")[0]
+    run_date = str(model.get("RunDate", "2026"))[:10]
+    ax_hdr.text(0.98, 0.54, f"{version}  ·  Run {run_date}",
+                transform=ax_hdr.transAxes, fontsize=6.5, color="white",
+                va="center", ha="right", alpha=0.85)
+
+    # ── Score band banner ─────────────────────────────────────────────────────
+    ax_band = fig.add_subplot(outer[1])
+    _off(ax_band, face=SURFACE2)
+    ax_band.add_patch(mpatches.FancyBboxPatch(
+        (0, 0), 1, 1, transform=ax_band.transAxes,
+        boxstyle="round,pad=0", fc=SURFACE2, ec=BORDER, lw=0.6,
+    ))
+
+    composite = float(model.get("CompositeRecruitmentScore", 50))
+    band      = str(model.get("ScoreBand", ""))
+    style1    = str(model.get("PrimaryPlayerStyle", ""))
+    style2    = str(model.get("SecondaryPlayerStyle", ""))
+    archetype = str(model.get("ClosestArchetype", ""))
+    smart_top = str(model.get("SmartClubTop3", ""))
+    conf_band = str(model.get("ConfidenceBand", ""))
+
+    band_colour = "#DC2626" if "Concern" in band else (
+        "#16A34A" if "Strong" in band else "#D97706"
+    )
+
+    # Big composite number
+    ax_band.text(0.03, 0.75, f"{composite:.1f}", transform=ax_band.transAxes,
+                 fontsize=28, fontweight="bold", color=ACCENT, va="top")
+    ax_band.text(0.03, 0.28, "Composite Recruitment Score",
+                 transform=ax_band.transAxes, fontsize=6.5, color=TEXT_DIM, va="center")
+
+    # Score band badge
+    ax_band.add_patch(mpatches.FancyBboxPatch(
+        (0.22, 0.52), 0.22, 0.30, transform=ax_band.transAxes,
+        boxstyle="round,pad=0.02", fc=band_colour, ec="none",
+    ))
+    ax_band.text(0.33, 0.67, band, transform=ax_band.transAxes,
+                 fontsize=6, fontweight="bold", color="white", va="center", ha="center")
+
+    # Style and archetype
+    ax_band.text(0.48, 0.75, f"{style1}  ·  {style2}",
+                 transform=ax_band.transAxes, fontsize=7.5, fontweight="bold",
+                 color=TEXT, va="top")
+    ax_band.text(0.48, 0.50, f"Closest Archetype: {archetype}",
+                 transform=ax_band.transAxes, fontsize=6.5, color=TEXT_MED, va="top")
+    ax_band.text(0.48, 0.28, f"Smart Club: {smart_top}",
+                 transform=ax_band.transAxes, fontsize=6, color=TEXT_DIM, va="top")
+
+    conf_colour = "#16A34A" if "Good" in conf_band else "#D97706"
+    ax_band.text(0.98, 0.28, f"● {conf_band}", transform=ax_band.transAxes,
+                 fontsize=6, color=conf_colour, va="top", ha="right")
+
+    # 6 key pills across bottom row
+    pill_cols = [
+        "#1D4ED8", "#1D4ED8", "#7C3AED", "#7C3AED", "#059669", "#059669",
+    ]
+    pill_w, pill_h = 0.145, 0.28
+    gap = (1.0 - 6 * pill_w) / 7
+    for i, (col_key, label, unit) in enumerate(KEY_PILLS):
+        x = gap + i * (pill_w + gap)
+        val = model.get(col_key, 0)
+        val_str = f"{float(val):.1f}{unit}" if pd.notna(val) else "—"
+        ax_band.add_patch(mpatches.FancyBboxPatch(
+            (x, -0.05), pill_w, pill_h, transform=ax_band.transAxes,
+            boxstyle="round,pad=0.01", fc=pill_cols[i], ec="none", clip_on=False,
+        ))
+        ax_band.text(x + pill_w / 2, 0.105, val_str, transform=ax_band.transAxes,
+                     fontsize=8, fontweight="bold", color="white",
+                     va="center", ha="center", clip_on=False)
+        ax_band.text(x + pill_w / 2, -0.02, label, transform=ax_band.transAxes,
+                     fontsize=5.2, color="white", va="center", ha="center",
+                     alpha=0.88, clip_on=False)
+
+    # ── Component scores (horizontal bar chart) ───────────────────────────────
+    ax_comp = fig.add_subplot(outer[2])
+    _off(ax_comp, face=BG)
+    _inner_title(ax_comp, "COMPONENT SCORES  (0–100 percentile scale)")
+
+    labels   = [lbl for _, lbl in MODEL_SCORES]
+    vals     = [float(model.get(key, 50)) for key, _ in MODEL_SCORES]
+    n_bars   = len(labels)
+    bar_h    = 0.55
+    y_pos    = list(range(n_bars - 1, -1, -1))
+
+    # Background tracks
+    for y in y_pos:
+        ax_comp.barh(y, 100, left=0, height=bar_h, color=SURFACE2, zorder=0)
+
+    COMP_CMAP = LinearSegmentedColormap.from_list("comp", ["#DC2626", "#F59E0B", "#16A34A"])
+    bar_colours = [COMP_CMAP(v / 100) for v in vals]
+    for i, (y, v, c) in enumerate(zip(y_pos, vals, bar_colours)):
+        ax_comp.barh(y, v, height=bar_h, color=c, zorder=2)
+        ax_comp.text(v + 1.5, y, f"{v:.1f}", va="center", fontsize=6.5, color=TEXT)
+
+    ax_comp.set_yticks(y_pos)
+    ax_comp.set_yticklabels(labels, fontsize=7, color=TEXT)
+    ax_comp.set_xlim(0, 108)
+    ax_comp.set_ylim(-0.6, n_bars - 0.4)
+    ax_comp.axvline(50, color=BORDER, lw=0.8, ls="--", zorder=1)
+    ax_comp.tick_params(axis="x", labelsize=6, colors=TEXT_DIM)
+    ax_comp.set_xlabel("Score (0–100)", fontsize=6.5, color=TEXT_DIM)
+    for sp in ax_comp.spines.values():
+        sp.set_visible(False)
+    ax_comp.tick_params(axis="y", length=0)
+
+    # ── Smart Club Closeness (bar chart) ──────────────────────────────────────
+    ax_clubs = fig.add_subplot(outer[3])
+    _off(ax_clubs, face=BG)
+    _inner_title(ax_clubs, "SMART CLUB CLOSENESS")
+
+    sc_labels = [lbl for _, lbl in SMART_CLUBS]
+    sc_vals   = [float(model.get(key, 0)) for key, _ in SMART_CLUBS]
+    sc_n      = len(sc_labels)
+    sc_y      = list(range(sc_n - 1, -1, -1))
+
+    # Top3 highlighted
+    top3_keys = {k for k, _ in SMART_CLUBS[:3]}
+    closeness_tier = str(model.get("SmartClubClosenessTier", ""))
+    tier_colour = "#16A34A" if "Strong" in closeness_tier else (
+        "#D97706" if "Medium" in closeness_tier else TEXT_DIM
+    )
+
+    for y in sc_y:
+        ax_clubs.barh(y, 100, left=0, height=bar_h, color=SURFACE2, zorder=0)
+    for i, (y, v, (key, lbl)) in enumerate(zip(sc_y, sc_vals, SMART_CLUBS)):
+        c = ACCENT if i < 3 else "#94A3B8"
+        ax_clubs.barh(y, v, height=bar_h, color=c, zorder=2)
+        ax_clubs.text(v + 1.5, y, f"{v:.1f}", va="center", fontsize=6.5, color=TEXT)
+
+    ax_clubs.set_yticks(sc_y)
+    ax_clubs.set_yticklabels(sc_labels, fontsize=7, color=TEXT)
+    ax_clubs.set_xlim(0, 108)
+    ax_clubs.set_ylim(-0.6, sc_n - 0.4)
+    ax_clubs.axvline(50, color=BORDER, lw=0.8, ls="--", zorder=1)
+    ax_clubs.tick_params(axis="x", labelsize=6, colors=TEXT_DIM)
+    ax_clubs.set_xlabel("Closeness Score (0–100)", fontsize=6.5, color=TEXT_DIM)
+    for sp in ax_clubs.spines.values():
+        sp.set_visible(False)
+    ax_clubs.tick_params(axis="y", length=0)
+
+    tier_txt = f"Tier: {closeness_tier}" if closeness_tier else ""
+    ax_clubs.text(0.98, 1.04, tier_txt, transform=ax_clubs.transAxes,
+                  fontsize=6.5, color=tier_colour, ha="right", va="bottom")
+
+    # ── Risk / flags ──────────────────────────────────────────────────────────
+    ax_risk = fig.add_subplot(outer[4])
+    _off(ax_risk, face=PANEL)
+    ax_risk.add_patch(mpatches.FancyBboxPatch(
+        (0, 0), 1, 1, transform=ax_risk.transAxes,
+        boxstyle="round,pad=0", fc=PANEL, ec=BORDER, lw=0.6,
+    ))
+
+    flags = [
+        ("Wage Risk",         model.get("WageRisk", "—")),
+        ("Fee Risk",          model.get("FeeRisk", "—")),
+        ("Availability",      model.get("AvailabilityFlag", "—")),
+        ("Minutes Flag",      model.get("MinutesRiskFlag", "—")),
+        ("Data Coverage",     model.get("DataCoverageFlag", "—")),
+        ("Deal Realism",      f"{float(model.get('DealRealismScore', 0)):.1f}"),
+    ]
+    col_w = 1.0 / len(flags)
+    for i, (flag_lbl, flag_val) in enumerate(flags):
+        x = (i + 0.5) * col_w
+        ax_risk.text(x, 0.68, str(flag_val), transform=ax_risk.transAxes,
+                     fontsize=6.8, fontweight="bold", color=TEXT, va="center", ha="center")
+        ax_risk.text(x, 0.28, flag_lbl, transform=ax_risk.transAxes,
+                     fontsize=5.5, color=TEXT_DIM, va="center", ha="center")
+
+    # Footer note
+    ax_risk.text(0.5, -0.18,
+                 "FCHK Model V3  ·  Data: Wyscout / IMPECT 2025/26  ·  FCHK Scouting",
+                 transform=ax_risk.transAxes, fontsize=5.5, color=TEXT_DIM,
+                 va="top", ha="center")
+
+    return fig
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -586,6 +833,12 @@ def main():
     print("Loading SkillCorner data …")
     barat_sc, pool_sc = load_skillcorner()
 
+    print("Loading FCHK Model V3 …")
+    model_data = load_fchk_model()
+    print(f"  Composite={model_data['CompositeRecruitmentScore']:.1f}  "
+          f"Band={model_data['ScoreBand']}  "
+          f"Style={model_data['PrimaryPlayerStyle']}")
+
     # ── Build pages ────────────────────────────────────────────────────────────
     print("Building pages …")
     fig0 = make_title_page(n_lg, n_db)
@@ -596,25 +849,29 @@ def main():
                       pc_cl, pc_lg, pc_ti, pc_db)
     fig3 = make_page3(player, pool_db, pool_lg, player_vals, db_pcts3, lg_ranks3, war_data)
     fig4 = make_page4(barat_sc, pool_sc)
+    fig5 = make_page5(model_data)
 
     # ── Save ───────────────────────────────────────────────────────────────────
     png_title = OUT_DIR / "D_Barat_Scouting_Report_Title.png"
     png_p4    = OUT_DIR / "D_Barat_Scouting_Report_P4.png"
+    png_p5    = OUT_DIR / "D_Barat_Scouting_Report_P5.png"
     pdf_full  = OUT_DIR / "D_Barat_Scouting_Report_Full.pdf"
 
     fig0.savefig(png_title, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
     fig4.savefig(png_p4,    dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    fig5.savefig(png_p5,    dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
 
     with PdfPages(pdf_full) as pp:
-        for fig in [fig0, fig1, fig2, fig3, fig4]:
+        for fig in [fig0, fig1, fig2, fig3, fig4, fig5]:
             pp.savefig(fig, bbox_inches="tight", facecolor=BG, edgecolor="none")
 
-    for fig in [fig0, fig1, fig2, fig3, fig4]:
+    for fig in [fig0, fig1, fig2, fig3, fig4, fig5]:
         plt.close(fig)
 
     print(f"  Saved → {png_title}")
     print(f"  Saved → {png_p4}")
-    print(f"  Saved → {pdf_full}  (5 pages: Title + Pages 1–4)")
+    print(f"  Saved → {png_p5}")
+    print(f"  Saved → {pdf_full}  (6 pages: Title + Pages 1–5)")
 
 
 if __name__ == "__main__":
