@@ -812,15 +812,19 @@ def make_page5(model: dict) -> plt.Figure:
     bar_colours = [COMP_CMAP(v / 100) for v in vals]
     for i, (y, v, c) in enumerate(zip(y_pos, vals, bar_colours)):
         ax_comp.barh(y, v, height=bar_h, color=c, zorder=2)
-        ax_comp.text(v + 1.5, y, f"{v:.1f}", va="center", fontsize=6.5, color=TEXT)
+        # Label inside the track (always readable, no margin needed)
+        ax_comp.text(1.2, y, labels[i], va="center", ha="left",
+                     fontsize=7, color=TEXT, zorder=4, fontweight="bold")
+        # Score value at the right end
+        ax_comp.text(v + 1.0, y, f"{v:.1f}", va="center", ha="left",
+                     fontsize=6.5, color=TEXT_DIM, zorder=4)
 
-    ax_comp.set_yticks(y_pos)
-    ax_comp.set_yticklabels(labels, fontsize=7, color=TEXT)
-    ax_comp.set_xlim(0, 108)
+    ax_comp.set_yticks([])
+    ax_comp.set_xlim(0, 115)
     ax_comp.set_ylim(-0.6, n_bars - 0.4)
     ax_comp.axvline(50, color=BORDER, lw=0.8, ls="--", zorder=1)
     ax_comp.tick_params(axis="x", labelsize=6, colors=TEXT_DIM)
-    ax_comp.set_xlabel("Score (0–100)", fontsize=6.5, color=TEXT_DIM)
+    ax_comp.set_xlabel("Score (0–100)  ·  dashed line = average (50)", fontsize=6.5, color=TEXT_DIM)
     for sp in ax_comp.spines.values():
         sp.set_visible(False)
     ax_comp.tick_params(axis="y", length=0)
@@ -847,11 +851,13 @@ def make_page5(model: dict) -> plt.Figure:
     for i, (y, v, (key, lbl)) in enumerate(zip(sc_y, sc_vals, SMART_CLUBS)):
         c = ACCENT if i < 3 else "#94A3B8"
         ax_clubs.barh(y, v, height=bar_h, color=c, zorder=2)
-        ax_clubs.text(v + 1.5, y, f"{v:.1f}", va="center", fontsize=6.5, color=TEXT)
+        ax_clubs.text(1.2, y, sc_labels[i], va="center", ha="left",
+                      fontsize=6.8, color=TEXT, zorder=4, fontweight="bold")
+        ax_clubs.text(v + 1.0, y, f"{v:.1f}", va="center", ha="left",
+                      fontsize=6.5, color=TEXT_DIM, zorder=4)
 
-    ax_clubs.set_yticks(sc_y)
-    ax_clubs.set_yticklabels(sc_labels, fontsize=7, color=TEXT)
-    ax_clubs.set_xlim(0, 108)
+    ax_clubs.set_yticks([])
+    ax_clubs.set_xlim(0, 115)
     ax_clubs.set_ylim(-0.6, sc_n - 0.4)
     ax_clubs.axvline(50, color=BORDER, lw=0.8, ls="--", zorder=1)
     ax_clubs.tick_params(axis="x", labelsize=6, colors=TEXT_DIM)
