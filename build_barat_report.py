@@ -257,7 +257,7 @@ def draw_header(ax, n_lg, n_db):
     ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
             transform=ax.transAxes, color=TEXT, fontsize=26, fontweight="bold")
     ax.text(0.0, 0.33,
-            "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  Czech Republic",
+            "Slovácko  ·  Czech Fortuna Liga 2025/26 (Final)  ·  LAMF / LW / LWB  ·  Age 19  ·  Czech Republic",
             ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8.5)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 

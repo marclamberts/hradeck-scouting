@@ -444,8 +444,8 @@ def make_title_page(n_lg, n_db):
             transform=ax.transAxes, color="#3A5A9F", lw=0.6, zorder=10)
 
     # Reference & season
-    for i, txt in enumerate(["REF: " + REPORT_REF, "SEASON: 2025/26", "DATE: June 2026",
-                              "STATUS: CONFIDENTIAL"]):
+    for i, txt in enumerate(["REF: " + REPORT_REF, "SEASON: 2025/26 (Final)", "DATE: June 2026",
+                              "WINDOW: Summer 2026 → 2026/27"]):
         ax.text(PANEL_W / 2, 0.475 - i * 0.040, txt, ha="center", va="center",
                 transform=ax.transAxes, color="#BFCCE8", fontsize=6.5, zorder=10)
 
@@ -480,7 +480,7 @@ def make_title_page(n_lg, n_db):
     ax.text(RX, 0.900, "D. BARÁT", ha="left", va="top",
             transform=ax.transAxes, color=FCHK_DARK,
             fontsize=46, fontweight="bold")
-    ax.text(RX, 0.802, "PLAYER ASSESSMENT REPORT  ·  2025/26",
+    ax.text(RX, 0.802, "PLAYER ASSESSMENT REPORT  ·  SUMMER 2026  ·  2026/27 WINDOW",
             ha="left", va="top", transform=ax.transAxes,
             color=FCHK_BLUE, fontsize=11.5, fontweight="bold")
     ax.text(RX, 0.758,
@@ -565,8 +565,8 @@ def make_title_page(n_lg, n_db):
     ax.plot([RX, 0.97], [my, my], transform=ax.transAxes, color=BORDER, lw=0.7)
     context_lines = [
         f"Benchmarks: Club (n=10)  ·  Czech First League (n={n_lg})  ·  Tier-3 Global (n=2,385)  ·  Full DB (n={n_db:,})",
-        "Data: Wyscout (Czech Fortuna Liga 2025/26)  ·  SkillCorner physical tracking (Czech FL 2025/26)",
-        "Profile fit: The Athletic attacker archetypes  ·  WAR: 3 goals/win, 15th-pctile replacement",
+        "Data: Wyscout (Czech Fortuna Liga 2025/26, season complete)  ·  SkillCorner physical tracking (Czech FL 2025/26 final)",
+        "Profile fit: The Athletic attacker archetypes  ·  WAR: 3 goals/win, 15th-pctile replacement  ·  Prepared: Summer 2026",
     ]
     for ki, line in enumerate(context_lines):
         ax.text(RX, my - 0.017 - ki * 0.022, line, ha="left", va="top",
@@ -702,12 +702,13 @@ def make_page5(model: dict) -> plt.Figure:
     """FCHK Model V3 page — component scores, smart club closeness, key signals."""
     fig = plt.figure(figsize=(8.27, 11.69), facecolor=BG)
 
+    # 6 rows: header | band | pills | comp scores | smart clubs | risk flags
     outer = gridspec.GridSpec(
-        5, 1, figure=fig,
+        6, 1, figure=fig,
         left=0.06, right=0.97,
         top=0.975, bottom=0.022,
-        height_ratios=[0.070, 0.115, 0.360, 0.320, 0.115],
-        hspace=0.28,
+        height_ratios=[0.060, 0.110, 0.068, 0.365, 0.322, 0.055],
+        hspace=0.25,
     )
 
     # ── Header ────────────────────────────────────────────────────────────────
@@ -715,17 +716,18 @@ def make_page5(model: dict) -> plt.Figure:
     _off(ax_hdr)
     ax_hdr.add_patch(mpatches.FancyBboxPatch(
         (0, 0), 1, 1, transform=ax_hdr.transAxes,
-        boxstyle="round,pad=0", fc=ACCENT, ec="none", zorder=0,
+        boxstyle="round,pad=0", fc=FCHK_DARK, ec="none", zorder=0,
     ))
-    ax_hdr.text(0.012, 0.54, "FCHK MODEL V3", transform=ax_hdr.transAxes,
-                fontsize=10, fontweight="bold", color="white", va="center")
+    ax_hdr.text(0.012, 0.54, "FCHK MODEL V3  —  RECRUITMENT SCORING",
+                transform=ax_hdr.transAxes, fontsize=9.5,
+                fontweight="bold", color="white", va="center")
     version = str(model.get("ModelVersion", "V3")).split(" ")[0]
     run_date = str(model.get("RunDate", "2026"))[:10]
-    ax_hdr.text(0.98, 0.54, f"{version}  ·  Run {run_date}",
-                transform=ax_hdr.transAxes, fontsize=6.5, color="white",
-                va="center", ha="right", alpha=0.85)
+    ax_hdr.text(0.98, 0.54, f"{version}  ·  Run {run_date}  ·  2025/26 Final",
+                transform=ax_hdr.transAxes, fontsize=6.5, color=FCHK_GOLD,
+                va="center", ha="right")
 
-    # ── Score band banner ─────────────────────────────────────────────────────
+    # ── Score band banner (composite + band badge + style + archetype) ────────
     ax_band = fig.add_subplot(outer[1])
     _off(ax_band, face=SURFACE2)
     ax_band.add_patch(mpatches.FancyBboxPatch(
@@ -745,56 +747,54 @@ def make_page5(model: dict) -> plt.Figure:
         "#16A34A" if "Strong" in band else "#D97706"
     )
 
-    # Big composite number
-    ax_band.text(0.03, 0.75, f"{composite:.1f}", transform=ax_band.transAxes,
-                 fontsize=28, fontweight="bold", color=ACCENT, va="top")
-    ax_band.text(0.03, 0.28, "Composite Recruitment Score",
+    ax_band.text(0.03, 0.80, f"{composite:.1f}", transform=ax_band.transAxes,
+                 fontsize=26, fontweight="bold", color=ACCENT, va="top")
+    ax_band.text(0.03, 0.20, "Composite Recruitment Score",
                  transform=ax_band.transAxes, fontsize=6.5, color=TEXT_DIM, va="center")
 
-    # Score band badge
     ax_band.add_patch(mpatches.FancyBboxPatch(
-        (0.22, 0.52), 0.22, 0.30, transform=ax_band.transAxes,
+        (0.22, 0.38), 0.24, 0.46, transform=ax_band.transAxes,
         boxstyle="round,pad=0.02", fc=band_colour, ec="none",
     ))
-    ax_band.text(0.33, 0.67, band, transform=ax_band.transAxes,
-                 fontsize=6, fontweight="bold", color="white", va="center", ha="center")
+    ax_band.text(0.34, 0.62, band, transform=ax_band.transAxes,
+                 fontsize=5.8, fontweight="bold", color="white",
+                 va="center", ha="center")
 
-    # Style and archetype
-    ax_band.text(0.48, 0.75, f"{style1}  ·  {style2}",
-                 transform=ax_band.transAxes, fontsize=7.5, fontweight="bold",
+    ax_band.text(0.50, 0.82, f"{style1}  ·  {style2}",
+                 transform=ax_band.transAxes, fontsize=7.2, fontweight="bold",
                  color=TEXT, va="top")
-    ax_band.text(0.48, 0.50, f"Closest Archetype: {archetype}",
+    ax_band.text(0.50, 0.52, f"Archetype: {archetype}",
                  transform=ax_band.transAxes, fontsize=6.5, color=TEXT_MED, va="top")
-    ax_band.text(0.48, 0.28, f"Smart Club: {smart_top}",
-                 transform=ax_band.transAxes, fontsize=6, color=TEXT_DIM, va="top")
-
+    ax_band.text(0.50, 0.24, f"Smart clubs: {smart_top}",
+                 transform=ax_band.transAxes, fontsize=5.8, color=TEXT_DIM, va="top")
     conf_colour = "#16A34A" if "Good" in conf_band else "#D97706"
-    ax_band.text(0.98, 0.28, f"● {conf_band}", transform=ax_band.transAxes,
+    ax_band.text(0.98, 0.24, f"● {conf_band}", transform=ax_band.transAxes,
                  fontsize=6, color=conf_colour, va="top", ha="right")
 
-    # 6 key pills across bottom row
-    pill_cols = [
-        "#1D4ED8", "#1D4ED8", "#7C3AED", "#7C3AED", "#059669", "#059669",
-    ]
-    pill_w, pill_h = 0.145, 0.28
-    gap = (1.0 - 6 * pill_w) / 7
+    # ── Key pills (own dedicated row — no overflow) ───────────────────────────
+    ax_pills = fig.add_subplot(outer[2])
+    _off(ax_pills, face=BG)
+    pill_cols = [FCHK_BLUE, FCHK_BLUE, "#7C3AED", "#7C3AED", "#059669", "#059669"]
+    pill_w = 0.145
+    gap    = (1.0 - 6 * pill_w) / 7
     for i, (col_key, label, unit) in enumerate(KEY_PILLS):
-        x = gap + i * (pill_w + gap)
+        x   = gap + i * (pill_w + gap)
         val = model.get(col_key, 0)
         val_str = f"{float(val):.1f}{unit}" if pd.notna(val) else "—"
-        ax_band.add_patch(mpatches.FancyBboxPatch(
-            (x, -0.05), pill_w, pill_h, transform=ax_band.transAxes,
-            boxstyle="round,pad=0.01", fc=pill_cols[i], ec="none", clip_on=False,
+        ax_pills.add_patch(mpatches.FancyBboxPatch(
+            (x, 0.06), pill_w, 0.88,
+            boxstyle="round,pad=0.010", fc=pill_cols[i], ec="none",
+            transform=ax_pills.transAxes, clip_on=True,
         ))
-        ax_band.text(x + pill_w / 2, 0.105, val_str, transform=ax_band.transAxes,
-                     fontsize=8, fontweight="bold", color="white",
-                     va="center", ha="center", clip_on=False)
-        ax_band.text(x + pill_w / 2, -0.02, label, transform=ax_band.transAxes,
-                     fontsize=5.2, color="white", va="center", ha="center",
-                     alpha=0.88, clip_on=False)
+        ax_pills.text(x + pill_w / 2, 0.66, val_str,
+                      transform=ax_pills.transAxes, fontsize=9,
+                      fontweight="bold", color="white", va="center", ha="center")
+        ax_pills.text(x + pill_w / 2, 0.24, label,
+                      transform=ax_pills.transAxes, fontsize=5.5,
+                      color="white", va="center", ha="center", alpha=0.90)
 
     # ── Component scores (horizontal bar chart) ───────────────────────────────
-    ax_comp = fig.add_subplot(outer[2])
+    ax_comp = fig.add_subplot(outer[3])
     _off(ax_comp, face=BG)
     _inner_title(ax_comp, "COMPONENT SCORES  (0–100 percentile scale)")
 
@@ -826,7 +826,7 @@ def make_page5(model: dict) -> plt.Figure:
     ax_comp.tick_params(axis="y", length=0)
 
     # ── Smart Club Closeness (bar chart) ──────────────────────────────────────
-    ax_clubs = fig.add_subplot(outer[3])
+    ax_clubs = fig.add_subplot(outer[4])
     _off(ax_clubs, face=BG)
     _inner_title(ax_clubs, "SMART CLUB CLOSENESS")
 
@@ -865,7 +865,7 @@ def make_page5(model: dict) -> plt.Figure:
                   fontsize=6.5, color=tier_colour, ha="right", va="bottom")
 
     # ── Risk / flags ──────────────────────────────────────────────────────────
-    ax_risk = fig.add_subplot(outer[4])
+    ax_risk = fig.add_subplot(outer[5])
     _off(ax_risk, face=PANEL)
     ax_risk.add_patch(mpatches.FancyBboxPatch(
         (0, 0), 1, 1, transform=ax_risk.transAxes,
@@ -902,32 +902,32 @@ def make_page5(model: dict) -> plt.Figure:
 VERDICT        = "MONITOR"
 VERDICT_COLOUR = "#D97706"   # amber = watch/monitor
 VERDICT_DESC   = (
-    "Barát presents a compelling age-physical combination not yet reflected in "
-    "output metrics. Elite sprint engine (Top 7% Czech league) and very high "
-    "development value (76.9) contrast with a model 'wrong role' flag and "
-    "below-average creative numbers. The ceiling is real; the current context "
-    "suppresses it. Revisit at season end or on role change."
+    "The 2025/26 season is complete. Barát's elite athletic profile (Top 7% Czech "
+    "league sprint distance) and exceptional development ceiling (Dev. Value 76.9) "
+    "make him a priority monitor entering the summer 2026/27 window. The model "
+    "'wrong role' flag suggests Slovácko underutilises him — a club offering "
+    "wider positional freedom could unlock meaningfully higher output. Act now."
 )
 STRENGTHS = [
-    "Elite athleticism  —  93rd pct sprint distance, 92nd pct sprint count (SkillCorner)",
-    "Age trajectory  —  Development Value 76.9, Age Resale 92.1 at age 19.7",
+    "Elite athleticism  —  93rd pct sprint distance, 92nd pct sprint count (2025/26 final)",
+    "Age trajectory  —  Dev. Value 76.9, Age Resale 92.1; maximum upside at 19.7",
     "Dribble volume  —  4.55 dribbles/90, direct carrying threat in transition",
-    "Smart Club fit  —  Strong closeness to Pozzo / Benfica academy trading model",
-    "Accessible deal  —  Czech Tier 1, lower fee risk, potentially realistic wage",
+    "Smart Club fit  —  Strong alignment with Pozzo / Benfica academy trading model",
+    "Accessible deal  —  Czech Tier 1, lower fee risk, realistic 2026/27 window",
 ]
 CONCERNS = [
-    "Role misalignment  —  FCHK Model V3 flags 'Concern / wrong role' band",
-    "Creative output  —  xA 0.38, xG 0.93 for 593 min; below wide-attacker norms",
+    "Role misalignment  —  FCHK Model V3 flags 'Concern / wrong role' for 2025/26",
+    "Creative output  —  xA 0.38, xG 0.93 over 593 min; below wide-attacker norms",
     "WAR rank 37/99  —  Slightly below Czech league median for wide attackers",
-    "Sample size  —  593 min / 19 matches limits projection confidence",
-    "No video review  —  Live/video assessment not yet completed (see Next Steps)",
+    "Sample size  —  593 min over season; would benefit from ≥900 min for projection",
+    "No video review  —  Live / video assessment not yet completed",
 ]
 NEXT_STEPS = [
-    "Request 6-match video package  (focus: press triggers, transition runs)",
-    "Attend one Slovácko home match before end of 2025/26 season",
-    "Re-score in July 2026 with full season data (target ≥1,000 min threshold)",
-    "Formal interest only if role autonomy improves or output jumps ≥10 pct",
-    "Explore availability window: January 2027 if summer 2026 window missed",
+    "Request 2025/26 full-season video package (min. 8 matches, focus transitions)",
+    "Season complete — re-run FCHK Model V3 with full 2025/26 dataset now available",
+    "Submit formal interest to agent by 31 July 2026 for 2026/27 registration",
+    "Schedule pre-season assessment visit (Slovácko training camp, July–Aug 2026)",
+    "Priority: Summer 2026 window — confirm contract status and transfer fee",
 ]
 TRANSFER_FLAGS = [
     ("Fee Range",     "€100–300k est."),
@@ -1052,7 +1052,7 @@ def make_verdict_page() -> plt.Figure:
                 blines, bl = [], ""
                 for w in words2:
                     t = (bl + " " + w).strip()
-                    if len(t) > 30:
+                    if len(t) > 42:
                         blines.append(bl)
                         bl = w
                     else:
@@ -1093,9 +1093,10 @@ def make_verdict_page() -> plt.Figure:
     ax_sign.plot([0, 1], [0.80, 0.80],
                  transform=ax_sign.transAxes, color=FCHK_GOLD, lw=1.0)
     ax_sign.text(0.0, 0.62, "This report is produced by the FC Hradec Králové "
-                 "Scouting Intelligence department and is for internal use only. "
-                 "All scores are model-derived and should be combined with live "
-                 "scouting observation before recruitment action is taken.",
+                 "Scouting Intelligence department for the Summer 2026 / 2026-27 "
+                 "recruitment window. For internal use only. All scores are "
+                 "model-derived and must be combined with live observation before "
+                 "any recruitment action is taken.",
                  transform=ax_sign.transAxes, fontsize=6.5, color=TEXT_DIM,
                  va="top", wrap=True)
 
