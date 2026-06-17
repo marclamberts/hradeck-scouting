@@ -75,6 +75,18 @@ TIER3_STEMS = {
     "England II","Spain II","Germany II","Italy II","France II",
 }
 
+# ── Player config (monkey-patchable for multi-player reports) ──────────────────
+P_HEADER_NAME     = "D. BARÁT"
+P_HEADER_SUBTITLE = ("Slovácko  ·  Czech Fortuna Liga 2025/26 (Final)  ·  "
+                     "LAMF / LW / LWB  ·  Age 19  ·  Czech Republic")
+P_PAGE2_SUBTITLE  = ("Slovácko  ·  Czech Fortuna Liga  ·  "
+                     "LAMF / LW / LWB  ·  Age 19  ·  Page 2 of 2")
+P_PAGE3_SUBTITLE  = ("Slovácko  ·  Czech Fortuna Liga  ·  "
+                     "LAMF / LW / LWB  ·  Age 19  ·  Page 3 of 3")
+P_PILLS           = [("MIN","593"),("MATCHES","19"),("xG","0.93"),("xA","0.38"),("DRIB/90","4.55")]
+P_WYSCOUT_FILTER  = "D. Bar"
+P_LEGEND_LABEL    = "D. Barát"
+
 CAT_COLOURS = {
     "Threat":    "#DC2626",
     "Carrying":  "#D97706",
@@ -161,7 +173,7 @@ def load_data():
     df_c1["_file"] = "Czech"
     df_c1["_pos1"] = df_c1["Position"].astype(str).str.split(",").str[0].str.strip()
 
-    player  = df_c1[df_c1["Player"].astype(str).str.startswith("D. Bar")].iloc[0].copy()
+    player  = df_c1[df_c1["Player"].astype(str).str.startswith(P_WYSCOUT_FILTER)].iloc[0].copy()
     team_kw = str(player.get("Team within selected timeframe", "Slovácko")).split()[0]
 
     pool_lg = df_c1[df_c1["_pos1"].isin(WIDE_ATK_POS) &
@@ -254,14 +266,13 @@ def draw_header(ax, n_lg, n_db):
         facecolor=ACCENT, edgecolor="none",
         transform=ax.transAxes, clip_on=False,
     ))
-    ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
+    ax.text(0.0, 0.97, P_HEADER_NAME, ha="left", va="top",
             transform=ax.transAxes, color=TEXT, fontsize=26, fontweight="bold")
-    ax.text(0.0, 0.33,
-            "Slovácko  ·  Czech Fortuna Liga 2025/26 (Final)  ·  LAMF / LW / LWB  ·  Age 19  ·  Czech Republic",
+    ax.text(0.0, 0.33, P_HEADER_SUBTITLE,
             ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8.5)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
-    pills = [("MIN","593"),("MATCHES","19"),("xG","0.93"),("xA","0.38"),("DRIB/90","4.55")]
+    pills = P_PILLS
     px = 0.50
     for j, (lbl, val) in enumerate(pills):
         if j > 0:
@@ -633,7 +644,7 @@ def find_peers(player, pool_lg, n=8):
     pool = pool_lg.copy()
     # exclude the player themselves
     player_name = str(player.get("Player", ""))
-    pool = pool[~pool["Player"].astype(str).str.startswith("D. Bar")]
+    pool = pool[~pool["Player"].astype(str).str.startswith(P_WYSCOUT_FILTER)]
 
     means = pool[sim_cols].mean()
     stds  = pool[sim_cols].std().replace(0, 1e-9)
@@ -662,10 +673,9 @@ def draw_page2_header(ax, player):
         facecolor=ACCENT, edgecolor="none",
         transform=ax.transAxes, clip_on=False,
     ))
-    ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
+    ax.text(0.0, 0.97, P_HEADER_NAME, ha="left", va="top",
             transform=ax.transAxes, color=TEXT, fontsize=22, fontweight="bold")
-    ax.text(0.0, 0.30,
-            "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  Page 2 of 2",
+    ax.text(0.0, 0.30, P_PAGE2_SUBTITLE,
             ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
@@ -1455,10 +1465,9 @@ def draw_page3_header(ax):
         facecolor=ACCENT, edgecolor="none",
         transform=ax.transAxes, clip_on=False,
     ))
-    ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
+    ax.text(0.0, 0.97, P_HEADER_NAME, ha="left", va="top",
             transform=ax.transAxes, color=TEXT, fontsize=22, fontweight="bold")
-    ax.text(0.0, 0.30,
-            "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  Page 3 of 3",
+    ax.text(0.0, 0.30, P_PAGE3_SUBTITLE,
             ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
@@ -1548,7 +1557,7 @@ def main():
             Line2D([0],[0], color="#94A3B8", lw=1.3, label="Full database"),
             Line2D([0],[0], color=LEAGUE_C,  lw=1.3, ls="--",
                    label="Czech First League"),
-            Line2D([0],[0], color=PLAYER_C,  lw=1.8, label="D. Barát"),
+            Line2D([0],[0], color=PLAYER_C,  lw=1.8, label=P_LEGEND_LABEL),
         ],
         loc="lower center", bbox_to_anchor=(0.5, -0.94),
         ncol=3, frameon=False, fontsize=5.8, labelcolor=TEXT_DIM, handlelength=1.2,

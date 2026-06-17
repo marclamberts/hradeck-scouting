@@ -50,6 +50,25 @@ PANEL    = "#EEF3FF"
 SURFACE2 = "#DDE7FF"
 
 
+# ── Player config (override in wrapper scripts for multi-player reports) ───────
+P_SC_SHORT        = "D. Barát"
+P_SC_FULL         = "Barát"
+P_MODEL_NAME      = "Daniel Barat"
+P_COVER_NAME      = "D. BARÁT"
+P_COVER_SUBTITLE  = "PLAYER ASSESSMENT REPORT  ·  SUMMER 2026  ·  2026/27 WINDOW"
+P_COVER_INFO      = "Slovácko  ·  Czech Fortuna Liga  ·  Age 19  ·  Czech Republic"
+P_COVER_POS_LABEL = "WIDE ATTACKER"
+P_COVER_POS_SHORT = "LAMF  ·  LW  ·  LWB"
+P_COVER_TEAM      = "1. FC SLOVÁCKO"
+P_COVER_LEAGUE    = "Czech Fortuna Liga"
+P_COVER_PILLS     = [("MIN","593"),("MATCHES","19"),("xG","0.93"),("xA","0.38"),("DRIB/90","4.55")]
+P_P4_NAME         = "D. BARÁT"
+P_P4_SUBTITLE     = ("Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  "
+                     "Physical Profile  ·  Page 4 of 6")
+P_P4_LEGEND_LABEL = "D. Barát"
+P_VERDICT_HEADER  = "D. BARÁT"
+REPORT_OUT_PREFIX = "D_Barat_Scouting_Report"
+
 SC_PATH = "data/SkillCorner.csv"
 
 SC_PILLS = [                              # (col, label, unit)
@@ -119,11 +138,11 @@ def load_skillcorner():
     for col in df.columns[6:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    barat_rows = df[df["Short Name"].str.strip() == "D. Barát"]
+    barat_rows = df[df["Short Name"].str.strip() == P_SC_SHORT]
     if barat_rows.empty:
-        barat_rows = df[df["Player"].str.contains("Barát", na=False)]
+        barat_rows = df[df["Player"].str.contains(P_SC_FULL, na=False)]
     if barat_rows.empty:
-        raise ValueError("D. Barát not found in SkillCorner CSV")
+        raise ValueError(f"{P_SC_SHORT} not found in SkillCorner CSV")
 
     # If multiple stints, keep all (single row in this CSV)
     barat_sc = barat_rows.iloc[0]
@@ -144,11 +163,9 @@ def draw_page4_header(ax):
         facecolor=ACCENT, edgecolor="none",
         transform=ax.transAxes, clip_on=False,
     ))
-    ax.text(0.0, 0.97, "D. BARÁT", ha="left", va="top",
+    ax.text(0.0, 0.97, P_P4_NAME, ha="left", va="top",
             transform=ax.transAxes, color=TEXT, fontsize=22, fontweight="bold")
-    ax.text(0.0, 0.30,
-            "Slovácko  ·  Czech Fortuna Liga  ·  LAMF / LW / LWB  ·  Age 19  ·  "
-            "Physical Profile  ·  Page 4 of 6",
+    ax.text(0.0, 0.30, P_P4_SUBTITLE,
             ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
@@ -291,7 +308,7 @@ def draw_sc_distributions(axes, barat_sc, pool_sc):
         ("Sprint Distance P90","Sprint Dist / 90 (m)"),
     ]
     _inner_title(axes[0], "PHYSICAL DISTRIBUTIONS",
-                 "Czech First League (grey)  ·  D. Barát (purple)")
+                 f"Czech First League (grey)  ·  {P_P4_LEGEND_LABEL} (purple)")
 
     for idx, (ax, (col, label)) in enumerate(zip(axes, dist_pairs)):
         ax.set_facecolor(PANEL)
@@ -373,7 +390,7 @@ def make_page4(barat_sc, pool_sc):
     dist_axes[0].legend(
         handles=[
             Line2D([0],[0], color="#94A3B8", lw=1.3, label="Czech First League"),
-            Line2D([0],[0], color=PLAYER_C,  lw=1.8, label="D. Barát"),
+            Line2D([0],[0], color=PLAYER_C,  lw=1.8, label=P_P4_LEGEND_LABEL),
         ],
         loc="lower center", bbox_to_anchor=(1.2, -0.94),
         ncol=2, frameon=False, fontsize=5.8, labelcolor=TEXT_DIM, handlelength=1.2,
@@ -450,17 +467,17 @@ def make_title_page(n_lg, n_db):
                 transform=ax.transAxes, color="#BFCCE8", fontsize=6.5, zorder=10)
 
     # Vertical position label
-    ax.text(PANEL_W / 2, 0.155, "WIDE ATTACKER", ha="center", va="center",
+    ax.text(PANEL_W / 2, 0.155, P_COVER_POS_LABEL, ha="center", va="center",
             transform=ax.transAxes, color=FCHK_GOLD, fontsize=8,
             fontweight="bold", zorder=10)
-    ax.text(PANEL_W / 2, 0.118, "LAMF  ·  LW  ·  LWB", ha="center", va="center",
+    ax.text(PANEL_W / 2, 0.118, P_COVER_POS_SHORT, ha="center", va="center",
             transform=ax.transAxes, color="#BFCCE8", fontsize=7, zorder=10)
     ax.plot([0.03, PANEL_W - 0.03], [0.095, 0.095],
             transform=ax.transAxes, color="#3A5A9F", lw=0.6, zorder=10)
-    ax.text(PANEL_W / 2, 0.065, "1. FC SLOVÁCKO", ha="center", va="center",
+    ax.text(PANEL_W / 2, 0.065, P_COVER_TEAM, ha="center", va="center",
             transform=ax.transAxes, color="white", fontsize=7,
             fontweight="bold", zorder=10)
-    ax.text(PANEL_W / 2, 0.040, "Czech Fortuna Liga", ha="center", va="center",
+    ax.text(PANEL_W / 2, 0.040, P_COVER_LEAGUE, ha="center", va="center",
             transform=ax.transAxes, color="#BFCCE8", fontsize=6.5, zorder=10)
 
     # ── Right section: player name + stats + contents ──────────────────────────
@@ -477,14 +494,13 @@ def make_title_page(n_lg, n_db):
             fontsize=5.5, fontweight="bold", zorder=11)
 
     # Player name block
-    ax.text(RX, 0.900, "D. BARÁT", ha="left", va="top",
+    ax.text(RX, 0.900, P_COVER_NAME, ha="left", va="top",
             transform=ax.transAxes, color=FCHK_DARK,
             fontsize=46, fontweight="bold")
-    ax.text(RX, 0.802, "PLAYER ASSESSMENT REPORT  ·  SUMMER 2026  ·  2026/27 WINDOW",
+    ax.text(RX, 0.802, P_COVER_SUBTITLE,
             ha="left", va="top", transform=ax.transAxes,
             color=FCHK_BLUE, fontsize=11.5, fontweight="bold")
-    ax.text(RX, 0.758,
-            "Slovácko  ·  Czech Fortuna Liga  ·  Age 19  ·  Czech Republic",
+    ax.text(RX, 0.758, P_COVER_INFO,
             ha="left", va="top", transform=ax.transAxes,
             color=TEXT_DIM, fontsize=9.5)
 
@@ -493,8 +509,7 @@ def make_title_page(n_lg, n_db):
             transform=ax.transAxes, color=FCHK_GOLD, lw=1.8)
 
     # Key stat pills (5 pills in FCHK blue)
-    pills = [("MIN", "593"), ("MATCHES", "19"), ("xG", "0.93"),
-             ("xA", "0.38"), ("DRIB/90", "4.55")]
+    pills = P_COVER_PILLS
     pill_w = (0.97 - RX - 0.016 * 4) / 5
     for j, (lbl, val) in enumerate(pills):
         px = RX + j * (pill_w + 0.016)
@@ -605,7 +620,7 @@ def make_page1(player, pool_cl, pool_lg, pool_tier, pool_db,
         handles=[
             Line2D([0],[0], color="#94A3B8", lw=1.3, label="Full database"),
             Line2D([0],[0], color=LEAGUE_C,  lw=1.3, ls="--", label="Czech First League"),
-            Line2D([0],[0], color=PLAYER_C,  lw=1.8, label="D. Barát"),
+            Line2D([0],[0], color=PLAYER_C,  lw=1.8, label=_bbr.P_LEGEND_LABEL),
         ],
         loc="lower center", bbox_to_anchor=(0.5, -0.94),
         ncol=3, frameon=False, fontsize=5.8, labelcolor=TEXT_DIM, handlelength=1.2,
@@ -694,8 +709,10 @@ KEY_PILLS = [
 
 def load_fchk_model() -> dict:
     df = pd.read_excel(FCHK_V3_PATH, sheet_name="Recruitment Scores")
-    row = df[df["PlayerName"] == "Daniel Barat"].iloc[0]
-    return row.to_dict()
+    rows = df[df["PlayerName"] == P_MODEL_NAME]
+    if rows.empty:
+        raise ValueError(f"'{P_MODEL_NAME}' not found in FCHK Model V3")
+    return rows.iloc[0].to_dict()
 
 
 def make_page5(model: dict) -> plt.Figure:
@@ -964,7 +981,7 @@ def make_verdict_page() -> plt.Figure:
     ax_hdr.text(0.012, 0.54, "ANALYST VERDICT  &  RECRUITMENT RECOMMENDATION",
                 transform=ax_hdr.transAxes, fontsize=9,
                 fontweight="bold", color="white", va="center")
-    ax_hdr.text(0.98, 0.54, f"D. BARÁT  ·  {REPORT_REF}",
+    ax_hdr.text(0.98, 0.54, f"{P_VERDICT_HEADER}  ·  {REPORT_REF}",
                 transform=ax_hdr.transAxes, fontsize=6.5,
                 color=FCHK_GOLD, va="center", ha="right")
 
@@ -1177,16 +1194,16 @@ def main():
     # ── Save ───────────────────────────────────────────────────────────────────
     _sv = lambda f, n: f.savefig(
         OUT_DIR / n, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
-    png_title = OUT_DIR / "D_Barat_Scouting_Report_Title.png"
-    pdf_full  = OUT_DIR / "D_Barat_Scouting_Report_Full.pdf"
+    png_title = OUT_DIR / f"{REPORT_OUT_PREFIX}_Title.png"
+    pdf_full  = OUT_DIR / f"{REPORT_OUT_PREFIX}_Full.pdf"
 
-    _sv(fig0, "D_Barat_Scouting_Report_Title.png")
-    _sv(fig1, "D_Barat_Scouting_Report.png")
-    _sv(fig2, "D_Barat_Scouting_Report_P2.png")
-    _sv(fig3, "D_Barat_Scouting_Report_P3.png")
-    _sv(fig4, "D_Barat_Scouting_Report_P4.png")
-    _sv(fig5, "D_Barat_Scouting_Report_P5.png")
-    _sv(fig6, "D_Barat_Scouting_Report_P6.png")
+    _sv(fig0, f"{REPORT_OUT_PREFIX}_Title.png")
+    _sv(fig1, f"{REPORT_OUT_PREFIX}.png")
+    _sv(fig2, f"{REPORT_OUT_PREFIX}_P2.png")
+    _sv(fig3, f"{REPORT_OUT_PREFIX}_P3.png")
+    _sv(fig4, f"{REPORT_OUT_PREFIX}_P4.png")
+    _sv(fig5, f"{REPORT_OUT_PREFIX}_P5.png")
+    _sv(fig6, f"{REPORT_OUT_PREFIX}_P6.png")
 
     with PdfPages(pdf_full) as pp:
         for fig in [fig0, fig1, fig2, fig3, fig4, fig5, fig6]:
