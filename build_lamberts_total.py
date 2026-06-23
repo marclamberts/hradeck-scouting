@@ -32,7 +32,14 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 ROOT = Path(__file__).parent
 WYSCOUT_DIR = ROOT / "Wyscout Files"
 
-DEFAULT_LEAGUES = ["Czech II", "Slovakia", "Slovakia II"]
+SKIP_FILES = {"FCHK Model V3 - Loaded Leagues", "FCHK Model V3 - Model Input",
+               "FCHK Model V3 - Player Scores", "FCHK Model V3 - Player Styles",
+               "FCHK Model V3 - Recruitment Scores", "FCHK Model V3 - Smart Club Closeness",
+               "FCHK Model V3 - Summary", "FCHK Model V3 Scores", "FCHK Scouting Report",
+               "Leagues Overview", "Wyscout Anomaly Report", "Wyscout Full Scouting Report",
+               "FCHK Model V3 Scores"}
+
+DEFAULT_LEAGUES = None  # None = all leagues in WYSCOUT_DIR
 DEFAULT_MIN_MINUTES = 400
 DEFAULT_MAX_AGE = 30
 DEFAULT_BUDGET = 1_000_000
@@ -159,14 +166,25 @@ C = {
 
 # ── Data loading ───────────────────────────────────────────────────────────────
 
-def load_leagues(leagues: list[str], min_minutes: int) -> pd.DataFrame:
+def load_leagues(leagues: list[str] | None, min_minutes: int) -> pd.DataFrame:
+    if leagues is None:
+        paths = sorted(p for p in WYSCOUT_DIR.glob("*.xlsx")
+                       if p.stem not in SKIP_FILES)
+    else:
+        paths = [WYSCOUT_DIR / f"{lg}.xlsx" for lg in leagues]
+
     frames: list[pd.DataFrame] = []
-    for lg in leagues:
-        path = WYSCOUT_DIR / f"{lg}.xlsx"
+    for path in paths:
         if not path.exists():
             print(f"  [warn] {path} not found — skipping")
             continue
-        df = pd.read_excel(path)
+        lg = path.stem
+        try:
+            df = pd.read_excel(path)
+        except Exception as e:
+            print(f"  [warn] Could not read {path.name}: {e}")
+            continue
+        df = df.copy()
         df["_League"] = lg
         frames.append(df)
         print(f"  Loaded {lg}: {len(df)} players")
@@ -542,7 +560,7 @@ def build_readme(ws, leagues: list[str], total: int, clear: int, budget: int) ->
     data = [
         ("FC HRADEC KRÁLOVÉ — LAMBERTS INDEX RECRUITMENT MODEL 2025–26", None),
         (f"Waltzing Analytics  ·  Jamestown / Marc Lamberts methodology  ·  "
-         f"{' + '.join(leagues)}  ·  Budget ≤ €{budget:,}  ·  Age ≤ 30", None),
+         f"{len(leagues) if leagues else 'All'} leagues  ·  Budget ≤ €{budget:,}  ·  Age ≤ 30", None),
         (None, None),
         (None, "WORKBOOK STRUCTURE"),
         (None, "Sheet"),
@@ -577,8 +595,9 @@ def build_readme(ws, leagues: list[str], total: int, clear: int, budget: int) ->
     ws["A1"].fill = _fill(C["navy"])
     ws.row_dimensions[1].height = 28
 
+    league_label = f"{len(leagues)} leagues" if len(leagues) > 5 else " + ".join(leagues)
     ws.append([f"Waltzing Analytics  ·  Jamestown / Marc Lamberts methodology  ·  "
-               f"{' + '.join(leagues)}  ·  Budget ≤ €{budget:,}  ·  Age ≤ 30"])
+               f"{league_label}  ·  Budget ≤ €{budget:,}  ·  Age ≤ 30"])
     ws.merge_cells("A2:T2")
     ws["A2"].font = Font(italic=True, color=C["gold"], size=10)
     ws["A2"].fill = _fill(C["navy"])
@@ -926,7 +945,8 @@ def run(leagues: list[str], min_minutes: int, max_age: int, budget: int, output:
     # README
     print("  Writing README…")
     ws_readme = wb.create_sheet("README")
-    build_readme(ws_readme, leagues, len(master), len(clear_upgrades), budget)
+    league_list = leagues if leagues else sorted(master["League"].unique().tolist())
+    build_readme(ws_readme, league_list, len(master), len(clear_upgrades), budget)
 
     # Priority List (clear upgrades only)
     print("  Writing Priority List…")
@@ -1023,12 +1043,13 @@ def run(leagues: list[str], min_minutes: int, max_age: int, budget: int, output:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build Lamberts Index Model workbook from Wyscout data")
-    parser.add_argument("--leagues", nargs="+", default=DEFAULT_LEAGUES)
+    parser.add_argument("--leagues", nargs="+", default=DEFAULT_LEAGUES,
+                        help="League names (without .xlsx). Omit to load ALL leagues.")
     parser.add_argument("--min-minutes", type=int, default=DEFAULT_MIN_MINUTES)
     parser.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE)
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     parser.add_argument("--output", type=Path,
-                        default=ROOT / "data" / "Lamberts_Index_Model_Wyscout_Total.xlsx")
+                        default=ROOT / "data" / "Lamberts_Index_Model_All_Leagues.xlsx")
     args = parser.parse_args()
     run(
         leagues=args.leagues,
