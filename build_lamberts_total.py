@@ -986,7 +986,7 @@ def run(leagues: list[str], min_minutes: int, max_age: int, budget: int, output:
     ws_all = wb.create_sheet("All Targets")
     write_data_sheet(
         ws_all,
-        f"ALL TARGETS — {len(master)} Candidates  ·  {' + '.join(leagues)}",
+        f"ALL TARGETS — {len(master)} Candidates  ·  {len(league_list)} leagues",
         "Use column filters to narrow by position, league, age, status, tier  ·  "
         "Ranked by Lamberts Index",
         master_out,
