@@ -9,6 +9,7 @@ Produces a focused Excel workbook covering only the DM position group
 Sheets produced
 ───────────────
   DM Scouting Board      — ranked board with all DM-relevant metrics + scores
+  Deep-Lying Playmakers   — DMs ranked by DLP composite (passing, vision, progression)
   Anomaly Overview        — DM anomalies ranked by score
   Hidden Gems             — high signal, low exposure
   Specialist Elite        — elite in 1–2 DM metrics
@@ -114,6 +115,51 @@ DM_SIMILARITY_FEATURES = [
     "xA per 90",
 ]
 
+# ── Deep-Lying Playmaker profile ──────────────────────────────────────────────
+
+# Weighted metrics that define a DLP — ranked by importance
+DLP_METRIC_WEIGHTS: dict[str, float] = {
+    "Progressive passes per 90":       3.0,   # drives play forward from deep
+    "Accurate passes, %":              2.5,   # composure + reliability
+    "Key passes per 90":               2.5,   # chance creation from deep
+    "xA per 90":                       2.0,   # actual creative output
+    "Smart passes per 90":             2.0,   # vision / line-breaking
+    "Forward passes per 90":           1.5,   # vertical intent
+    "Accurate forward passes, %":      1.5,   # forward pass quality
+    "Through passes per 90":           1.5,   # incisive passing
+    "Passes per 90":                   1.0,   # volume / involvement
+    "Duels won, %":                    1.0,   # holds up under pressure
+    "Successful defensive actions per 90": 0.8,  # baseline defensive contribution
+}
+
+DLP_DISPLAY_COLS = [
+    "Player", "Team", "Position", "Age", "_League",
+    "Minutes played", "Matches played", "Height", "Foot",
+    "Contract expires", "Market value",
+    "DLP Score",
+    # Passing
+    "Progressive passes per 90",
+    "Accurate passes, %",
+    "Key passes per 90",
+    "xA per 90",
+    "Smart passes per 90",
+    "Accurate smart passes, %",
+    "Forward passes per 90",
+    "Accurate forward passes, %",
+    "Through passes per 90",
+    "Passes per 90",
+    # Ball security under pressure
+    "Duels won, %",
+    "Defensive duels won, %",
+    # Defensive baseline
+    "Successful defensive actions per 90",
+    "Interceptions per 90",
+    # Scores
+    "CreativeProgressionScore",
+    "BallSecurityScore",
+    "CompositeRecruitmentScore",
+]
+
 DM_STYLE_WEIGHTS: dict[str, dict[str, float]] = {
     "Defensive Enforcer":    {"DefensiveDisruptionScore": 3.0, "PressingScore": 2.0},
     "Press Monster":         {"PressingScore": 3.0, "DefensiveDisruptionScore": 2.0},
@@ -207,6 +253,42 @@ def _display(df: pd.DataFrame, z_cols: list[str] | None = None) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+# ── Deep-Lying Playmaker board ─────────────────────────────────────────────────
+
+def build_dlp_board(dm: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rank DMs by a DLP composite score built from passing, vision, and
+    ball-progression metrics.  Score is 0–100 (percentile within the DM group).
+    """
+    from scipy.stats import norm  # type: ignore
+
+    dm = dm.copy()
+
+    # Build weighted z-score composite
+    available = [(m, w) for m, w in DLP_METRIC_WEIGHTS.items() if m in dm.columns]
+    if not available:
+        dm["DLP Score"] = 50.0
+    else:
+        total_w = sum(w for _, w in available)
+        z = pd.Series(0.0, index=dm.index)
+        for metric, weight in available:
+            col = pd.to_numeric(dm[metric], errors="coerce").fillna(0)
+            mu  = col.mean()
+            sig = col.std() or 1e-9
+            z  += (weight / total_w) * (col - mu) / sig
+        dm["DLP Score"] = (norm.cdf(z.values) * 100).clip(0, 100).round(1)
+
+    keep = [c for c in DLP_DISPLAY_COLS if c in dm.columns]
+    board = (
+        dm[keep]
+        .rename(columns={"_League": "League"})
+        .sort_values("DLP Score", ascending=False)
+        .round(2)
+        .reset_index(drop=True)
+    )
+    return board
+
+
 # ── Main pipeline ──────────────────────────────────────────────────────────────
 
 def run(threshold: float, min_minutes: int, output: Path) -> None:
@@ -236,7 +318,11 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
     if dm.empty:
         raise RuntimeError("No DM players found after filtering.")
 
-    # 2. Anomaly detection within DM group
+    # 2. Deep-Lying Playmaker board
+    print("Building deep-lying playmaker board…")
+    dlp_board = build_dlp_board(dm)
+
+    # 3. Anomaly detection within DM group
     print("Running DM anomaly detection…")
     metrics = [m for m in DM_ANOMALY_METRICS if m in dm.columns]
     if metrics and len(dm) >= 5:
@@ -365,6 +451,7 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         _write_sheet(writer, "DM Scouting Board",      scouting_board)
+        _write_sheet(writer, "Deep-Lying Playmakers",  dlp_board)
         _write_sheet(writer, "Anomaly Overview",        _display(anomalies.head(500), z_cols))
         _write_sheet(writer, "Hidden Gems",             _display(_type("Hidden Gem")))
         _write_sheet(writer, "Specialist Elite",        _display(_type("Specialist Elite")))
