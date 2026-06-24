@@ -9,7 +9,7 @@ Produces a focused Excel workbook covering only the DM position group
 Sheets produced
 ───────────────
   DM Scouting Board      — ranked board with all DM-relevant metrics + scores
-  Deep-Lying Playmakers   — DMs ranked by DLP composite (passing, vision, progression)
+  Deep-Lying Playmakers   — DMs ranked by DLP Score + Lamberts Index (SQS, MV Rank, LI, Tier, vs Hradec)
   Anomaly Overview        — DM anomalies ranked by score
   Hidden Gems             — high signal, low exposure
   Specialist Elite        — elite in 1–2 DM metrics
@@ -253,18 +253,155 @@ def _display(df: pd.DataFrame, z_cols: list[str] | None = None) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+# ── Lamberts Index constants (DLP-specific) ────────────────────────────────────
+
+# SQS blueprint for DLPs: passing/vision weighted, with a defensive floor
+DLP_SQS_BLUEPRINT: list[tuple[str, float]] = [
+    ("Progressive passes per 90",       3.0),
+    ("Accurate passes, %",              2.5),
+    ("Key passes per 90",               2.5),
+    ("xA per 90",                       2.0),
+    ("Smart passes per 90",             2.0),
+    ("Forward passes per 90",           1.5),
+    ("Accurate forward passes, %",      1.5),
+    ("Through passes per 90",           1.5),
+    ("Passes per 90",                   1.0),
+    ("Duels won, %",                    1.0),
+    ("Successful defensive actions per 90", 0.8),
+]
+
+# Hradec DM starter quality benchmark (Czech top-flight percentile)
+HRADEC_DM_QUALITY = 36.8   # Jakub Elbel
+
+LAMBERTS_TIERS = {
+    "ELITE VALUE": ("LI ≥ 30", "1A5276"),
+    "HIGH VALUE":  ("LI ≥ 20", "1E8449"),
+    "VALUE":       ("LI ≥ 10", "117A65"),
+    "FAIR VALUE":  ("LI 0–9",  "626567"),
+    "OVERPRICED":  ("LI < 0",  "922B21"),
+}
+
+
+def _assign_lamberts_tier(li: float) -> str:
+    if li >= 30: return "ELITE VALUE"
+    if li >= 20: return "HIGH VALUE"
+    if li >= 10: return "VALUE"
+    if li >= 0:  return "FAIR VALUE"
+    return "OVERPRICED"
+
+
+def _model_value(mkt: float, sqs: float) -> float:
+    return round(mkt * max(sqs / 50.0, 0.1), 0)
+
+
+def apply_lamberts(dm: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute Lamberts Index analytics on the DM group:
+      SQS Rank  — DLP-weighted metric percentile (0–100)
+      MV Rank   — market value percentile (0–100)
+      LI        — SQS Rank − MV Rank
+      Tier      — ELITE VALUE / HIGH VALUE / VALUE / FAIR VALUE / OVERPRICED
+      Model Val — market value × (SQS / 50)
+      vs Hradec — target SQS − Hradec DM benchmark (36.8)
+      Status    — CLEAR UPGRADE / ROTATIONAL / DEPTH
+    """
+    dm = dm.copy()
+
+    # ── SQS Rank ────────────────────────────────────────────────────────────────
+    available = [(m, w) for m, w in DLP_SQS_BLUEPRINT if m in dm.columns]
+    if available:
+        total_w = sum(w for _, w in available)
+        raw_sqs = pd.Series(0.0, index=dm.index)
+        for metric, w in available:
+            vals = pd.to_numeric(dm[metric], errors="coerce").fillna(0)
+            raw_sqs += (w / total_w) * vals.rank(pct=True) * 100
+        dm["SQS Rank"] = raw_sqs.rank(pct=True).mul(100).round(2)
+    else:
+        dm["SQS Rank"] = 50.0
+
+    # ── Market Value Rank ────────────────────────────────────────────────────────
+    mv_col = next((c for c in ["Market value", "MarketValue"] if c in dm.columns), None)
+    if mv_col:
+        mv = pd.to_numeric(dm[mv_col], errors="coerce").fillna(0)
+    else:
+        mv = pd.Series(0.0, index=dm.index)
+    dm["_mkt_val"]  = mv
+    dm["MV Rank"]   = mv.rank(pct=True).mul(100).round(2)
+
+    # ── Lamberts Index ───────────────────────────────────────────────────────────
+    dm["Lamberts Index"] = (dm["SQS Rank"] - dm["MV Rank"]).round(2)
+    dm["Tier"]           = dm["Lamberts Index"].apply(_assign_lamberts_tier)
+
+    # ── Model Value ──────────────────────────────────────────────────────────────
+    dm["Model Val (€)"] = [
+        int(_model_value(float(mkt), float(sqs)))
+        for mkt, sqs in zip(dm["_mkt_val"], dm["SQS Rank"])
+    ]
+    dm["Mkt Val (€)"]   = dm["_mkt_val"].astype(int)
+
+    val_ratios = []
+    for mkt, mod in zip(dm["_mkt_val"], dm["Model Val (€)"]):
+        if mkt > 0:
+            val_ratios.append(f"{mod / mkt:.1f}×")
+        else:
+            val_ratios.append("N/A")
+    dm["Val Ratio"] = val_ratios
+
+    # ── vs Hradec & Status ───────────────────────────────────────────────────────
+    dm["vs Hradec"] = (dm["SQS Rank"] - HRADEC_DM_QUALITY).round(1)
+    status = []
+    for gap in dm["vs Hradec"]:
+        if gap > 0:
+            status.append("CLEAR UPGRADE")
+        elif gap > -10:
+            status.append("ROTATIONAL / COVER")
+        else:
+            status.append("DEPTH")
+    dm["Status"] = status
+
+    return dm
+
+
 # ── Deep-Lying Playmaker board ─────────────────────────────────────────────────
+
+DLP_LAMBERTS_COLS = [
+    "Player", "Team", "Position", "Age", "_League",
+    "Minutes played", "Matches played", "Height", "Foot",
+    "Contract expires",
+    "Mkt Val (€)", "Model Val (€)", "Val Ratio",
+    "DLP Score", "SQS Rank", "Lamberts Index", "Tier",
+    "vs Hradec", "Status",
+    # Key DLP metrics
+    "Progressive passes per 90",
+    "Accurate passes, %",
+    "Key passes per 90",
+    "xA per 90",
+    "Smart passes per 90",
+    "Accurate smart passes, %",
+    "Forward passes per 90",
+    "Accurate forward passes, %",
+    "Through passes per 90",
+    "Passes per 90",
+    "Duels won, %",
+    "Defensive duels won, %",
+    "Successful defensive actions per 90",
+    "Interceptions per 90",
+    # Composite scores
+    "CreativeProgressionScore",
+    "BallSecurityScore",
+    "CompositeRecruitmentScore",
+]
+
 
 def build_dlp_board(dm: pd.DataFrame) -> pd.DataFrame:
     """
-    Rank DMs by a DLP composite score built from passing, vision, and
-    ball-progression metrics.  Score is 0–100 (percentile within the DM group).
+    Rank DMs by DLP composite score and enrich with Lamberts Index analytics.
     """
     from scipy.stats import norm  # type: ignore
 
     dm = dm.copy()
 
-    # Build weighted z-score composite
+    # ── DLP Score (0–100 percentile within DM group) ─────────────────────────
     available = [(m, w) for m, w in DLP_METRIC_WEIGHTS.items() if m in dm.columns]
     if not available:
         dm["DLP Score"] = 50.0
@@ -278,7 +415,10 @@ def build_dlp_board(dm: pd.DataFrame) -> pd.DataFrame:
             z  += (weight / total_w) * (col - mu) / sig
         dm["DLP Score"] = (norm.cdf(z.values) * 100).clip(0, 100).round(1)
 
-    keep = [c for c in DLP_DISPLAY_COLS if c in dm.columns]
+    # ── Lamberts Index analytics ─────────────────────────────────────────────
+    dm = apply_lamberts(dm)
+
+    keep = [c for c in DLP_LAMBERTS_COLS if c in dm.columns]
     board = (
         dm[keep]
         .rename(columns={"_League": "League"})
