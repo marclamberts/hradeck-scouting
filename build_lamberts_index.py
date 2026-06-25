@@ -153,6 +153,103 @@ HRADEC_SQUAD: dict[str, float] = {
     "FW": 38.3,
 }
 
+# ── League Tier System ─────────────────────────────────────────────────────────
+# T1 = Elite (top 5 European + major global)
+# T2 = Strong (secondary European + top Americas/Asia)
+# T3 = Mid-tier (solid domestic + 2nd divisions of big leagues)
+# T4 = Developing (lower domestic + 3rd/4th divisions)
+# T5 = Emerging (developing nations, amateur-adjacent)
+
+LEAGUE_TIER: dict[str, str] = {
+    # T1 — Elite
+    "England":         "T1", "Spain":           "T1", "Germany":         "T1",
+    "Italy":           "T1", "France":           "T1", "Portugal":        "T1",
+    "Netherlands":     "T1", "Brazil":           "T1", "Argentina":       "T1",
+    "Mexico":          "T1",
+
+    # T2 — Strong
+    "England II":      "T2", "Spain II":         "T2", "Germany II":      "T2",
+    "Italy II":        "T2", "France II":        "T2", "Belgium":         "T2",
+    "Scotland":        "T2", "Turkey":           "T2", "Turkiye":         "T2",
+    "Russia":          "T2", "Ukraine":          "T2", "Switzerland":     "T2",
+    "Austria":         "T2", "Greece":           "T2", "Denmark":         "T2",
+    "Sweden":          "T2", "Norway":           "T2", "Poland":          "T2",
+    "Czech":           "T2", "Croatia":          "T2", "Serbia":          "T2",
+    "Romania":         "T2", "USA":              "T2", "Colombia":        "T2",
+    "Chile":           "T2", "Japan":            "T2", "Korea":           "T2",
+    "Saudi":           "T2", "Morocco":          "T2", "South Africa":    "T2",
+
+    # T3 — Mid-tier
+    "England III":     "T3", "England IV":       "T3", "Spain III":       "T3",
+    "Germany III":     "T3", "France III":       "T3", "Netherlands II":  "T3",
+    "Portugal II":     "T3", "Belgium II":       "T3", "Scotland II":     "T3",
+    "Russia II":       "T3", "Ukraine II":       "T3", "Switzerland II":  "T3",
+    "Austria II":      "T3", "Greece II":        "T3", "Denmark II":      "T3",
+    "Sweden II":       "T3", "Norway II":        "T3", "Poland II":       "T3",
+    "Czech II":        "T3", "Slovakia":         "T3", "Hungary":         "T3",
+    "Bulgaria":        "T3", "Serbia II":        "T3", "Romania":         "T3",
+    "USA II":          "T3", "Mexico II":        "T3", "Argentina II":    "T3",
+    "Brazil II":       "T3", "Colombia":         "T3", "Chile II":        "T3",
+    "Uruguay":         "T3", "Japan II III":     "T3", "Korea II":        "T3",
+    "China":           "T3", "Australia":        "T3", "Saudi II":        "T3",
+    "Qatar":           "T3", "UAE":              "T3", "Egypt":           "T3",
+    "Tunisia":         "T3", "Nigeria":          "T3", "Israel":          "T3",
+    "Turkey":          "T3",
+
+    # T4 — Developing
+    "England V":       "T4", "Germany 4 - Part I":  "T4", "Germany 4 - Part II": "T4",
+    "Germany 4 - Part III": "T4", "Germany 4 - Part IV": "T4",
+    "Italy III - Part I": "T4", "Italy III - Part II": "T4",
+    "Italy III - Part III": "T4", "Italy III - Part IV": "T4",
+    "Netherlands III": "T4", "Portugal III":     "T4", "Scotland III":    "T4",
+    "Scotland IV":     "T4", "Denmark III":      "T4", "Denmark IV":      "T4",
+    "Sweden III":      "T4", "Norway III":       "T4", "Poland III":      "T4",
+    "Czech II":        "T4", "Slovakia II":      "T4", "Hungary II":      "T4",
+    "Slovenia":        "T4", "Slovenia II":      "T4", "Bosnia":          "T4",
+    "Montenegro":      "T4", "Kosovo":           "T4", "Albania":         "T4",
+    "Armenia":         "T4", "Georgia":          "T4", "Azerbaijan":      "T4",
+    "Kazakhstan":      "T4", "Belarus":          "T4", "Ireland":         "T4",
+    "Ireland II":      "T4", "Northern Ireland": "T4", "Wales":           "T4",
+    "Finland":         "T4", "Finland II":       "T4", "Iceland":         "T4",
+    "Estonia":         "T4", "Latvia":           "T4", "Lithuania":       "T4",
+    "USA III":         "T4", "Canada":           "T4", "Uruguay II":      "T4",
+    "Peru":            "T4", "Ecuador":          "T4", "Bolivia":         "T4",
+    "Venezuela":       "T4", "Paraguay":         "T4", "China II":        "T4",
+    "Korea III":       "T4", "Australia II - Part I":   "T4",
+    "Australia II - Part II":  "T4", "Australia II - Part III": "T4",
+    "Australia II - Part IV":  "T4", "Australia II - Part V":   "T4",
+    "Australia II - Part VI":  "T4", "Australia II - Part VII": "T4",
+    "Japan":           "T4", "India":            "T4", "Malaysia":        "T4",
+    "Thailand":        "T4", "Vietnam":          "T4", "Indonesia":       "T4",
+    "Cyprus":          "T4", "Cyprus II":        "T4", "Malta":           "T4",
+    "Faroe Islands":   "T4", "Andorra":          "T4", "Moldovia":        "T4",
+
+    # T5 — Emerging
+    "Czech U17":       "T5", "Czech U19":        "T5", "Ecuador II":      "T5",
+    "El Salvador":     "T5", "Guatemala":        "T5", "Honduras":        "T5",
+    "Nicaragua":       "T5", "Panama":           "T5", "Costa Rica":      "T5",
+    "Bahrain":         "T5", "Jordan":           "T5", "Uzbekistan":      "T5",
+    "Kyrgystan":       "T5", "Bangladesh":       "T5", "Cambodia":        "T5",
+    "Philippines":     "T5", "Singapore":        "T5", "Hong Kong":       "T5",
+    "China II":        "T5",
+}
+
+LEAGUE_TIER_LABEL = {
+    "T1": "T1 — Elite",
+    "T2": "T2 — Strong",
+    "T3": "T3 — Mid-Tier",
+    "T4": "T4 — Developing",
+    "T5": "T5 — Emerging",
+}
+
+LEAGUE_TIER_COLOR = {
+    "T1": "1A5276",  # dark blue
+    "T2": "1E8449",  # green
+    "T3": "7D6608",  # gold
+    "T4": "6E2F1A",  # brown
+    "T5": "626567",  # grey
+}
+
 POS_LABELS = {
     "GK": "GK — GOALKEEPER",
     "CB": "CB — CENTRE-BACK",
@@ -272,7 +369,7 @@ W = {
 # ── Output column blueprints per position ──────────────────────────────────────
 
 # Shared identity block
-_ID = ["Player", "Team", "League", "Birth Country", "Pos", "Full Position",
+_ID = ["Player", "Team", "League", "League Tier", "Birth Country", "Pos", "Full Position",
        "Age", "Height (cm)", "Weight (kg)", "Foot", "On Loan",
        "Contract", "Exp?", "Mkt Val (€)", "Model Val (€)", "Val Ratio"]
 _SCORE = ["Tier", "LI Score", "Lamberts Index"]
@@ -760,6 +857,7 @@ def build_master(df: pd.DataFrame) -> pd.DataFrame:
             "Player":         r.get("Player", ""),
             "Team":           r.get("Team", ""),
             "League":         r.get("_League", ""),
+            "League Tier":    LEAGUE_TIER.get(r.get("_League", ""), "T5"),
             "Birth Country":  r.get("Birth country", ""),
             "Pos":            r.get("_pos_group", ""),
             "Full Position":  r.get("_full_position", ""),
@@ -892,6 +990,7 @@ def write_data_sheet(wb_x, sheet_name: str, title: str, subtitle: str,
     status_idx = cols.index("Status")         if "Status"         in cols else -1
     li_idx     = cols.index("Lamberts Index") if "Lamberts Index" in cols else -1
     lis_idx    = cols.index("LI Score")       if "LI Score"       in cols else -1
+    ltier_idx  = cols.index("League Tier")    if "League Tier"    in cols else -1
 
     fmt_e   = _xf(wb_x, bg_color=f"#{C['ice']}")
     fmt_o   = _xf(wb_x, bg_color=f"#{C['white']}")
@@ -906,6 +1005,8 @@ def write_data_sheet(wb_x, sheet_name: str, title: str, subtitle: str,
                    for k, v in TIER_BG.items()}
     status_fmts = {k: _xf(wb_x, bold=True, font_color="#FFFFFF", bg_color=v)
                    for k, v in STATUS_BG.items()}
+    ltier_fmts  = {k: _xf(wb_x, bold=True, font_color="#FFFFFF", bg_color=f"#{v}")
+                   for k, v in LEAGUE_TIER_COLOR.items()}
 
     for i, row_vals in enumerate(df.itertuples(index=False)):
         xrow = i + 3
@@ -918,6 +1019,8 @@ def write_data_sheet(wb_x, sheet_name: str, title: str, subtitle: str,
         for j, val in enumerate(row_vals):
             if j == tier_idx:
                 fmt = tier_fmts.get(str(val), base)
+            elif j == ltier_idx:
+                fmt = ltier_fmts.get(str(val), base)
             elif j == status_idx:
                 fmt = status_fmts.get(str(val), base)
             elif j == li_idx:
@@ -1167,6 +1270,29 @@ def build_analysis(ws, master: pd.DataFrame) -> None:
         ws.cell(ws.max_row, 1).font = Font(bold=True)
     ws.append([None])
 
+    # ── League Tier breakdown ──────────────────────────────────────────────────
+    section_title("LEAGUE TIER BREAKDOWN")
+    tbl_hdr(["League Tier", "Leagues", "Players", "Clear Upgrades", "Top 5",
+             "Elite", "High", "Value", "Avg LI Score", "Avg LI", "Avg Mkt Val (€)"])
+    for ltier in ["T1", "T2", "T3", "T4", "T5"]:
+        grp = master[master["League Tier"] == ltier]
+        if grp.empty:
+            continue
+        tc = grp["Tier"].value_counts()
+        ws.append([
+            LEAGUE_TIER_LABEL[ltier],
+            grp["League"].nunique(),
+            len(grp),
+            (grp["Status"] == "CLEAR UPGRADE").sum(),
+            tc.get("TOP 5", 0),
+            tc.get("ELITE VALUE", 0), tc.get("HIGH VALUE", 0), tc.get("VALUE", 0),
+            round(grp["LI Score"].mean(), 2),
+            round(grp["Lamberts Index"].mean(), 2),
+            int(grp["Mkt Val (€)"].mean()) if grp["Mkt Val (€)"].mean() > 0 else 0,
+        ])
+        ws.cell(ws.max_row, 1).font = Font(bold=True)
+    ws.append([None])
+
     # ── Age analysis ───────────────────────────────────────────────────────────
     section_title("AGE BAND ANALYSIS")
     tbl_hdr(["Age Band", "Players", "Avg LI Score", "Avg LI", "Clear Upgrades", "Elite", "Avg Mkt Val (€)"])
@@ -1256,17 +1382,17 @@ def build_league_analysis(ws, master: pd.DataFrame) -> None:
     ws.sheet_view.showGridLines = False
 
     ws.append(["LAMBERTS INDEX — LEAGUE ANALYSIS"])
-    ws.merge_cells("A1:N1")
+    ws.merge_cells("A1:P1")
     ws["A1"].font = Font(bold=True, color=C["white"], size=14)
     ws["A1"].fill = _fill(C["dark"])
     ws.row_dimensions[1].height = 26
 
-    ws.append(["Average LI Score, tier distribution and player counts per scouted league"])
-    ws.merge_cells("A2:N2")
+    ws.append(["League Tier, average LI Score, tier distribution and player counts per scouted league"])
+    ws.merge_cells("A2:P2")
     ws["A2"].font = Font(italic=True, color=C["gold"], size=9)
     ws["A2"].fill = _fill(C["dark"])
 
-    cols = ["League", "Players", "Clear Upgrades", "Elite",
+    cols = ["League", "League Tier", "Players", "Clear Upgrades", "Top 5", "Elite",
             "High", "Value", "Avg LI Score", "Max LI Score",
             "Avg LI", "Max LI", "Avg Age", "Avg Mkt Val (€)",
             "GK", "CB", "FB", "DM", "CM", "W", "FW"]
@@ -1285,10 +1411,13 @@ def build_league_analysis(ws, master: pd.DataFrame) -> None:
     for league, grp in leagues:
         tc = grp["Tier"].value_counts()
         pc = grp["Pos"].value_counts()
+        ltier = LEAGUE_TIER.get(league, "T5")
         data_rows.append({
             "League":        league,
+            "League Tier":   ltier,
             "Players":       len(grp),
             "Clear Upgrades":(grp["Status"] == "CLEAR UPGRADE").sum(),
+            "Top 5":          tc.get("TOP 5", 0),
             "Elite":          tc.get("ELITE VALUE", 0),
             "High":           tc.get("HIGH VALUE", 0),
             "Value":          tc.get("VALUE", 0),
@@ -1303,8 +1432,11 @@ def build_league_analysis(ws, master: pd.DataFrame) -> None:
             "W": pc.get("W", 0),   "FW": pc.get("FW", 0),
         })
 
-    # Sort by Avg LI Score descending
-    data_rows.sort(key=lambda x: x["Avg LI Score"], reverse=True)
+    # Sort by League Tier then Avg LI Score descending
+    tier_order_map = {"T1": 1, "T2": 2, "T3": 3, "T4": 4, "T5": 5}
+    data_rows.sort(key=lambda x: (tier_order_map.get(x["League Tier"], 9), -x["Avg LI Score"]))
+
+    ltier_col_idx = cols.index("League Tier") + 1  # 1-based
 
     for i, row in enumerate(data_rows):
         ws.append([row[c] for c in cols])
@@ -1316,6 +1448,11 @@ def build_league_analysis(ws, master: pd.DataFrame) -> None:
             cell.alignment = Alignment(horizontal="center")
         ws.cell(dr, 1).font = Font(bold=True, size=9)
         ws.cell(dr, 1).alignment = Alignment(horizontal="left")
+        # League Tier colour
+        lt_cell = ws.cell(dr, ltier_col_idx)
+        lt_hex = LEAGUE_TIER_COLOR.get(row["League Tier"], C["fair"])
+        lt_cell.fill = _fill(lt_hex)
+        lt_cell.font = Font(bold=True, color=C["white"], size=9)
 
     ws.freeze_panes = f"A{hdr + 1}"
     _autofit(ws)
