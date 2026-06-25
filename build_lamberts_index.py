@@ -167,7 +167,7 @@ POS_LABELS = {
 
 C = {
     "navy":   "0D1B2A",  "gold":   "C9A84C",  "steel":  "1B4F72",
-    "elite":  "1A5276",  "high":   "1E8449",   "value":  "117A65",
+    "top5":   "6D3460",  "elite":  "1A5276",  "high":   "1E8449",   "value":  "117A65",
     "fair":   "626567",  "over":   "922B21",   "white":  "FFFFFF",
     "ice":    "EBF5FB",  "mint":   "E8F8F5",   "pearl":  "F8F9FA",
     "header": "154360",  "sub":    "1A5276",   "dark":   "0D1B2A",
@@ -668,6 +668,13 @@ def compute_lamberts_index(df: pd.DataFrame) -> pd.DataFrame:
         return "OVERPRICED"
 
     df["_tier"] = df["_LI"].apply(tier)
+
+    # Promote top 5 per position group to TOP 5 tier
+    for pos_grp, grp_idx in df.groupby("_pos_group").groups.items():
+        grp = df.loc[grp_idx].sort_values("_LI", ascending=False)
+        top5_idx = grp.head(5).index
+        df.loc[top5_idx, "_tier"] = "TOP 5"
+
     return df
 
 
@@ -830,6 +837,7 @@ def _xf(wb_x, bold=False, font_color="#000000", bg_color=None,
 
 
 TIER_BG   = {
+    "TOP 5":       f"#{C['top5']}",
     "ELITE VALUE": f"#{C['elite']}", "HIGH VALUE": f"#{C['high']}",
     "VALUE": f"#{C['value']}", "FAIR VALUE": f"#{C['fair']}",
     "OVERPRICED": f"#{C['over']}",
@@ -1018,7 +1026,7 @@ def build_readme(ws, leagues: list[str], total: int, clear: int, budget: int) ->
          "each position. 100 = best player in that position across all scouted leagues."),
         ("Lamberts Index",
          "LI Score Rank − Market Value Rank. Positive = performs above market price. "
-         "ELITE ≥ 30  ·  HIGH ≥ 20  ·  VALUE ≥ 10  ·  FAIR 0–9  ·  OVERPRICED < 0"),
+         "TOP 5 (best per pos)  ·  ELITE ≥ 30  ·  HIGH ≥ 20  ·  VALUE ≥ 10  ·  FAIR 0–9  ·  OVERPRICED < 0"),
         ("DIS — Defensive Impact Score (def positions only)",
          "Weighted rank 0–100: Def actions/90 ×3 · Def duels won% ×2.5 · "
          "Interceptions/90 ×2 · PAdj Interceptions ×2 · Aerial won% ×1.5 · Blocks/90 ×1"),
@@ -1079,7 +1087,7 @@ def build_analysis(ws, master: pd.DataFrame) -> None:
         ws[f"A{ws.max_row}"].fill = _fill(C["dark"])
 
     hdr_row("LAMBERTS INDEX — FULL ANALYSIS BREAKDOWN", 1, "A:M", 14)
-    sub_row("Lamberts Index = LI Score Rank − Market Value Rank  ·  ELITE ≥30  ·  HIGH ≥20  ·  VALUE ≥10  ·  FAIR 0–9  ·  OVER <0")
+    sub_row("Lamberts Index = LI Score Rank − Market Value Rank  ·  TOP 5 (best per pos)  ·  ELITE ≥30  ·  HIGH ≥20  ·  VALUE ≥10  ·  FAIR 0–9  ·  OVER <0")
     ws.append([None])
 
     def tbl_hdr(labels):
@@ -1105,6 +1113,7 @@ def build_analysis(ws, master: pd.DataFrame) -> None:
     overall = [
         ("Total players",   f"{len(master):,}"),
         ("Clear Upgrades",  f"{(master['Status']=='CLEAR UPGRADE').sum():,}"),
+        ("TOP 5",           f"{(master['Tier']=='TOP 5').sum():,}"),
         ("ELITE VALUE",     f"{(master['Tier']=='ELITE VALUE').sum():,}"),
         ("HIGH VALUE",      f"{(master['Tier']=='HIGH VALUE').sum():,}"),
         ("VALUE",           f"{(master['Tier']=='VALUE').sum():,}"),
@@ -1122,9 +1131,9 @@ def build_analysis(ws, master: pd.DataFrame) -> None:
 
     # ── Position breakdown ─────────────────────────────────────────────────────
     section_title("BREAKDOWN BY POSITION")
-    tbl_hdr(["Position", "Players", "Clear Upgrades", "Elite", "High",
+    tbl_hdr(["Position", "Players", "Clear Upgrades", "Top 5", "Elite", "High",
              "Value", "Fair", "Over", "Avg LI Score", "Avg LI", "Avg Mkt Val (€)"])
-    tier_order = ["ELITE VALUE", "HIGH VALUE", "VALUE", "FAIR VALUE", "OVERPRICED"]
+    tier_order = ["TOP 5", "ELITE VALUE", "HIGH VALUE", "VALUE", "FAIR VALUE", "OVERPRICED"]
     for pos in ["GK", "CB", "FB", "DM", "CM", "W", "FW"]:
         grp = master[master["Pos"] == pos]
         if grp.empty:
@@ -1133,7 +1142,7 @@ def build_analysis(ws, master: pd.DataFrame) -> None:
         ws.append([
             pos, len(grp),
             (grp["Status"] == "CLEAR UPGRADE").sum(),
-            tc.get("ELITE VALUE", 0), tc.get("HIGH VALUE", 0),
+            tc.get("TOP 5", 0), tc.get("ELITE VALUE", 0), tc.get("HIGH VALUE", 0),
             tc.get("VALUE", 0), tc.get("FAIR VALUE", 0), tc.get("OVERPRICED", 0),
             round(grp["LI Score"].mean(), 2),
             round(grp["Lamberts Index"].mean(), 2),
@@ -1430,9 +1439,9 @@ def build_physical_profiles(ws, master: pd.DataFrame) -> None:
         ws.cell(dr, 1).alignment = Alignment(horizontal="left")
         # Tier colour
         tc = ws.cell(dr, cols.index("Tier") + 1)
-        thex = {"ELITE VALUE": C["elite"], "HIGH VALUE": C["high"],
+        thex = {"TOP 5": C["top5"], "ELITE VALUE": C["elite"], "HIGH VALUE": C["high"],
                 "VALUE": C["value"], "FAIR VALUE": C["fair"],
-                "OVERPRICED": C["over"]}.get(tier_val)
+                "OVERPRICED": C["over"], "TOP 5": C["top5"]}.get(tier_val)
         if thex:
             tc.fill = _fill(thex)
             tc.font = Font(bold=True, color=C["white"], size=9)
