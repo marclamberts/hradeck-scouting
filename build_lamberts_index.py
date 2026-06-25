@@ -669,8 +669,8 @@ def compute_lamberts_index(df: pd.DataFrame) -> pd.DataFrame:
 
     df["_tier"] = df["_LI"].apply(tier)
 
-    # Promote top 5 per position group to TOP 5 tier
-    for pos_grp, grp_idx in df.groupby("_pos_group").groups.items():
+    # Promote top 5 per position per league to TOP 5 tier
+    for (pos_grp, league), grp_idx in df.groupby(["_pos_group", "_League"]).groups.items():
         grp = df.loc[grp_idx].sort_values("_LI", ascending=False)
         top5_idx = grp.head(5).index
         df.loc[top5_idx, "_tier"] = "TOP 5"
@@ -1026,7 +1026,7 @@ def build_readme(ws, leagues: list[str], total: int, clear: int, budget: int) ->
          "each position. 100 = best player in that position across all scouted leagues."),
         ("Lamberts Index",
          "LI Score Rank − Market Value Rank. Positive = performs above market price. "
-         "TOP 5 (best per pos)  ·  ELITE ≥ 30  ·  HIGH ≥ 20  ·  VALUE ≥ 10  ·  FAIR 0–9  ·  OVERPRICED < 0"),
+         "TOP 5 (best per pos per league)  ·  ELITE ≥ 30  ·  HIGH ≥ 20  ·  VALUE ≥ 10  ·  FAIR 0–9  ·  OVERPRICED < 0"),
         ("DIS — Defensive Impact Score (def positions only)",
          "Weighted rank 0–100: Def actions/90 ×3 · Def duels won% ×2.5 · "
          "Interceptions/90 ×2 · PAdj Interceptions ×2 · Aerial won% ×1.5 · Blocks/90 ×1"),
@@ -1087,7 +1087,7 @@ def build_analysis(ws, master: pd.DataFrame) -> None:
         ws[f"A{ws.max_row}"].fill = _fill(C["dark"])
 
     hdr_row("LAMBERTS INDEX — FULL ANALYSIS BREAKDOWN", 1, "A:M", 14)
-    sub_row("Lamberts Index = LI Score Rank − Market Value Rank  ·  TOP 5 (best per pos)  ·  ELITE ≥30  ·  HIGH ≥20  ·  VALUE ≥10  ·  FAIR 0–9  ·  OVER <0")
+    sub_row("Lamberts Index = LI Score Rank − Market Value Rank  ·  TOP 5 (best per pos per league)  ·  ELITE ≥30  ·  HIGH ≥20  ·  VALUE ≥10  ·  FAIR 0–9  ·  OVER <0")
     ws.append([None])
 
     def tbl_hdr(labels):
