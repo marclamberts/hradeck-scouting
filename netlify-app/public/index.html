@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Lamberts Index — FC Hradec Králové</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0D1B2A;--gold:#C9A84C;--steel:#1B4F72;
+  --t1:#1A5276;--t2:#1E8449;--t3:#7D6608;--t4:#6E2F1A;--t5:#626567;
+  --tier-top5:#6D3460;--tier-elite:#1A5276;--tier-high:#1E8449;
+  --tier-value:#117A65;--tier-fair:#626567;--tier-over:#922B21;
+  --status-upgrade:#1A5276;--status-rota:#7D6608;--status-depth:#117A65;
+  --bg:#0f1923;--card:#162333;--border:#1e3048;--text:#e2e8f0;
+  --muted:#94a3b8;--hover:#1e3a5f;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;min-height:100vh}
+a{color:var(--gold);text-decoration:none}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+header{background:linear-gradient(135deg,var(--navy) 60%,var(--steel));border-bottom:2px solid var(--gold);padding:0 24px}
+.header-inner{display:flex;align-items:center;justify-content:space-between;max-width:1800px;margin:0 auto;height:56px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-logo{width:36px;height:36px;background:var(--gold);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;color:var(--navy)}
+.brand-name{font-size:18px;font-weight:700;color:var(--gold);letter-spacing:.5px}
+.brand-sub{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.header-stats{display:flex;gap:24px}
+.hstat{text-align:center}
+.hstat-val{font-size:18px;font-weight:700;color:var(--gold)}
+.hstat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* ── Tab bar ──────────────────────────────────────────────────────── */
+.tab-bar{background:var(--navy);border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap;scrollbar-width:thin}
+.tab-bar::-webkit-scrollbar{height:3px}
+.tab-bar::-webkit-scrollbar-thumb{background:var(--border)}
+.tab-inner{display:inline-flex;max-width:1800px;padding:0 24px}
+.tab{display:inline-flex;align-items:center;gap:6px;padding:12px 16px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;letter-spacing:.3px;transition:all .15s;white-space:nowrap;user-select:none}
+.tab:hover{color:var(--text);background:var(--hover)}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.tab-dot{width:8px;height:8px;border-radius:50%}
+
+/* ── Toolbar ──────────────────────────────────────────────────────── */
+.toolbar{background:var(--card);border-bottom:1px solid var(--border);padding:10px 24px}
+.toolbar-inner{max-width:1800px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.search-wrap{position:relative;flex:0 0 220px}
+.search-wrap input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 32px;border-radius:6px;font-size:12px;outline:none}
+.search-wrap input:focus{border-color:var(--gold)}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+select.filter{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;outline:none;cursor:pointer;min-width:130px}
+select.filter:focus{border-color:var(--gold)}
+.btn{background:var(--steel);color:white;border:none;padding:7px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;letter-spacing:.3px;transition:background .15s}
+.btn:hover{background:var(--t1)}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold);background:transparent}
+.result-count{margin-left:auto;font-size:11px;color:var(--muted)}
+
+/* ── Main layout ──────────────────────────────────────────────────── */
+main{max-width:1800px;margin:0 auto;padding:16px 24px}
+
+/* ── Summary cards ────────────────────────────────────────────────── */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;border-left:3px solid var(--gold)}
+.sc-val{font-size:24px;font-weight:700;color:var(--gold)}
+.sc-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+
+/* ── Table ────────────────────────────────────────────────────────── */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.table-scroll{overflow-x:auto;max-height:calc(100vh - 280px);overflow-y:auto}
+.table-scroll::-webkit-scrollbar{width:6px;height:6px}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{background:var(--navy);position:sticky;top:0;z-index:10}
+th{padding:10px 10px;text-align:left;font-weight:600;color:var(--muted);font-size:11px;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1px solid var(--border)}
+th:hover{color:var(--text)}
+th.sorted-asc::after{content:" ▲";color:var(--gold)}
+th.sorted-desc::after{content:" ▼";color:var(--gold)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+tbody tr:hover{background:var(--hover)}
+tbody tr.even{background:rgba(255,255,255,.015)}
+td{padding:8px 10px;white-space:nowrap;vertical-align:middle}
+td.name{font-weight:600;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.center{text-align:center}
+
+/* ── Badges ───────────────────────────────────────────────────────── */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;letter-spacing:.3px;white-space:nowrap}
+.badge-top5{background:var(--tier-top5)}
+.badge-elite{background:var(--tier-elite)}
+.badge-high{background:var(--tier-high)}
+.badge-value{background:var(--tier-value)}
+.badge-fair{background:var(--tier-fair)}
+.badge-over{background:var(--tier-over)}
+.badge-t1{background:var(--t1)}
+.badge-t2{background:var(--t2)}
+.badge-t3{background:var(--t3)}
+.badge-t4{background:var(--t4)}
+.badge-t5{background:var(--t5)}
+.badge-upgrade{background:var(--status-upgrade)}
+.badge-rota{background:var(--status-rota)}
+.badge-depth{background:var(--status-depth)}
+.li-pos{color:#4ade80;font-weight:700}
+.li-neg{color:#f87171;font-weight:700}
+.li-score{color:var(--gold);font-weight:700}
+
+/* ── Pagination ───────────────────────────────────────────────────── */
+.pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-top:1px solid var(--border)}
+.page-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.page-btn:hover{border-color:var(--gold);color:var(--gold)}
+.page-btn.active{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700}
+.page-btn:disabled{opacity:.3;cursor:default}
+.page-info{font-size:11px;color:var(--muted)}
+
+/* ── League view ──────────────────────────────────────────────────── */
+.league-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.league-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;border-left:4px solid var(--border);cursor:pointer;transition:all .15s}
+.league-card:hover{border-color:var(--gold);transform:translateY(-1px)}
+.lc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.lc-name{font-weight:700;font-size:13px}
+.lc-stats{display:flex;gap:16px;font-size:11px;color:var(--muted)}
+.lc-stat span{color:var(--text);font-weight:600}
+
+/* ── Player modal ─────────────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:700px;max-height:90vh;overflow-y:auto}
+.modal-head{background:var(--navy);padding:20px 24px;border-radius:12px 12px 0 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start}
+.modal-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:20px 24px}
+.modal-name{font-size:20px;font-weight:700;color:var(--gold)}
+.modal-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.modal-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.stat-block{background:var(--bg);border-radius:6px;padding:10px 12px}
+.stat-val{font-size:16px;font-weight:700;color:var(--gold)}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.section-head{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.detail-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}
+.detail-row .dl{color:var(--muted)}
+.detail-row .dv{font-weight:600}
+
+/* ── Loading ──────────────────────────────────────────────────────── */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:16px;color:var(--muted)}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .header-stats{display:none}
+  .toolbar-inner{gap:6px}
+  main{padding:10px 12px}
+  .summary-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-logo">LI</div>
+      <div>
+        <div class="brand-name">Lamberts Index</div>
+        <div class="brand-sub">FC Hradec Králové · Scouting Intelligence</div>
+      </div>
+    </div>
+    <div class="header-stats" id="headerStats">
+      <div class="hstat"><div class="hstat-val" id="hTotal">—</div><div class="hstat-lbl">Players</div></div>
+      <div class="hstat"><div class="hstat-val" id="hUpgrade">—</div><div class="hstat-lbl">Clear Upgrades</div></div>
+      <div class="hstat"><div class="hstat-val" id="hElite">—</div><div class="hstat-lbl">Elite Value</div></div>
+      <div class="hstat"><div class="hstat-val" id="hTop5">—</div><div class="hstat-lbl">Top 5</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="tab-bar">
+  <div class="tab-inner" id="tabBar">
+    <div class="tab active" data-sheet="all_players" onclick="switchTab(this)"><span class="tab-dot" style="background:#C9A84C"></span>All Players</div>
+    <div class="tab" data-sheet="priority_list" onclick="switchTab(this)"><span class="tab-dot" style="background:#1E8449"></span>Priority List</div>
+    <div class="tab" data-sheet="elite_picks" onclick="switchTab(this)"><span class="tab-dot" style="background:#1A5276"></span>Elite Picks</div>
+    <div class="tab" data-sheet="gk" onclick="switchTab(this)"><span class="tab-dot" style="background:#154360"></span>GK</div>
+    <div class="tab" data-sheet="cb" onclick="switchTab(this)"><span class="tab-dot" style="background:#0B5345"></span>CB</div>
+    <div class="tab" data-sheet="fb" onclick="switchTab(this)"><span class="tab-dot" style="background:#145A32"></span>FB</div>
+    <div class="tab" data-sheet="dm" onclick="switchTab(this)"><span class="tab-dot" style="background:#1A5276"></span>DM</div>
+    <div class="tab" data-sheet="cm" onclick="switchTab(this)"><span class="tab-dot" style="background:#6C3483"></span>CM</div>
+    <div class="tab" data-sheet="w" onclick="switchTab(this)"><span class="tab-dot" style="background:#784212"></span>W</div>
+    <div class="tab" data-sheet="fw" onclick="switchTab(this)"><span class="tab-dot" style="background:#922B21"></span>FW</div>
+    <div class="tab" data-sheet="expiring_2026" onclick="switchTab(this)"><span class="tab-dot" style="background:#922B21"></span>Expiring 2026</div>
+    <div class="tab" data-sheet="leagues" onclick="switchTab(this)"><span class="tab-dot" style="background:#C9A84C"></span>Leagues</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="toolbar-inner">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search player, team, league…" oninput="applyFilters()"/>
+    </div>
+    <select class="filter" id="filterTier" onchange="applyFilters()">
+      <option value="">All Tiers</option>
+      <option value="TOP 5">TOP 5</option>
+      <option value="ELITE VALUE">Elite Value</option>
+      <option value="HIGH VALUE">High Value</option>
+      <option value="VALUE">Value</option>
+      <option value="FAIR VALUE">Fair Value</option>
+      <option value="OVERPRICED">Overpriced</option>
+    </select>
+    <select class="filter" id="filterLeagueTier" onchange="applyFilters()">
+      <option value="">All League Tiers</option>
+      <option value="T1">T1 — Elite</option>
+      <option value="T2">T2 — Strong</option>
+      <option value="T3">T3 — Mid-Tier</option>
+      <option value="T4">T4 — Developing</option>
+      <option value="T5">T5 — Emerging</option>
+    </select>
+    <select class="filter" id="filterStatus" onchange="applyFilters()">
+      <option value="">All Status</option>
+      <option value="CLEAR UPGRADE">Clear Upgrade</option>
+      <option value="ROTATIONAL / COVER">Rotational</option>
+      <option value="DEPTH">Depth</option>
+    </select>
+    <select class="filter" id="filterPos" onchange="applyFilters()">
+      <option value="">All Positions</option>
+      <option value="GK">GK</option>
+      <option value="CB">CB</option>
+      <option value="FB">FB</option>
+      <option value="DM">DM</option>
+      <option value="CM">CM</option>
+      <option value="W">W</option>
+      <option value="FW">FW</option>
+    </select>
+    <select class="filter" id="filterAgeBand" onchange="applyFilters()">
+      <option value="">All Ages</option>
+      <option value="U21">U21</option>
+      <option value="U23">U23</option>
+      <option value="U25">U25</option>
+      <option value="U28">U28</option>
+      <option value="U30+">U30+</option>
+    </select>
+    <select class="filter" id="filterFoot" onchange="applyFilters()">
+      <option value="">Both Feet</option>
+      <option value="Left">Left</option>
+      <option value="Right">Right</option>
+    </select>
+    <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+    <span class="result-count" id="resultCount"></span>
+  </div>
+</div>
+
+<main id="mainContent">
+  <div class="loading"><div class="spinner"></div><div>Loading player data…</div></div>
+</main>
+
+<!-- Player modal -->
+<div class="modal-overlay" id="playerModal" onclick="closeModal(event)">
+  <div class="modal" id="modalInner">
+    <div class="modal-head">
+      <div>
+        <div class="modal-name" id="mName"></div>
+        <div class="modal-sub" id="mSub"></div>
+        <div class="modal-badges" id="mBadges"></div>
+      </div>
+      <button class="modal-close" onclick="closeModalBtn()">✕</button>
+    </div>
+    <div class="modal-body" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const STATE = {
+  sheet: 'all_players',
+  data: {},       // cache: sheet -> {cols, rows}
+  filtered: [],   // current filtered rows
+  cols: [],
+  page: 1,
+  pageSize: 100,
+  sortCol: null,
+  sortDir: 1,
+  meta: null,
+};
+
+// ── Column display names / visibility ──────────────────────────────────────
+const COL_CFG = {
+  'Player':         {w:160, pin:true},
+  'Team':           {w:130},
+  'League':         {w:120},
+  'League Tier':    {w:90},
+  'Pos':            {w:50},
+  'Age':            {w:45, num:true},
+  'Age Band':       {w:65},
+  'Foot':           {w:55},
+  'Mkt Val (€)':    {w:100, num:true, fmt:'money'},
+  'Contract':       {w:80},
+  'Exp?':           {w:45},
+  'Tier':           {w:110, badge:true},
+  'LI Score':       {w:75, num:true},
+  'Lamberts Index': {w:90, num:true, li:true},
+  'Status':         {w:120, badge:true},
+  'vs Hradec':      {w:80, num:true},
+  'Minutes':        {w:70, num:true},
+  'DIS':            {w:55, num:true},
+  'ADI':            {w:55, num:true},
+  'PADS':           {w:55, num:true},
+  'PDS':            {w:55, num:true},
+  'Save %':         {w:65, num:true},
+  'Prev Goals/90':  {w:80, num:true},
+  'Def Actions/90': {w:80, num:true},
+  'Aerial/90':      {w:75, num:true},
+  'Aerial Won %':   {w:80, num:true},
+  'PAdj Intercept': {w:85, num:true},
+  'Goals/90':       {w:65, num:true},
+  'xG/90':          {w:60, num:true},
+  'Assists/90':     {w:70, num:true},
+  'Pass Acc %':     {w:70, num:true},
+  'Prog Pass/90':   {w:80, num:true},
+  'Dribbles/90':    {w:75, num:true},
+  'Dribble %':      {w:70, num:true},
+  'Cross/90':       {w:65, num:true},
+  'Touch Box/90':   {w:80, num:true},
+};
+
+// Columns shown per tab (subset of what exists in the data)
+const TAB_COLS = {
+  all_players:   ['Player','Team','League','League Tier','Pos','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','Minutes','DIS','ADI'],
+  priority_list: ['Player','Team','League','League Tier','Pos','Age','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','Contract','Exp?'],
+  elite_picks:   ['Player','Team','League','League Tier','Pos','Age','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','DIS','ADI'],
+  gk:            ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','Save %','Prev Goals/90','Minutes'],
+  cb:            ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','DIS','ADI','PAdj Intercept','Aerial/90','Aerial Won %','Minutes'],
+  fb:            ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','DIS','Cross/90','Prog Pass/90','Dribbles/90','Minutes'],
+  dm:            ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','DIS','PADS','PAdj Intercept','Pass Acc %','Minutes'],
+  cm:            ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','Pass Acc %','Prog Pass/90','Assists/90','Minutes'],
+  w:             ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','Goals/90','xG/90','Dribbles/90','Cross/90','Minutes'],
+  fw:            ['Player','Team','League','League Tier','Age','Foot','Mkt Val (€)','Tier','LI Score','Lamberts Index','Status','vs Hradec','Goals/90','xG/90','Assists/90','Touch Box/90','Minutes'],
+  expiring_2026: ['Player','Team','League','League Tier','Pos','Age','Foot','Mkt Val (€)','Contract','Tier','LI Score','Lamberts Index','Status','vs Hradec'],
+  leagues:       [],
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmt(v, type) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (type === 'money') {
+    const n = Number(v);
+    if (isNaN(n)) return v;
+    if (n >= 1e6)  return '€' + (n/1e6).toFixed(1) + 'M';
+    if (n >= 1e3)  return '€' + (n/1e3).toFixed(0) + 'K';
+    return '€' + n;
+  }
+  if (typeof v === 'number') return v % 1 === 0 ? v : v.toFixed(2);
+  return v;
+}
+
+function tierBadge(v) {
+  const map = {
+    'TOP 5':'top5','ELITE VALUE':'elite','HIGH VALUE':'high',
+    'VALUE':'value','FAIR VALUE':'fair','OVERPRICED':'over'
+  };
+  const cls = map[v] || 'fair';
+  const label = {
+    'TOP 5':'TOP 5','ELITE VALUE':'ELITE','HIGH VALUE':'HIGH',
+    'VALUE':'VALUE','FAIR VALUE':'FAIR','OVERPRICED':'OVERPRICED'
+  }[v] || v;
+  return `<span class="badge badge-${cls}">${label}</span>`;
+}
+
+function leagueTierBadge(v) {
+  if (!v) return '—';
+  return `<span class="badge badge-${v.toLowerCase()}">${v}</span>`;
+}
+
+function statusBadge(v) {
+  if (!v) return '—';
+  const map = {'CLEAR UPGRADE':'upgrade','ROTATIONAL / COVER':'rota','DEPTH':'depth'};
+  const cls = map[v] || 'depth';
+  const label = v === 'CLEAR UPGRADE' ? '✓ UPGRADE' : v === 'ROTATIONAL / COVER' ? '~ ROTA' : 'DEPTH';
+  return `<span class="badge badge-${cls}">${label}</span>`;
+}
+
+function liCell(v) {
+  if (v === null || v === undefined) return '—';
+  const n = Number(v);
+  if (isNaN(n)) return v;
+  const cls = n >= 0 ? 'li-pos' : 'li-neg';
+  return `<span class="${cls}">${n >= 0 ? '+' : ''}${n.toFixed(2)}</span>`;
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────
+async function loadData(sheet) {
+  if (STATE.data[sheet]) return STATE.data[sheet];
+  const res = await fetch(`data/${sheet}.json`);
+  if (!res.ok) throw new Error(`Failed to load ${sheet}.json`);
+  const d = await res.json();
+  STATE.data[sheet] = d;
+  return d;
+}
+
+async function loadMeta() {
+  const res = await fetch('data/meta.json');
+  STATE.meta = await res.json();
+  const m = STATE.meta;
+  const total = m.total || 0;
+  const tiers = m.tiers || {};
+  const upgrades = Object.entries(m).find(([k]) => k === 'upgrades')?.[1] || '—';
+  document.getElementById('hTotal').textContent   = total.toLocaleString();
+  document.getElementById('hElite').textContent   = (tiers['ELITE VALUE'] || 0).toLocaleString();
+  document.getElementById('hTop5').textContent    = (tiers['TOP 5'] || 0).toLocaleString();
+  // Count upgrades from all data
+  document.getElementById('hUpgrade').textContent = '—';
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+async function switchTab(el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  STATE.sheet = el.dataset.sheet;
+  STATE.page  = 1;
+  STATE.sortCol = null;
+  document.getElementById('searchInput').value = '';
+  // Hide pos filter on position tabs
+  const posFilter = document.getElementById('filterPos');
+  const posOnlyTabs = ['gk','cb','fb','dm','cm','w','fw'];
+  posFilter.style.display = posOnlyTabs.includes(STATE.sheet) ? 'none' : '';
+  await renderView();
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────
+function applyFilters() {
+  STATE.page = 1;
+  const d = STATE.data[STATE.sheet];
+  if (!d) return;
+  const q     = document.getElementById('searchInput').value.trim().toLowerCase();
+  const tier  = document.getElementById('filterTier').value;
+  const ltier = document.getElementById('filterLeagueTier').value;
+  const status= document.getElementById('filterStatus').value;
+  const pos   = document.getElementById('filterPos').value;
+  const age   = document.getElementById('filterAgeBand').value;
+  const foot  = document.getElementById('filterFoot').value;
+  const cols  = d.cols;
+  const ci    = name => cols.indexOf(name);
+  const iPlayer = ci('Player'), iTeam = ci('Team'), iLeague = ci('League');
+  const iTier = ci('Tier'), iLTier = ci('League Tier'), iStatus = ci('Status');
+  const iPos  = ci('Pos'), iAge = ci('Age Band'), iFoot = ci('Foot');
+
+  STATE.filtered = d.rows.filter(r => {
+    if (q) {
+      const s = [r[iPlayer],r[iTeam],r[iLeague]].join(' ').toLowerCase();
+      if (!s.includes(q)) return false;
+    }
+    if (tier   && r[iTier]   !== tier)   return false;
+    if (ltier  && r[iLTier]  !== ltier)  return false;
+    if (status && r[iStatus] !== status) return false;
+    if (pos    && r[iPos]    !== pos)    return false;
+    if (age    && r[iAge]    !== age)    return false;
+    if (foot   && r[iFoot]   !== foot)   return false;
+    return true;
+  });
+
+  applySortAndRender();
+}
+
+function clearFilters() {
+  ['searchInput','filterTier','filterLeagueTier','filterStatus',
+   'filterPos','filterAgeBand','filterFoot'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.tagName === 'INPUT') el.value = '';
+    else el.value = '';
+  });
+  applyFilters();
+}
+
+// ── Sort ───────────────────────────────────────────────────────────────────
+function sortBy(colName) {
+  if (STATE.sortCol === colName) STATE.sortDir *= -1;
+  else { STATE.sortCol = colName; STATE.sortDir = -1; }
+  STATE.page = 1;
+  applySortAndRender();
+}
+
+function applySortAndRender() {
+  if (STATE.sortCol) {
+    const d   = STATE.data[STATE.sheet];
+    const idx = d.cols.indexOf(STATE.sortCol);
+    STATE.filtered.sort((a, b) => {
+      const av = a[idx], bv = b[idx];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * STATE.sortDir;
+      return String(av).localeCompare(String(bv)) * STATE.sortDir;
+    });
+  }
+  renderTable();
+}
+
+// ── Render view ────────────────────────────────────────────────────────────
+async function renderView() {
+  const el = document.getElementById('mainContent');
+  if (STATE.sheet === 'leagues') {
+    await renderLeagues();
+    return;
+  }
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><div>Loading…</div></div>';
+  try {
+    const d = await loadData(STATE.sheet);
+    STATE.cols = d.cols;
+    STATE.filtered = [...d.rows];
+    applySortAndRender();
+  } catch(e) {
+    el.innerHTML = `<div class="loading">Error loading data: ${e.message}</div>`;
+  }
+}
+
+function renderTable() {
+  const el      = document.getElementById('mainContent');
+  const sheet   = STATE.sheet;
+  const d       = STATE.data[sheet];
+  const dispCols= (TAB_COLS[sheet] || []).filter(c => d.cols.includes(c));
+  const colIdxs = dispCols.map(c => d.cols.indexOf(c));
+  const total   = STATE.filtered.length;
+  const pages   = Math.ceil(total / STATE.pageSize) || 1;
+  const start   = (STATE.page - 1) * STATE.pageSize;
+  const slice   = STATE.filtered.slice(start, start + STATE.pageSize);
+
+  document.getElementById('resultCount').textContent =
+    `${total.toLocaleString()} players`;
+
+  // Update upgrade count in header once
+  if (sheet === 'all_players' && STATE.meta) {
+    const siStatus = d.cols.indexOf('Status');
+    const upg = STATE.filtered.filter(r => r[siStatus] === 'CLEAR UPGRADE').length;
+    document.getElementById('hUpgrade').textContent = upg.toLocaleString();
+  }
+
+  // Summary cards
+  const sumCards = buildSummaryCards(d, sheet);
+
+  // Table
+  let thead = '<tr>';
+  dispCols.forEach(c => {
+    const sc = STATE.sortCol === c ? (STATE.sortDir === 1 ? ' sorted-asc' : ' sorted-desc') : '';
+    thead += `<th class="${sc}" onclick="sortBy('${c}')">${c}</th>`;
+  });
+  thead += '</tr>';
+
+  let tbody = '';
+  slice.forEach((row, i) => {
+    const even = i % 2 === 0;
+    tbody += `<tr class="${even?'even':''}" onclick="openModal(${start+i})" style="cursor:pointer">`;
+    dispCols.forEach((c, ci) => {
+      const v  = row[colIdxs[ci]];
+      const cfg= COL_CFG[c] || {};
+      let cell = '';
+      if (c === 'Tier')          cell = tierBadge(v);
+      else if (c === 'League Tier') cell = leagueTierBadge(v);
+      else if (c === 'Status')   cell = statusBadge(v);
+      else if (c === 'Lamberts Index') cell = liCell(v);
+      else if (c === 'LI Score') cell = `<span class="li-score">${fmt(v)}</span>`;
+      else cell = fmt(v, cfg.fmt);
+      const cls = [c === 'Player' ? 'name' : '', cfg.num ? 'num' : ''].filter(Boolean).join(' ');
+      tbody += `<td class="${cls}">${cell}</td>`;
+    });
+    tbody += '</tr>';
+  });
+
+  el.innerHTML = `
+    ${sumCards}
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>${thead}</thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>
+      ${renderPagination(pages)}
+    </div>`;
+}
+
+function buildSummaryCards(d, sheet) {
+  const rows = STATE.filtered;
+  if (!rows.length) return '';
+  const ci = n => d.cols.indexOf(n);
+  const vals = n => rows.map(r => r[ci(n)]).filter(v => v !== null && v !== undefined);
+
+  const cards = [];
+  cards.push({val: rows.length.toLocaleString(), lbl: 'Players'});
+
+  const siStatus = ci('Status');
+  if (siStatus >= 0) {
+    const upg = rows.filter(r => r[siStatus] === 'CLEAR UPGRADE').length;
+    cards.push({val: upg.toLocaleString(), lbl: 'Clear Upgrades'});
+  }
+  const siTier = ci('Tier');
+  if (siTier >= 0) {
+    const top5 = rows.filter(r => r[siTier] === 'TOP 5').length;
+    const elite = rows.filter(r => r[siTier] === 'ELITE VALUE').length;
+    cards.push({val: top5.toLocaleString(), lbl: 'TOP 5'});
+    cards.push({val: elite.toLocaleString(), lbl: 'Elite Value'});
+  }
+  const siLI = ci('LI Score');
+  if (siLI >= 0) {
+    const vs = vals('LI Score').filter(v => typeof v === 'number');
+    if (vs.length) {
+      const avg = vs.reduce((a,b) => a+b, 0) / vs.length;
+      cards.push({val: avg.toFixed(1), lbl: 'Avg LI Score'});
+    }
+  }
+  const siMV = ci('Mkt Val (€)');
+  if (siMV >= 0) {
+    const mv = vals('Mkt Val (€)').filter(v => typeof v === 'number' && v > 0);
+    if (mv.length) {
+      const avg = mv.reduce((a,b) => a+b, 0) / mv.length;
+      cards.push({val: fmt(avg, 'money'), lbl: 'Avg Mkt Val'});
+    }
+  }
+
+  return `<div class="summary-grid">${cards.map(c =>
+    `<div class="summary-card"><div class="sc-val">${c.val}</div><div class="sc-lbl">${c.lbl}</div></div>`
+  ).join('')}</div>`;
+}
+
+function renderPagination(pages) {
+  if (pages <= 1) return '';
+  const p = STATE.page;
+  let html = '<div class="pagination">';
+  html += `<button class="page-btn" onclick="gotoPage(${p-1})" ${p<=1?'disabled':''}>‹</button>`;
+  const range = [];
+  for (let i = Math.max(1, p-2); i <= Math.min(pages, p+2); i++) range.push(i);
+  if (range[0] > 1) { html += `<button class="page-btn" onclick="gotoPage(1)">1</button>`; if (range[0] > 2) html += `<span class="page-info">…</span>`; }
+  range.forEach(i => html += `<button class="page-btn ${i===p?'active':''}" onclick="gotoPage(${i})">${i}</button>`);
+  if (range[range.length-1] < pages) { if (range[range.length-1] < pages-1) html += `<span class="page-info">…</span>`; html += `<button class="page-btn" onclick="gotoPage(${pages})">${pages}</button>`; }
+  html += `<button class="page-btn" onclick="gotoPage(${p+1})" ${p>=pages?'disabled':''}>›</button>`;
+  html += `<span class="page-info">&nbsp;Page ${p} of ${pages} · ${STATE.filtered.length.toLocaleString()} results</span>`;
+  html += '</div>';
+  return html;
+}
+
+function gotoPage(p) {
+  const pages = Math.ceil(STATE.filtered.length / STATE.pageSize);
+  STATE.page = Math.max(1, Math.min(p, pages));
+  renderTable();
+  document.querySelector('.table-scroll')?.scrollTo(0,0);
+}
+
+// ── Leagues view ───────────────────────────────────────────────────────────
+async function renderLeagues() {
+  const el = document.getElementById('mainContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    let data;
+    if (STATE.data['leagues']) {
+      data = STATE.data['leagues'];
+    } else {
+      const res = await fetch('data/league_analysis.json');
+      data = await res.json();
+      STATE.data['leagues'] = data;
+    }
+    const tier_order = {'T1':1,'T2':2,'T3':3,'T4':4,'T5':5};
+    data.sort((a,b) => (tier_order[a['League Tier']]||9) - (tier_order[b['League Tier']]||9) || (b['Avg LI Score']||0) - (a['Avg LI Score']||0));
+
+    const tiers = ['T1','T2','T3','T4','T5'];
+    const tierLabels = {'T1':'T1 — Elite','T2':'T2 — Strong','T3':'T3 — Mid-Tier','T4':'T4 — Developing','T5':'T5 — Emerging'};
+    let html = '';
+    tiers.forEach(t => {
+      const leagues = data.filter(d => d['League Tier'] === t);
+      if (!leagues.length) return;
+      html += `<div style="margin-bottom:24px">
+        <h3 style="color:var(--gold);font-size:13px;margin-bottom:12px;letter-spacing:.5px">
+          <span class="badge badge-${t.toLowerCase()}" style="margin-right:8px">${t}</span>${tierLabels[t]} · ${leagues.length} leagues
+        </h3>
+        <div class="league-grid">`;
+      leagues.forEach(d => {
+        const top5 = d['Top 5'] || 0;
+        const elite = d['Elite'] || 0;
+        const high = d['High'] || 0;
+        const players = d['Players'] || 0;
+        const avgLI = d['Avg LI Score'] != null ? d['Avg LI Score'].toFixed(1) : '—';
+        html += `<div class="league-card" style="border-left-color:var(--${t.toLowerCase()})">
+          <div class="lc-head">
+            <div class="lc-name">${d['League']||'—'}</div>
+            <span class="badge badge-${t.toLowerCase()}">${t}</span>
+          </div>
+          <div class="lc-stats">
+            <div>Players <span>${players}</span></div>
+            <div>TOP 5 <span>${top5}</span></div>
+            <div>Elite <span>${elite}</span></div>
+            <div>High <span>${high}</span></div>
+            <div>Avg LI <span>${avgLI}</span></div>
+          </div>
+        </div>`;
+      });
+      html += '</div></div>';
+    });
+    el.innerHTML = html;
+    document.getElementById('resultCount').textContent = `${data.length} leagues`;
+  } catch(e) {
+    el.innerHTML = `<div class="loading">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Player modal ───────────────────────────────────────────────────────────
+function openModal(idx) {
+  const sheet = STATE.sheet;
+  if (sheet === 'leagues') return;
+  const d   = STATE.data[sheet];
+  const row = STATE.filtered[idx];
+  if (!row) return;
+  const ci = n => d.cols.indexOf(n);
+  const g  = n => { const v = row[ci(n)]; return (v === null || v === undefined) ? '—' : v; };
+
+  document.getElementById('mName').textContent = g('Player');
+  document.getElementById('mSub').textContent  = `${g('Team')} · ${g('League')} · ${g('Full Position') !== '—' ? g('Full Position') : g('Pos')}`;
+
+  const badges = [
+    tierBadge(g('Tier')),
+    leagueTierBadge(g('League Tier')),
+    statusBadge(g('Status')),
+    g('Exp?') === 'Yes' ? '<span class="badge badge-over">Expiring 2026</span>' : '',
+    g('On Loan') === 'Yes' ? '<span class="badge badge-rota">On Loan</span>' : '',
+  ].filter(Boolean).join('');
+  document.getElementById('mBadges').innerHTML = badges;
+
+  const stats = [
+    {v: g('LI Score'),        l: 'LI Score',       gold: true},
+    {v: liCell(g('Lamberts Index')), l: 'Lamberts Index', raw: true},
+    {v: g('vs Hradec') !== '—' ? (Number(g('vs Hradec')) >= 0 ? '+' : '') + g('vs Hradec') : '—', l: 'vs Hradec'},
+    {v: fmt(g('Mkt Val (€)'), 'money'), l: 'Market Value'},
+    {v: g('Age'),             l: 'Age'},
+    {v: g('Minutes'),         l: 'Minutes'},
+  ];
+
+  let body = '<div class="stat-grid">';
+  stats.forEach(s => {
+    const val = s.raw ? s.v : `<span style="${s.gold?'color:var(--gold);':''} font-weight:700;font-size:16px">${s.v}</span>`;
+    body += `<div class="stat-block"><div class="stat-val">${val}</div><div class="stat-lbl">${s.l}</div></div>`;
+  });
+  body += '</div>';
+
+  // Personal details
+  body += '<div class="section-head">Details</div>';
+  const details = [
+    ['Birth Country', g('Birth Country')], ['Foot', g('Foot')],
+    ['Age Band', g('Age Band')], ['Height', g('Height (cm)') !== '—' ? g('Height (cm)') + ' cm' : '—'],
+    ['Weight', g('Weight (kg)') !== '—' ? g('Weight (kg)') + ' kg' : '—'],
+    ['Contract', g('Contract')], ['On Loan', g('On Loan')],
+    ['Model Val', fmt(g('Model Val (€)'), 'money')], ['Val Ratio', g('Val Ratio')],
+    ['Matches', g('Matches')], ['Min/Match', g('Min/Match')],
+  ];
+  details.forEach(([l,v]) => {
+    body += `<div class="detail-row"><span class="dl">${l}</span><span class="dv">${v}</span></div>`;
+  });
+
+  // Defensive indexes if available
+  const defVals = [['DIS',g('DIS')],['ADI',g('ADI')],['PADS',g('PADS')],['PDS',g('PDS')]].filter(([,v]) => v !== '—');
+  if (defVals.length) {
+    body += '<div class="section-head">Defensive Indexes</div><div class="stat-grid">';
+    defVals.forEach(([l,v]) => body += `<div class="stat-block"><div class="stat-val">${typeof v === 'number' ? v.toFixed(1) : v}</div><div class="stat-lbl">${l}</div></div>`);
+    body += '</div>';
+  }
+
+  // Key stats
+  const statCols = d.cols.filter(c =>
+    c.includes('/90') || c.includes(' %') || c === 'Save %' || c === 'Prev Goals/90'
+  ).slice(0, 18);
+  if (statCols.length) {
+    body += '<div class="section-head">Key Stats</div><div class="stat-grid">';
+    statCols.forEach(c => {
+      const v = row[ci(c)];
+      if (v !== null && v !== undefined) {
+        body += `<div class="stat-block"><div class="stat-val">${typeof v === 'number' ? v.toFixed(2) : v}</div><div class="stat-lbl">${c}</div></div>`;
+      }
+    });
+    body += '</div>';
+  }
+
+  document.getElementById('mBody').innerHTML = body;
+  document.getElementById('playerModal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('playerModal')) closeModalBtn();
+}
+function closeModalBtn() {
+  document.getElementById('playerModal').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalBtn(); });
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async () => {
+  await loadMeta();
+  await renderView();
+})();
+</script>
+</body>
+</html>
