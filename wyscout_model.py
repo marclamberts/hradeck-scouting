@@ -138,7 +138,77 @@ POSITION_RELEVANCE: dict[str, dict[str, float]] = {
 
 WYSCOUT_DB_DIR = Path(__file__).parent / "data" / "Wyscout DB"
 
-ALL_SCORE_COLS = list(SCORE_BLUEPRINTS.keys()) + ["AerialScore", "SetPieceScore", "CompositeRecruitmentScore", "ScoutingUncertainty"]
+ALL_SCORE_COLS = list(SCORE_BLUEPRINTS.keys()) + [
+    "AerialScore", "SetPieceScore", "CompositeRecruitmentScore",
+    "ScoutingGrade", "UncertaintyBand", "DataReliability",
+    "RatingWithBand", "GradeWithBand", "ConfidenceLabel",
+]
+
+# ── League quality index ───────────────────────────────────────────────────────
+# Factor in [0.0, 1.0]: lower = stronger league (less uncertainty from context).
+# Used by the confidence framework; unmapped leagues default to 0.30.
+LEAGUE_QUALITY_FACTOR: dict[str, float] = {
+    # ── Tier 1: Big-5 European (factor = 0.00) ──────────────────────────────
+    "England": 0.00, "Germany": 0.00, "Spain": 0.00, "France": 0.00, "Italy": 0.00,
+    # ── Tier 2: Strong European + elite non-European ─────────────────────────
+    "Netherlands": 0.08, "Portugal": 0.08, "Russia": 0.08, "Turkiye": 0.08,
+    "Belgium": 0.08, "Brazil": 0.10, "Argentina": 0.10, "Mexico": 0.10,
+    "Ukraine": 0.10, "Scotland": 0.10, "Switzerland": 0.10, "Austria": 0.10,
+    "Greece": 0.10, "Denmark": 0.10, "Sweden": 0.10, "Norway": 0.10,
+    "Japan": 0.12, "Korea": 0.12, "USA": 0.12, "Saudi": 0.12,
+    "Czech": 0.12, "Poland": 0.12, "Serbia": 0.12, "Croatia": 0.12,
+    "China": 0.14,
+    # ── Tier 3: Second divisions of Big-5 + solid mid-tier ───────────────────
+    "England II": 0.08, "Germany II": 0.08, "Spain II": 0.10,
+    "France II": 0.10, "Italy II": 0.10,
+    "Netherlands II": 0.12, "Portugal II": 0.12, "Belgium II": 0.12,
+    "Russia II": 0.15, "Turkiye II": 0.15, "Ukraine II": 0.15,
+    "Scotland II": 0.15, "Switzerland II": 0.15, "Austria II": 0.15,
+    "Greece II": 0.15, "Denmark II": 0.15, "Sweden II": 0.15,
+    "Norway II": 0.15, "Czech II": 0.16, "Poland II": 0.16, "Serbia II": 0.16,
+    "Brazil II": 0.15, "Argentina II": 0.15, "Mexico II": 0.15,
+    "Japan II III": 0.18, "USA II": 0.18, "Korea II": 0.18, "Saudi II": 0.18,
+    "China II": 0.20, "Slovakia": 0.15, "Hungary": 0.15, "Romania": 0.15,
+    "Bulgaria": 0.15, "Colombia": 0.22, "Chile": 0.22, "Australia": 0.22,
+    "Morocco": 0.25, "Tunisia": 0.25, "Egypt": 0.25,
+    # ── Tier 4: Third divisions + lower non-European ─────────────────────────
+    "England III": 0.15, "England IV": 0.20, "England V": 0.25,
+    "Germany III": 0.15,
+    "Germany 4 - Part I": 0.20, "Germany 4 - Part II": 0.20,
+    "Germany 4 - Part III": 0.20, "Germany 4 - Part IV": 0.20,
+    "Spain III": 0.18, "France III": 0.18,
+    "Italy III - Part I": 0.18, "Italy III - Part II": 0.18,
+    "Italy III - Part III": 0.18, "Italy III - Part IV": 0.18,
+    "Netherlands III": 0.20, "Portugal III": 0.20, "Poland III": 0.22,
+    "Norway III": 0.25, "Sweden III": 0.25, "Denmark III": 0.25,
+    "Denmark IV": 0.28, "Scotland III": 0.25, "Scotland IV": 0.28,
+    "Slovakia II": 0.22, "Slovenia": 0.22, "Slovenia II": 0.25,
+    "Bosnia": 0.22, "Montenegro": 0.25, "Albania": 0.25,
+    "Latvia": 0.25, "Lithuania": 0.25, "Estonia": 0.25,
+    "Finland": 0.20, "Finland II": 0.25, "Iceland": 0.25,
+    "Ireland": 0.22, "Ireland II": 0.28, "Northern Ireland": 0.28,
+    "Wales": 0.28, "Hungary II": 0.28, "Kosovo": 0.28,
+    "Georgia": 0.28, "Armenia": 0.28, "Azerbaijan": 0.28,
+    "Moldovia": 0.30, "Faroe Islands": 0.35, "Malta": 0.35, "Andorra": 0.40,
+    "Chile II": 0.28, "Uruguay": 0.22, "Uruguay II": 0.28,
+    "Paraguay": 0.25, "Peru": 0.28, "Ecuador": 0.25, "Ecuador II": 0.30,
+    "Bolivia": 0.30, "Venezuela": 0.30, "Costa Rica": 0.30,
+    "Guatemala": 0.35, "Honduras": 0.35, "Panama": 0.35,
+    "El Salvador": 0.35, "Nicaragua": 0.38,
+    "Australia II - Part I": 0.28, "Australia II - Part II": 0.28,
+    "Australia II - Part III": 0.28, "Australia II - Part IV": 0.28,
+    "Australia II - Part V": 0.28, "Australia II - Part VI": 0.28,
+    "Australia II - Part VII": 0.28,
+    "Canada": 0.25, "USA III": 0.25, "Korea III": 0.28,
+    "Nigeria": 0.30, "South Africa": 0.30,
+    "Qatar": 0.28, "UAE": 0.28, "Jordan": 0.30, "Bahrain": 0.32,
+    "India": 0.32, "Thailand": 0.35, "Malaysia": 0.38,
+    "Indonesia": 0.38, "Vietnam": 0.38, "Philippines": 0.40,
+    "Singapore": 0.40, "Cambodia": 0.45, "Hong Kong": 0.38,
+    "Kazakhstan": 0.32, "Uzbekistan": 0.32, "Kyrgystan": 0.40,
+    "Bangladesh": 0.45, "Cyprus": 0.25, "Cyprus II": 0.30,
+    "Czech U17": 0.30, "Czech U19": 0.25,
+}
 PROJECTION_METRICS = [
     "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
     "PressingScore", "BallSecurityScore", "ExpectedThreatScore", "ASA_GoalsAddedScore",
@@ -313,26 +383,110 @@ def compute_wyscout_scores(df: pd.DataFrame) -> pd.DataFrame:
             + result.get("PerformanceReliabilityScore", pd.Series(50, index=result.index)).fillna(50) * 0.4
         ).clip(0, 100)
 
-    # ScoutingUncertainty: 0 = high confidence, 100 = high uncertainty.
-    # Per-90 stats have standard errors that scale as 1/sqrt(n_nineties), so a
-    # player at the 400-minute qualifying floor is set to 100% uncertainty and
-    # the score falls as sqrt(400 / minutes_played).  An additional volatility
-    # penalty (±10 pts) is applied based on position: scoring-heavy roles carry
-    # higher inherent variance than defensive ones.
-    if "ScoutingUncertainty" not in result.columns:
-        _MIN_QUAL = 400.0
-        _POSITION_VOL: dict[str, float] = {
-            "ST": 10.0, "W": 8.0, "AM": 6.0, "CM": 4.0,
-            "DM": 2.0, "FB": 4.0, "CB": 0.0, "GK": -2.0,
-        }
+    # ── Five-factor scouting confidence framework ─────────────────────────────
+    # Produces:
+    #   ScoutingGrade    (1–10)  — the scout's number for the player
+    #   UncertaintyBand  (pts)   — ±X on a 0–100 scale; display as "82 ± 11"
+    #   DataReliability  (0–100) — how much to trust the grade (100 = full trust)
+    #   RatingWithBand           — formatted "82 ± 11" string
+    #   GradeWithBand            — formatted "8.2 ± 1.1" string
+    #   CF_*                     — individual factor components (for drill-down)
+    if "UncertaintyBand" not in result.columns:
+        _MIN_QUAL  = 400.0
+        _KEY_STATS = [
+            "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+            "Key passes per 90", "Passes per 90", "Accurate passes, %",
+            "Dribbles per 90", "Successful defensive actions per 90",
+            "Aerial duels won, %", "Progressive passes per 90",
+        ]
+
+        # Factor 1 — Sample size (35 %)
+        # SE of per-90 stats ∝ 1/√(minutes/90); normalised so 400 min = 1.0
         _mins = result.get(
-            "MinutesPlayed",
-            pd.Series(_MIN_QUAL, index=result.index),
+            "MinutesPlayed", pd.Series(_MIN_QUAL, index=result.index)
         ).fillna(_MIN_QUAL).clip(lower=_MIN_QUAL)
-        _base = np.sqrt(_MIN_QUAL / _mins) * 100
-        _pos_grp = result.get("PositionGroup", pd.Series("CM", index=result.index)).fillna("CM")
-        _vol_adj = _pos_grp.map(_POSITION_VOL).fillna(4.0)
-        result["ScoutingUncertainty"] = (_base + _vol_adj).clip(0, 100).round(1)
+        _cf_sample = np.sqrt(_MIN_QUAL / _mins).clip(0, 1)
+
+        # Factor 2 — League quality (25 %)
+        _league = result.get("_League", pd.Series("", index=result.index)).fillna("")
+        _cf_league = _league.map(LEAGUE_QUALITY_FACTOR).fillna(0.30)
+
+        # Factor 3 — Age (20 %)
+        # Peak certainty at 24–27; higher uncertainty for teenagers and 30+ players
+        _age = result.get("AgeYears", pd.Series(25.0, index=result.index)).fillna(25)
+        _cf_age = pd.Series(0.0, index=result.index, dtype=float)
+        _cf_age = _cf_age.where(_age >= 17, 0.40)          # extreme youth: unknown ceiling
+        _cf_age = _cf_age.where(~(_age.between(17, 19.99)), _cf_age)
+        _cf_age[_age.between(17, 19.99)] = 0.35
+        _cf_age[_age.between(20, 22.99)] = 0.20
+        _cf_age[_age.between(23, 27.99)] = 0.00            # peak — most reliable
+        _cf_age[_age.between(28, 30.99)] = 0.12
+        _cf_age[_age >= 31] = 0.25
+
+        # Factor 4 — Tactical stability / availability (10 %)
+        # Proxied by average minutes-per-match; rotation players are less representative
+        _matches = pd.to_numeric(
+            result.get("Matches played", pd.Series(10, index=result.index)),
+            errors="coerce",
+        ).fillna(10).clip(lower=1)
+        _avg_min = (_mins / _matches).clip(0, 90)
+        _cf_avail = ((90 - _avg_min) / 90).clip(0, 1) * 0.40  # max 0.40 if 0 min/game
+
+        # Factor 5 — Data completeness (10 %)
+        # Missing key stats = less evidence to anchor the composite score
+        _avail_stats = [c for c in _KEY_STATS if c in result.columns]
+        if _avail_stats:
+            _present = result[_avail_stats].notna().sum(axis=1)
+            _cf_complete = (1 - _present / len(_avail_stats)).clip(0, 1)
+        else:
+            _cf_complete = pd.Series(0.20, index=result.index)
+
+        # Combined factor (weighted sum, clamped to [0, 1])
+        _combined = (
+            0.35 * _cf_sample
+            + 0.25 * _cf_league
+            + 0.20 * _cf_age
+            + 0.10 * _cf_avail
+            + 0.10 * _cf_complete
+        ).clip(0, 1)
+
+        # Uncertainty band in composite-score points (0–100 scale)
+        # Calibrated so: best case (top league, regular starter, peak age) ≈ ±5 pts
+        #                worst case (min minutes, weak league, teen)       ≈ ±28 pts
+        _comp = result.get(
+            "CompositeRecruitmentScore", pd.Series(50.0, index=result.index)
+        ).fillna(50).clip(0, 100)
+        _band = (_comp * _combined * 0.30).clip(3, 30).round(1)
+
+        result["ScoutingGrade"]   = (_comp / 10).clip(0, 10).round(1)
+        result["UncertaintyBand"] = _band
+        result["DataReliability"] = (100 - _combined * 100).clip(0, 100).round(1)
+
+        # Store individual factors for drill-down on the uncertainty sheet
+        result["CF_SampleSize"]        = (_cf_sample * 100).round(1)
+        result["CF_LeagueQuality"]     = (_cf_league * 100).round(1)
+        result["CF_Age"]               = (_cf_age * 100).round(1)
+        result["CF_TacticalStability"] = (_cf_avail * 100).round(1)
+        result["CF_DataCompleteness"]  = (_cf_complete * 100).round(1)
+
+        # Formatted strings — "82 ± 11" and "8.2 ± 1.1"
+        _rating = _comp.round(0).astype(int)
+        _band_i = _band.round(0).astype(int)
+        result["RatingWithBand"] = _rating.astype(str) + " ± " + _band_i.astype(str)
+        result["GradeWithBand"]  = (
+            result["ScoutingGrade"].astype(str)
+            + " ± "
+            + (_band / 10).round(1).astype(str)
+        )
+
+        def _conf_label(r: float) -> str:
+            if r >= 85: return "High Confidence"
+            if r >= 70: return "Good Confidence"
+            if r >= 50: return "Moderate Confidence"
+            if r >= 30: return "Low Confidence"
+            return "Very Low Confidence"
+
+        result["ConfidenceLabel"] = result["DataReliability"].apply(_conf_label)
 
     return result
 
