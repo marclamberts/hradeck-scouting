@@ -18,6 +18,7 @@ Sheets produced
   Profiles               — full composite score card per player
   Tiers                  — tiered recruitment board per position (T1–T4)
   Playing Styles         — rule-based style classification + radar summary
+  Scouting Uncertainty   — sample-size uncertainty ranking with confidence bands
   SP Reliance            — how dependent each player is on set pieces
   SP Output              — volume: corners, crosses, free kicks delivered
   SP Quality             — accuracy + xG efficiency from set pieces
@@ -143,7 +144,7 @@ SCORE_COLS = [
     "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
     "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
     "ASA_GoalsAddedScore", "AerialScore", "SetPieceScore",
-    "CompositeRecruitmentScore",
+    "CompositeRecruitmentScore", "ScoutingUncertainty",
 ]
 
 DISPLAY_BASE = [
@@ -539,34 +540,41 @@ POSITION_DISPLAY: dict[str, list[str]] = {
     "ST": ["Goals per 90", "Non-penalty goals per 90", "xG per 90", "Shots per 90",
            "Shots on target, %", "Goal conversion, %", "Touches in box per 90",
            "Aerial duels won, %", "Dribbles per 90", "xA per 90",
-           "ScoringThreatScore", "ExpectedThreatScore", "CompositeRecruitmentScore"],
+           "ScoringThreatScore", "ExpectedThreatScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
     "W":  ["Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
            "Key passes per 90", "Dribbles per 90", "Successful dribbles, %",
            "Crosses per 90", "Accurate crosses, %", "Progressive runs per 90",
-           "ScoringThreatScore", "CreativeProgressionScore", "CompositeRecruitmentScore"],
+           "ScoringThreatScore", "CreativeProgressionScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
     "AM": ["Key passes per 90", "xA per 90", "Assists per 90", "Smart passes per 90",
            "Goals per 90", "xG per 90", "Touches in box per 90", "Through passes per 90",
            "Dribbles per 90", "Progressive passes per 90",
-           "CreativeProgressionScore", "ExpectedThreatScore", "CompositeRecruitmentScore"],
+           "CreativeProgressionScore", "ExpectedThreatScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
     "CM": ["Passes per 90", "Accurate passes, %", "Progressive passes per 90",
            "Key passes per 90", "xA per 90", "Progressive runs per 90",
            "Successful defensive actions per 90", "Interceptions per 90", "Duels won, %",
-           "CreativeProgressionScore", "BallSecurityScore", "CompositeRecruitmentScore"],
+           "CreativeProgressionScore", "BallSecurityScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
     "DM": ["Successful defensive actions per 90", "Defensive duels per 90",
            "Defensive duels won, %", "Interceptions per 90", "PAdj Interceptions",
            "Aerial duels won, %", "Passes per 90", "Accurate passes, %",
            "Progressive passes per 90",
-           "DefensiveDisruptionScore", "PressingScore", "CompositeRecruitmentScore"],
+           "DefensiveDisruptionScore", "PressingScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
     "FB": ["Crosses per 90", "Accurate crosses, %", "xA per 90", "Assists per 90",
            "Progressive runs per 90", "Dribbles per 90",
            "Successful defensive actions per 90", "Defensive duels won, %",
            "Aerial duels won, %", "Progressive passes per 90",
-           "CreativeProgressionScore", "DefensiveDisruptionScore", "CompositeRecruitmentScore"],
+           "CreativeProgressionScore", "DefensiveDisruptionScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
     "CB": ["Successful defensive actions per 90", "Defensive duels per 90",
            "Defensive duels won, %", "Aerial duels per 90", "Aerial duels won, %",
            "Interceptions per 90", "PAdj Interceptions", "Shots blocked per 90",
            "Accurate passes, %", "Progressive passes per 90",
-           "DefensiveDisruptionScore", "BallSecurityScore", "CompositeRecruitmentScore"],
+           "DefensiveDisruptionScore", "BallSecurityScore", "CompositeRecruitmentScore",
+           "ScoutingUncertainty"],
 }
 
 
@@ -591,6 +599,56 @@ def build_positional_boards(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         )
         boards[pos] = board
     return boards
+
+
+# ── Scouting Uncertainty ──────────────────────────────────────────────────────
+
+def build_scouting_uncertainty(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rank players by scouting uncertainty so analysts know where extra
+    in-person coverage is needed most.
+
+    ScoutingUncertainty (0–100):
+      100 = maximum uncertainty (player at the minutes floor, volatile position)
+        0 = near-certain assessment (high sample, low-variance role)
+
+    Confidence band: one-sigma projected composite swing = uncertainty * composite * 0.14 / 100.
+    """
+    keep_bio = [c for c in [
+        "Player", "Team", "Position", "PositionGroup", "Age", "_League",
+        "Minutes played", "Matches played",
+    ] if c in df.columns]
+    out = df[keep_bio].copy().rename(columns={"_League": "League"})
+
+    if "ScoutingUncertainty" in df.columns:
+        out["Scouting Uncertainty (0–100)"] = pd.to_numeric(
+            df["ScoutingUncertainty"], errors="coerce"
+        ).round(1)
+    if "CompositeRecruitmentScore" in df.columns:
+        comp = pd.to_numeric(df["CompositeRecruitmentScore"], errors="coerce").fillna(50)
+        unc  = pd.to_numeric(df.get("ScoutingUncertainty", pd.Series(50, index=df.index)),
+                             errors="coerce").fillna(50)
+        # ±1σ swing on the composite assuming ~14 % base metric volatility
+        out["Composite Score"]           = comp.round(1)
+        out["Uncertainty Band (±pts)"]   = (unc * comp * 0.0014).round(1)
+        out["Optimistic Composite"]      = (comp + unc * comp * 0.0014).clip(0, 100).round(1)
+        out["Pessimistic Composite"]     = (comp - unc * comp * 0.0014).clip(0, 100).round(1)
+
+    # Confidence label
+    def _label(u: float) -> str:
+        if u >= 85: return "Very Low Confidence"
+        if u >= 70: return "Low Confidence"
+        if u >= 50: return "Moderate Confidence"
+        if u >= 30: return "Good Confidence"
+        return "High Confidence"
+
+    if "Scouting Uncertainty (0–100)" in out.columns:
+        out["Confidence Label"] = out["Scouting Uncertainty (0–100)"].apply(_label)
+
+    return (
+        out.sort_values("Scouting Uncertainty (0–100)", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -672,11 +730,12 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
     sp_anomaly   = sp_analyzer.anomaly_table(ws_enriched, top_n=300)
     role_leaders = sp_analyzer.top_players_by_role(ws_enriched, top_n=30)
 
-    # 5. Profiles + Tiers + Styles
-    print("Building profiles, tiers, and playing styles…")
-    profiles      = build_profiles(ws_enriched)
-    tiers         = build_tiers(ws_enriched)
-    playing_styles = build_playing_styles(ws_enriched)
+    # 5. Profiles + Tiers + Styles + Uncertainty
+    print("Building profiles, tiers, playing styles, and scouting uncertainty…")
+    profiles           = build_profiles(ws_enriched)
+    tiers              = build_tiers(ws_enriched)
+    playing_styles     = build_playing_styles(ws_enriched)
+    scouting_uncert    = build_scouting_uncertainty(ws_enriched)
 
     # 6. Set-piece reliance / output / quality
     print("Analysing set-piece reliance, output, and quality…")
@@ -713,6 +772,8 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
         # SP + Anomaly tags
         "_sp_primary_role", "_sp_composite",
         "_anomaly_type", "_anomaly_score", "_peak_z",
+        # Uncertainty
+        "ScoutingUncertainty",
     ]
     keep_all = [c for c in ALL_DISPLAY_COLS if c in ws_enriched.columns]
     all_players = (
@@ -745,10 +806,11 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
         _write_sheet(writer, "Similarity — Cosine",    sim_cosine)
         _write_sheet(writer, "Similarity — Pearson",   sim_pearson)
         _write_sheet(writer, "Similarity — Euclidean", sim_euclidean)
-        # Profiles / Tiers / Styles
-        _write_sheet(writer, "Profiles",        profiles)
-        _write_sheet(writer, "Tiers",           tiers)
-        _write_sheet(writer, "Playing Styles",  playing_styles)
+        # Profiles / Tiers / Styles / Uncertainty
+        _write_sheet(writer, "Profiles",            profiles)
+        _write_sheet(writer, "Tiers",               tiers)
+        _write_sheet(writer, "Playing Styles",      playing_styles)
+        _write_sheet(writer, "Scouting Uncertainty", scouting_uncert)
         # Set piece
         _write_sheet(writer, "SP Reliance",     sp_reliance)
         _write_sheet(writer, "SP Output",       sp_output)

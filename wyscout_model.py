@@ -138,7 +138,7 @@ POSITION_RELEVANCE: dict[str, dict[str, float]] = {
 
 WYSCOUT_DB_DIR = Path(__file__).parent / "data" / "Wyscout DB"
 
-ALL_SCORE_COLS = list(SCORE_BLUEPRINTS.keys()) + ["AerialScore", "SetPieceScore", "CompositeRecruitmentScore"]
+ALL_SCORE_COLS = list(SCORE_BLUEPRINTS.keys()) + ["AerialScore", "SetPieceScore", "CompositeRecruitmentScore", "ScoutingUncertainty"]
 PROJECTION_METRICS = [
     "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
     "PressingScore", "BallSecurityScore", "ExpectedThreatScore", "ASA_GoalsAddedScore",
@@ -312,6 +312,27 @@ def compute_wyscout_scores(df: pd.DataFrame) -> pd.DataFrame:
             result["CompositeRecruitmentScore"].fillna(50) * 0.6
             + result.get("PerformanceReliabilityScore", pd.Series(50, index=result.index)).fillna(50) * 0.4
         ).clip(0, 100)
+
+    # ScoutingUncertainty: 0 = high confidence, 100 = high uncertainty.
+    # Per-90 stats have standard errors that scale as 1/sqrt(n_nineties), so a
+    # player at the 400-minute qualifying floor is set to 100% uncertainty and
+    # the score falls as sqrt(400 / minutes_played).  An additional volatility
+    # penalty (±10 pts) is applied based on position: scoring-heavy roles carry
+    # higher inherent variance than defensive ones.
+    if "ScoutingUncertainty" not in result.columns:
+        _MIN_QUAL = 400.0
+        _POSITION_VOL: dict[str, float] = {
+            "ST": 10.0, "W": 8.0, "AM": 6.0, "CM": 4.0,
+            "DM": 2.0, "FB": 4.0, "CB": 0.0, "GK": -2.0,
+        }
+        _mins = result.get(
+            "MinutesPlayed",
+            pd.Series(_MIN_QUAL, index=result.index),
+        ).fillna(_MIN_QUAL).clip(lower=_MIN_QUAL)
+        _base = np.sqrt(_MIN_QUAL / _mins) * 100
+        _pos_grp = result.get("PositionGroup", pd.Series("CM", index=result.index)).fillna("CM")
+        _vol_adj = _pos_grp.map(_POSITION_VOL).fillna(4.0)
+        result["ScoutingUncertainty"] = (_base + _vol_adj).clip(0, 100).round(1)
 
     return result
 
