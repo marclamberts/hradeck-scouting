@@ -144,10 +144,7 @@ SCORE_COLS = [
     "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
     "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
     "ASA_GoalsAddedScore", "AerialScore", "SetPieceScore",
-    "CompositeRecruitmentScore",
-    # Scout numbers
-    "ScoutingGrade", "UncertaintyBand", "DataReliability",
-    "RatingWithBand", "GradeWithBand", "ConfidenceLabel",
+    "CompositeRecruitmentScore", "Rating", "ScoutingUncertainty",
 ]
 
 DISPLAY_BASE = [
@@ -544,40 +541,40 @@ POSITION_DISPLAY: dict[str, list[str]] = {
            "Shots on target, %", "Goal conversion, %", "Touches in box per 90",
            "Aerial duels won, %", "Dribbles per 90", "xA per 90",
            "ScoringThreatScore", "ExpectedThreatScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
     "W":  ["Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
            "Key passes per 90", "Dribbles per 90", "Successful dribbles, %",
            "Crosses per 90", "Accurate crosses, %", "Progressive runs per 90",
            "ScoringThreatScore", "CreativeProgressionScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
     "AM": ["Key passes per 90", "xA per 90", "Assists per 90", "Smart passes per 90",
            "Goals per 90", "xG per 90", "Touches in box per 90", "Through passes per 90",
            "Dribbles per 90", "Progressive passes per 90",
            "CreativeProgressionScore", "ExpectedThreatScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
     "CM": ["Passes per 90", "Accurate passes, %", "Progressive passes per 90",
            "Key passes per 90", "xA per 90", "Progressive runs per 90",
            "Successful defensive actions per 90", "Interceptions per 90", "Duels won, %",
            "CreativeProgressionScore", "BallSecurityScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
     "DM": ["Successful defensive actions per 90", "Defensive duels per 90",
            "Defensive duels won, %", "Interceptions per 90", "PAdj Interceptions",
            "Aerial duels won, %", "Passes per 90", "Accurate passes, %",
            "Progressive passes per 90",
            "DefensiveDisruptionScore", "PressingScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
     "FB": ["Crosses per 90", "Accurate crosses, %", "xA per 90", "Assists per 90",
            "Progressive runs per 90", "Dribbles per 90",
            "Successful defensive actions per 90", "Defensive duels won, %",
            "Aerial duels won, %", "Progressive passes per 90",
            "CreativeProgressionScore", "DefensiveDisruptionScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
     "CB": ["Successful defensive actions per 90", "Defensive duels per 90",
            "Defensive duels won, %", "Aerial duels per 90", "Aerial duels won, %",
            "Interceptions per 90", "PAdj Interceptions", "Shots blocked per 90",
            "Accurate passes, %", "Progressive passes per 90",
            "DefensiveDisruptionScore", "BallSecurityScore", "CompositeRecruitmentScore",
-           "RatingWithBand", "GradeWithBand", "DataReliability", "ConfidenceLabel"],
+           "Rating", "ScoutingUncertainty"],
 }
 
 
@@ -608,18 +605,8 @@ def build_positional_boards(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 def build_scouting_uncertainty(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Full confidence framework sheet.
-
-    Each player gets two headline numbers — "82 ± 11" — plus a breakdown
-    of the five factors that drive the uncertainty band:
-
-      CF_SampleSize       — minutes played (low sample → wider band)
-      CF_LeagueQuality    — league strength (weaker league → wider band)
-      CF_Age              — age uncertainty (very young / 31+ → wider band)
-      CF_TacticalStability— rotation / starting role (sub → wider band)
-      CF_DataCompleteness — missing key stats (gaps → wider band)
-
-    Sorted by DataReliability descending (most confident assessments first).
+    Sheet showing Rating and Scouting Uncertainty for every player,
+    sorted from most to least certain.
     """
     keep_bio = [c for c in [
         "Player", "Team", "Position", "PositionGroup", "Age", "_League",
@@ -627,41 +614,13 @@ def build_scouting_uncertainty(df: pd.DataFrame) -> pd.DataFrame:
     ] if c in df.columns]
     out = df[keep_bio].copy().rename(columns={"_League": "League"})
 
-    # ── Headline numbers ──────────────────────────────────────────────────────
-    for src, dst in [
-        ("RatingWithBand",  "Rating (e.g. 82 ± 11)"),
-        ("GradeWithBand",   "Grade (e.g. 8.2 ± 1.1)"),
-        ("ConfidenceLabel", "Confidence Label"),
-        ("ScoutingGrade",   "Scouting Grade (1–10)"),
-        ("UncertaintyBand", "Uncertainty Band (±pts)"),
-        ("DataReliability", "Data Reliability (0–100)"),
-    ]:
-        if src in df.columns:
-            out[dst] = df[src]
+    if "Rating" in df.columns:
+        out["Rating"] = pd.to_numeric(df["Rating"], errors="coerce").round(1)
+    if "ScoutingUncertainty" in df.columns:
+        out["Scouting Uncertainty"] = pd.to_numeric(df["ScoutingUncertainty"], errors="coerce").round(1)
 
-    # ── Composite + band ──────────────────────────────────────────────────────
-    if "CompositeRecruitmentScore" in df.columns:
-        comp = pd.to_numeric(df["CompositeRecruitmentScore"], errors="coerce").fillna(50)
-        out["Composite Score (0–100)"] = comp.round(1)
-        if "UncertaintyBand" in df.columns:
-            band = pd.to_numeric(df["UncertaintyBand"], errors="coerce").fillna(0)
-            out["Optimistic Score"]  = (comp + band).clip(0, 100).round(1)
-            out["Pessimistic Score"] = (comp - band).clip(0, 100).round(1)
-
-    # ── Five-factor breakdown ─────────────────────────────────────────────────
-    factor_cols = {
-        "CF_SampleSize":        "Factor: Sample Size (0=best)",
-        "CF_LeagueQuality":     "Factor: League Quality (0=best)",
-        "CF_Age":               "Factor: Age (0=best)",
-        "CF_TacticalStability": "Factor: Tactical Stability (0=best)",
-        "CF_DataCompleteness":  "Factor: Data Completeness (0=best)",
-    }
-    for src, dst in factor_cols.items():
-        if src in df.columns:
-            out[dst] = pd.to_numeric(df[src], errors="coerce").round(1)
-
-    sort_col = "Data Reliability (0–100)" if "Data Reliability (0–100)" in out.columns else out.columns[0]
-    return out.sort_values(sort_col, ascending=False).reset_index(drop=True)
+    sort_col = "Scouting Uncertainty" if "Scouting Uncertainty" in out.columns else out.columns[0]
+    return out.sort_values(sort_col).reset_index(drop=True)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -782,9 +741,8 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
         "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
         "ASA_GoalsAddedScore", "AerialScore", "SetPieceScore",
         "CompositeRecruitmentScore",
-        # Scout numbers (lead with the "82 ± 11" formatted column)
-        "RatingWithBand", "GradeWithBand", "ConfidenceLabel",
-        "ScoutingGrade", "UncertaintyBand", "DataReliability",
+        # Scout numbers
+        "Rating", "ScoutingUncertainty",
         # SP + Anomaly tags
         "_sp_primary_role", "_sp_composite",
         "_anomaly_type", "_anomaly_score", "_peak_z",

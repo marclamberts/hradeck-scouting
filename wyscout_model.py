@@ -140,8 +140,7 @@ WYSCOUT_DB_DIR = Path(__file__).parent / "data" / "Wyscout DB"
 
 ALL_SCORE_COLS = list(SCORE_BLUEPRINTS.keys()) + [
     "AerialScore", "SetPieceScore", "CompositeRecruitmentScore",
-    "ScoutingGrade", "UncertaintyBand", "DataReliability",
-    "RatingWithBand", "GradeWithBand", "ConfidenceLabel",
+    "Rating", "ScoutingUncertainty",
 ]
 
 # ── League quality index ───────────────────────────────────────────────────────
@@ -383,15 +382,14 @@ def compute_wyscout_scores(df: pd.DataFrame) -> pd.DataFrame:
             + result.get("PerformanceReliabilityScore", pd.Series(50, index=result.index)).fillna(50) * 0.4
         ).clip(0, 100)
 
-    # ── Five-factor scouting confidence framework ─────────────────────────────
-    # Produces:
-    #   ScoutingGrade    (1–10)  — the scout's number for the player
-    #   UncertaintyBand  (pts)   — ±X on a 0–100 scale; display as "82 ± 11"
-    #   DataReliability  (0–100) — how much to trust the grade (100 = full trust)
-    #   RatingWithBand           — formatted "82 ± 11" string
-    #   GradeWithBand            — formatted "8.2 ± 1.1" string
-    #   CF_*                     — individual factor components (for drill-down)
-    if "UncertaintyBand" not in result.columns:
+    # Rating — the player's composite score on a 0–100 scale
+    if "Rating" not in result.columns and "CompositeRecruitmentScore" in result.columns:
+        result["Rating"] = result["CompositeRecruitmentScore"].round(1)
+
+    # ScoutingUncertainty — 0 (very certain) to 100 (very uncertain).
+    # Driven by five factors: sample size, league quality, age,
+    # tactical stability (rotation vs starter), and data completeness.
+    if "ScoutingUncertainty" not in result.columns:
         _MIN_QUAL  = 400.0
         _KEY_STATS = [
             "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
@@ -399,94 +397,51 @@ def compute_wyscout_scores(df: pd.DataFrame) -> pd.DataFrame:
             "Dribbles per 90", "Successful defensive actions per 90",
             "Aerial duels won, %", "Progressive passes per 90",
         ]
-
-        # Factor 1 — Sample size (35 %)
-        # SE of per-90 stats ∝ 1/√(minutes/90); normalised so 400 min = 1.0
         _mins = result.get(
             "MinutesPlayed", pd.Series(_MIN_QUAL, index=result.index)
         ).fillna(_MIN_QUAL).clip(lower=_MIN_QUAL)
-        _cf_sample = np.sqrt(_MIN_QUAL / _mins).clip(0, 1)
 
-        # Factor 2 — League quality (25 %)
+        # 1. Sample size: fewer minutes → higher uncertainty
+        _f_sample = np.sqrt(_MIN_QUAL / _mins).clip(0, 1)
+
+        # 2. League quality: weaker league → higher uncertainty
         _league = result.get("_League", pd.Series("", index=result.index)).fillna("")
-        _cf_league = _league.map(LEAGUE_QUALITY_FACTOR).fillna(0.30)
+        _f_league = _league.map(LEAGUE_QUALITY_FACTOR).fillna(0.30)
 
-        # Factor 3 — Age (20 %)
-        # Peak certainty at 24–27; higher uncertainty for teenagers and 30+ players
+        # 3. Age: peak reliability at 23–27; teens and 31+ add uncertainty
         _age = result.get("AgeYears", pd.Series(25.0, index=result.index)).fillna(25)
-        _cf_age = pd.Series(0.0, index=result.index, dtype=float)
-        _cf_age = _cf_age.where(_age >= 17, 0.40)          # extreme youth: unknown ceiling
-        _cf_age = _cf_age.where(~(_age.between(17, 19.99)), _cf_age)
-        _cf_age[_age.between(17, 19.99)] = 0.35
-        _cf_age[_age.between(20, 22.99)] = 0.20
-        _cf_age[_age.between(23, 27.99)] = 0.00            # peak — most reliable
-        _cf_age[_age.between(28, 30.99)] = 0.12
-        _cf_age[_age >= 31] = 0.25
+        _f_age = pd.Series(0.0, index=result.index, dtype=float)
+        _f_age[_age < 20]                  = 0.35
+        _f_age[_age.between(20, 22.99)]    = 0.20
+        _f_age[_age.between(23, 27.99)]    = 0.00
+        _f_age[_age.between(28, 30.99)]    = 0.12
+        _f_age[_age >= 31]                 = 0.25
 
-        # Factor 4 — Tactical stability / availability (10 %)
-        # Proxied by average minutes-per-match; rotation players are less representative
+        # 4. Tactical stability: rotation players are less representative
         _matches = pd.to_numeric(
             result.get("Matches played", pd.Series(10, index=result.index)),
             errors="coerce",
         ).fillna(10).clip(lower=1)
-        _avg_min = (_mins / _matches).clip(0, 90)
-        _cf_avail = ((90 - _avg_min) / 90).clip(0, 1) * 0.40  # max 0.40 if 0 min/game
+        _avg_min  = (_mins / _matches).clip(0, 90)
+        _f_avail  = ((90 - _avg_min) / 90).clip(0, 1) * 0.40
 
-        # Factor 5 — Data completeness (10 %)
-        # Missing key stats = less evidence to anchor the composite score
+        # 5. Data completeness: missing key stats → higher uncertainty
         _avail_stats = [c for c in _KEY_STATS if c in result.columns]
         if _avail_stats:
-            _present = result[_avail_stats].notna().sum(axis=1)
-            _cf_complete = (1 - _present / len(_avail_stats)).clip(0, 1)
+            _present    = result[_avail_stats].notna().sum(axis=1)
+            _f_complete = (1 - _present / len(_avail_stats)).clip(0, 1)
         else:
-            _cf_complete = pd.Series(0.20, index=result.index)
+            _f_complete = pd.Series(0.20, index=result.index)
 
-        # Combined factor (weighted sum, clamped to [0, 1])
         _combined = (
-            0.35 * _cf_sample
-            + 0.25 * _cf_league
-            + 0.20 * _cf_age
-            + 0.10 * _cf_avail
-            + 0.10 * _cf_complete
+            0.35 * _f_sample
+            + 0.25 * _f_league
+            + 0.20 * _f_age
+            + 0.10 * _f_avail
+            + 0.10 * _f_complete
         ).clip(0, 1)
 
-        # Uncertainty band in composite-score points (0–100 scale)
-        # Calibrated so: best case (top league, regular starter, peak age) ≈ ±5 pts
-        #                worst case (min minutes, weak league, teen)       ≈ ±28 pts
-        _comp = result.get(
-            "CompositeRecruitmentScore", pd.Series(50.0, index=result.index)
-        ).fillna(50).clip(0, 100)
-        _band = (_comp * _combined * 0.30).clip(3, 30).round(1)
-
-        result["ScoutingGrade"]   = (_comp / 10).clip(0, 10).round(1)
-        result["UncertaintyBand"] = _band
-        result["DataReliability"] = (100 - _combined * 100).clip(0, 100).round(1)
-
-        # Store individual factors for drill-down on the uncertainty sheet
-        result["CF_SampleSize"]        = (_cf_sample * 100).round(1)
-        result["CF_LeagueQuality"]     = (_cf_league * 100).round(1)
-        result["CF_Age"]               = (_cf_age * 100).round(1)
-        result["CF_TacticalStability"] = (_cf_avail * 100).round(1)
-        result["CF_DataCompleteness"]  = (_cf_complete * 100).round(1)
-
-        # Formatted strings — "82 ± 11" and "8.2 ± 1.1"
-        _rating = _comp.round(0).astype(int)
-        _band_i = _band.round(0).astype(int)
-        result["RatingWithBand"] = _rating.astype(str) + " ± " + _band_i.astype(str)
-        result["GradeWithBand"]  = (
-            result["ScoutingGrade"].astype(str)
-            + " ± "
-            + (_band / 10).round(1).astype(str)
-        )
-
-        def _conf_label(r: float) -> str:
-            if r >= 85: return "High Confidence"
-            if r >= 70: return "Good Confidence"
-            if r >= 50: return "Moderate Confidence"
-            if r >= 30: return "Low Confidence"
-            return "Very Low Confidence"
-
-        result["ConfidenceLabel"] = result["DataReliability"].apply(_conf_label)
+        result["ScoutingUncertainty"] = (_combined * 100).clip(0, 100).round(1)
 
     return result
 
