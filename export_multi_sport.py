@@ -1,96 +1,93 @@
 """
 export_multi_sport.py
 ─────────────────────
-Multi-sport scouting workbook.
+Multi-sport scouting workbook using REAL football players from the Wyscout DB.
 
-Applies the same Rating + ScoutingUncertainty + ConfidenceLabel framework
-used in the Wyscout football model to five other major sports:
+Each player's football profile (their composite sub-scores) is mapped to
+equivalent performance levels in five other sports. A striker who scores at
+the 90th percentile in football generates stats matching a 90th-percentile
+MLB slugger; a deep-lying defensive midfielder becomes a high-ceiling pitcher.
 
-  Sheet 1 — MLB       (batters + pitchers)
-  Sheet 2 — NBA       (guards / forwards / centres)
-  Sheet 3 — NHL       (skaters + goalies)
-  Sheet 4 — NFL       (QB / RB / WR / TE / Defence)
-  Sheet 5 — Cricket   (batters / bowlers / all-rounders, by format)
+Sheets
+──────
+  MLB     — strikers / wingers / AM → batters; DM / CB / FB → pitchers; GK → closers
+  NBA     — playmakers → guards; athletic forwards → wings; CBs/DMs → bigs
+  NHL     — attackers → forwards; CBs/DMs → defensemen; GKs → goalies
+  NFL     — creative mids → QBs; strikers/wingers → WRs; pressing players → RBs/Defence
+  Cricket — attacking players → batters; defensive/pressing → bowlers; balanced → all-rounders
 
-Each sheet has:
-  Rating (0–100)            — composite of the sport's key metrics,
-                              normalised within position group
-  ScoutingUncertainty (0–100) — five-factor confidence model:
-                                sample size · league quality · age ·
-                                availability · data completeness
-  Confidence Label          — High / Good / Moderate / Low / Very Low
+Each sheet: Player · Team · Position · Age · Football Position · League +
+            sport-specific stats + Rating (0–100) + Scouting Uncertainty (0–100) +
+            Confidence Label
 
 Usage
 ─────
-  python export_multi_sport.py [--output "data/Multi-Sport Scouting Report.xlsx"]
+  python export_multi_sport.py [--min-minutes 400] [--output "data/...xlsx"]
 """
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.stats import percentileofscore  # type: ignore
+from scipy.stats import norm  # type: ignore
 
-ROOT     = Path(__file__).parent
+ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT))
+
+from wyscout_model import load_wyscout_raw, compute_wyscout_scores
+
 DATA_DIR = ROOT / "data"
-RNG      = np.random.default_rng(2024)
+RNG = np.random.default_rng(2024)
 
-# ── Shared helpers ─────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _pct_rank(series: pd.Series) -> pd.Series:
-    """0–100 percentile rank within series (higher = better)."""
-    vals = series.fillna(series.median())
-    return vals.rank(pct=True) * 100
+def _pct(series: pd.Series) -> pd.Series:
+    """0–100 percentile rank (higher = better)."""
+    return series.fillna(series.median()).rank(pct=True) * 100
 
-
-def _pct_rank_inv(series: pd.Series) -> pd.Series:
-    """0–100 percentile rank, inverted (lower raw value = better)."""
-    return _pct_rank(-series)
-
+def _pct_inv(series: pd.Series) -> pd.Series:
+    return _pct(-series)
 
 def _composite(df: pd.DataFrame, spec: list[tuple[str, float, bool]]) -> pd.Series:
-    """
-    Weighted composite 0–100.
-    spec = [(column, weight, higher_is_better), ...]
-    """
-    total_w = sum(w for _, w, _ in spec if _ is not None)
+    total_w = sum(w for _, w, _ in spec)
     score   = pd.Series(0.0, index=df.index)
     for col, w, higher in spec:
         if col not in df.columns:
             continue
-        pct = _pct_rank(df[col]) if higher else _pct_rank_inv(df[col])
-        score += (w / total_w) * pct
+        score += (w / total_w) * (_pct(df[col]) if higher else _pct_inv(df[col]))
     return score.clip(0, 100).round(1)
 
+def _s2v(score_0_100: pd.Series, mean: float, std: float,
+         lo: float, hi: float) -> pd.Series:
+    """
+    Convert a 0–100 football sub-score to a sport stat value.
+    Uses the normal PPF so a score of 90 → ~90th-percentile stat value.
+    """
+    pct = score_0_100.clip(1, 99) / 100
+    z   = pct.apply(lambda p: norm.ppf(p))
+    return (mean + z * std).clip(lo, hi)
 
 def _uncertainty(
     df: pd.DataFrame,
-    sample_col: str,
-    sample_max: float,
     age_col: str,
     games_col: str,
     max_games: float,
-    peak_age: tuple[float, float] = (25.0, 29.0),
+    peak_age: tuple[float, float],
+    football_minutes: pd.Series,
 ) -> pd.Series:
     """
-    Five-factor ScoutingUncertainty (0–100).
-    1. Sample size   35 % — fewer reps → higher uncertainty
-    2. League quality 25 % — top tier = 0.0 (all data here is top-league)
-    3. Age           20 % — outside peak window → higher uncertainty
-    4. Availability  10 % — games / max_games
-    5. Data complete 10 % — fixed at 0 (full synthetic data)
+    Five-factor ScoutingUncertainty (0–100) using original football minutes
+    as the primary sample-size signal.
     """
-    # 1. Sample size
-    _min = max(sample_max * 0.1, 1)
-    samp = pd.to_numeric(df[sample_col], errors="coerce").fillna(_min).clip(lower=_min)
-    f_sample = np.sqrt(_min / samp).clip(0, 1)
+    _MIN = 400.0
+    mins  = football_minutes.fillna(_MIN).clip(lower=_MIN)
+    f_sample = np.sqrt(_MIN / mins).clip(0, 1)
 
-    # 2. League quality (all generated data = top tier → 0.0)
-    f_league = pd.Series(0.05, index=df.index)
+    f_league = pd.Series(0.05, index=df.index)   # all top-level football
 
-    # 3. Age
     age = pd.to_numeric(df[age_col], errors="coerce").fillna(27)
     f_age = pd.Series(0.0, index=df.index, dtype=float)
     f_age[age < 21]                              = 0.35
@@ -99,23 +96,13 @@ def _uncertainty(
     f_age[age.between(peak_age[1], 31.99)]       = 0.12
     f_age[age >= 32]                             = 0.25
 
-    # 4. Availability
-    games = pd.to_numeric(df[games_col], errors="coerce").fillna(max_games * 0.5).clip(lower=1)
+    games  = pd.to_numeric(df[games_col], errors="coerce").fillna(max_games * 0.5).clip(lower=1)
     f_avail = ((max_games - games) / max_games).clip(0, 1) * 0.40
 
-    # 5. Data completeness (full data assumed)
-    f_complete = pd.Series(0.0, index=df.index)
-
     combined = (
-        0.35 * f_sample
-        + 0.25 * f_league
-        + 0.20 * f_age
-        + 0.10 * f_avail
-        + 0.10 * f_complete
+        0.35 * f_sample + 0.25 * f_league + 0.20 * f_age + 0.10 * f_avail
     ).clip(0, 1)
-
-    return (combined * 100).clip(0, 100).round(1)
-
+    return (combined * 100).round(1)
 
 def _confidence_label(u: pd.Series) -> pd.Series:
     def _lbl(v: float) -> str:
@@ -126,620 +113,520 @@ def _confidence_label(u: pd.Series) -> pd.Series:
         return "Very Low Confidence"
     return u.apply(_lbl)
 
+def _base_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract the bio columns every sheet starts with."""
+    keep = ["Player", "Team", "Age", "Football Position", "Football League",
+            "Football Minutes", "Matches played"]
+    return df[[c for c in keep if c in df.columns]].copy()
 
 def _write(writer: pd.ExcelWriter, sheet: str, df: pd.DataFrame) -> None:
     df.to_excel(writer, sheet_name=sheet[:31], index=False)
     ws = writer.sheets[sheet[:31]]
     for col_cells in ws.columns:
         try:
-            width = max(len(str(col_cells[0].value or "")),
-                        *(len(str(c.value or "")) for c in col_cells[1:8]))
-            ws.column_dimensions[col_cells[0].column_letter].width = min(width + 2, 40)
+            w = max(len(str(col_cells[0].value or "")),
+                    *(len(str(c.value or "")) for c in col_cells[1:8]))
+            ws.column_dimensions[col_cells[0].column_letter].width = min(w + 2, 38)
         except Exception:
             pass
     print(f"  ✓ {sheet!r} — {len(df):,} rows")
 
 
-# ── Name generators ─────────────────────────────────────────────────────────────
+# ── Load football players ──────────────────────────────────────────────────────
 
-def _names(n: int, first_pool: list[str], last_pool: list[str]) -> list[str]:
-    return [
-        f"{RNG.choice(first_pool)} {RNG.choice(last_pool)}"
-        for _ in range(n)
+def load_players(min_minutes: int) -> pd.DataFrame:
+    print(f"  Loading Wyscout players (min {min_minutes} min)…")
+    raw = load_wyscout_raw(min_minutes=min_minutes)
+    df  = compute_wyscout_scores(raw)
+    df  = df.loc[:, ~df.columns.duplicated()]
+
+    # Rename for clarity
+    df = df.rename(columns={
+        "Player":        "Player",
+        "Team":          "Team",
+        "Age":           "Age",
+        "Position":      "Football Position",
+        "_League":       "Football League",
+        "MinutesPlayed": "Football Minutes",
+    })
+    if "Football Minutes" not in df.columns:
+        mins_col = next((c for c in ["Minutes played"] if c in df.columns), None)
+        if mins_col:
+            df["Football Minutes"] = pd.to_numeric(df[mins_col], errors="coerce")
+
+    # Keep only what we need
+    score_cols = [
+        "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
+        "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
+        "ASA_GoalsAddedScore", "AerialScore", "SetPieceScore",
+        "CompositeRecruitmentScore", "PositionGroup",
     ]
+    keep = ["Player", "Team", "Age", "Football Position", "Football League",
+            "Football Minutes", "Matches played"] + score_cols
+    df = df[[c for c in keep if c in df.columns]].copy()
+    df["Age"] = pd.to_numeric(df["Age"], errors="coerce").fillna(25)
+    print(f"  → {len(df):,} players loaded")
+    return df.reset_index(drop=True)
 
 
-MLB_FIRST = ["Aaron","Bryce","Clayton","Fernando","Gerrit","Julio","Mookie","Nolan",
-             "Paul","Ronald","Sandy","Trea","Vladimir","Yordan","Zack","Pete","Kyle",
-             "Shane","Max","Cody","Bo","Freddie","Anthony","Jose","Francisco","Blake",
-             "Logan","Luis","Spencer","Corbin","Tyler","Austin","Wander","Gunnar",
-             "Bobby","Corey","Dansby","Ryan","Grayson","Triston"]
-MLB_LAST  = ["Judge","Harper","Kershaw","Tatis","Cole","Rodriguez","Betts","Arenado",
-             "Acuna","Alcantara","Turner","Guerrero","Alvarez","Wheeler","Alonso",
-             "Tucker","Bieber","Freeman","Lindor","Webb","Castillo","Ohtani","deGrom",
-             "Burnes","Verlander","Glasnow","Strider","Scherzer","McClanahan","Nola",
-             "Flaherty","Manoah","Montgomery","Musgrove","Anderson","Swanson","Story"]
-
-NBA_FIRST = ["LeBron","Stephen","Kevin","Giannis","Nikola","Luka","Joel","Jayson",
-             "Damian","Anthony","Kawhi","Paul","Devin","Zion","Ja","James","Bam",
-             "Karl-Anthony","Trae","Donovan","DeMar","Tyrese","Jordan","Shai","Chet",
-             "Victor","Paolo","Scottie","Brandon","Jaren"]
-NBA_LAST  = ["James","Curry","Durant","Antetokounmpo","Jokic","Doncic","Embiid",
-             "Tatum","Lillard","Davis","Leonard","George","Booker","Williamson",
-             "Morant","Harden","Adebayo","Towns","Young","Mitchell","DeRozan",
-             "Maxey","Poole","Gilgeous-Alexander","Holmgren","Wembanyama","Banchero",
-             "Barnes","Ingram","Jackson"]
-
-NHL_FIRST = ["Connor","Nathan","Leon","Auston","David","Sidney","Alex","Nikita",
-             "Artemi","Brad","Brayden","Mark","Patrick","Aleksander","Andrei",
-             "Evgeni","William","Jonathan","Kyle","John","Sam","Mikko","Dylan",
-             "Cale","Roman","Quinn","Jack","Tim","Anze","Adam"]
-NHL_LAST  = ["McDavid","MacKinnon","Draisaitl","Matthews","Pastrnak","Crosby",
-             "Ovechkin","Kucherov","Panarin","Marchand","Point","Stone","Kane",
-             "Barkov","Svechnikov","Malkin","Nylander","Huberdeau","Connor",
-             "Tavares","Reinhart","Rantanen","Larkin","Makar","Josi","Hughes",
-             "Eichel","Stutzle","Kopitar","Pelech"]
-
-NFL_FIRST = ["Patrick","Josh","Joe","Lamar","Justin","Jalen","Brock","Trevor",
-             "Tua","Dak","Tyreek","Stefon","Justin","Davante","DeAndre","CeeDee",
-             "Cooper","Ja'Marr","Christian","Derrick","Austin","Nick","Travis",
-             "Mark","Sam","Aaron","Myles","Micah","T.J.","Maxx"]
-NFL_LAST  = ["Mahomes","Allen","Burrow","Jackson","Herbert","Hurts","Purdy","Lawrence",
-             "Tagovailoa","Prescott","Hill","Diggs","Jefferson","Adams","Hopkins",
-             "Lamb","Kupp","Chase","McCaffrey","Henry","Ekeler","Chubb","Kelce",
-             "Andrews","LaPorta","Donald","Garrett","Parsons","Watt","Crosby"]
-
-CRICKET_FIRST = ["Virat","Rohit","Steve","David","Kane","Joe","Babar","Ben","Pat",
-                 "Jasprit","Kagiso","Mitchell","Trent","Mitchell","Shakib","Quinton",
-                 "Rishabh","KL","Shubman","Yashasvi","Mohammed","James","Stuart",
-                 "Travis","Marnus","Devon","Tom","Shreyas","Hardik","Ravindra"]
-CRICKET_LAST  = ["Kohli","Sharma","Smith","Warner","Williamson","Root","Azam","Stokes",
-                 "Cummins","Bumrah","Rabada","Starc","Boult","Marsh","Al Hasan",
-                 "de Kock","Pant","Rahul","Gill","Jaiswal","Siraj","Anderson",
-                 "Broad","Head","Labuschagne","Conway","Latham","Iyer","Pandya","Ravindra"]
+def _sample(df: pd.DataFrame, pos_groups: list[str], n: int,
+            sort_col: str = "CompositeRecruitmentScore") -> pd.DataFrame:
+    """Sample n players from given position groups, sorted by sort_col descending."""
+    sub = df[df["PositionGroup"].isin(pos_groups)].copy()
+    sub = sub.sort_values(sort_col, ascending=False)
+    return sub.head(n).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MLB
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_mlb(n_batters: int = 120, n_pitchers: int = 80) -> pd.DataFrame:
-    """Generate MLB batter + pitcher data with Rating and ScoutingUncertainty."""
+MLB_POSITION_MAP = {
+    "ST": "DH/OF", "W": "OF", "AM": "2B/SS", "CM": "2B",
+    "DM": "SP", "FB": "SP", "CB": "SP", "GK": "CL/RP",
+}
 
-    positions_b = ["C","1B","2B","3B","SS","LF","CF","RF","DH"]
-    positions_p = ["SP","SP","SP","RP","RP","CL"]
+def build_mlb(df: pd.DataFrame) -> pd.DataFrame:
+    # Batters: attacking players
+    bat_df  = _sample(df, ["ST", "W", "AM"], 100, "ScoringThreatScore")
+    # Pitchers: defensive players + GK
+    pit_df  = _sample(df, ["DM", "CB", "FB", "GK"], 80, "DefensiveDisruptionScore")
 
-    # ── Batters ────────────────────────────────────────────────────────────────
-    pos_b = RNG.choice(positions_b, n_batters)
-    age_b = RNG.integers(20, 38, n_batters).astype(float)
-    games_b = np.clip(RNG.normal(130, 25, n_batters), 30, 162).astype(int)
-    pa_b    = (games_b * RNG.uniform(3.5, 4.5, n_batters)).astype(int)
+    frames = []
 
-    batters = pd.DataFrame({
-        "Player":          _names(n_batters, MLB_FIRST, MLB_LAST),
-        "Team":            RNG.choice(["Yankees","Dodgers","Braves","Astros","Mets",
-                                       "Phillies","Cardinals","Cubs","Red Sox","Giants",
-                                       "Blue Jays","Rays","Mariners","Padres","Tigers"], n_batters),
-        "Position":        pos_b,
-        "Age":             age_b,
-        "Games":           games_b,
-        "Plate Appearances": pa_b,
-        "BA":              np.clip(RNG.normal(0.265, 0.035, n_batters), 0.180, 0.370),
-        "OBP":             np.clip(RNG.normal(0.335, 0.040, n_batters), 0.250, 0.470),
-        "SLG":             np.clip(RNG.normal(0.440, 0.065, n_batters), 0.300, 0.700),
-        "OPS":             None,
-        "OPS+":            np.clip(RNG.normal(108, 25, n_batters), 50, 210).astype(int),
-        "HR":              np.clip(RNG.normal(18, 12, n_batters), 0, 62).astype(int),
-        "RBI":             np.clip(RNG.normal(72, 28, n_batters), 10, 150).astype(int),
-        "SB":              np.clip(RNG.normal(10, 12, n_batters), 0, 70).astype(int),
-        "wRC+":            np.clip(RNG.normal(108, 24, n_batters), 45, 210).astype(int),
-        "wOBA":            np.clip(RNG.normal(0.335, 0.045, n_batters), 0.240, 0.480),
-        "WAR":             np.clip(RNG.normal(2.5, 2.2, n_batters), -1.5, 9.5),
-        "K%":              np.clip(RNG.normal(22, 6, n_batters), 8, 42),
-        "BB%":             np.clip(RNG.normal(9, 3, n_batters), 3, 20),
-        "Exit Velocity":   np.clip(RNG.normal(89, 4, n_batters), 78, 98),
-        "Hard Hit%":       np.clip(RNG.normal(38, 8, n_batters), 18, 60),
-        "Barrel%":         np.clip(RNG.normal(8, 4, n_batters), 1, 22),
-        "Sprint Speed":    np.clip(RNG.normal(27, 1.5, n_batters), 23, 31),
-        "Type":            "Batter",
-    })
-    batters["OPS"] = (batters["OBP"] + batters["SLG"]).round(3)
+    # ── Batters ───────────────────────────────────────────────────────────────
+    b = _base_cols(bat_df)
+    b["MLB Position"] = bat_df["PositionGroup"].map(MLB_POSITION_MAP).fillna("OF")
+    sc = bat_df["ScoringThreatScore"]
+    cr = bat_df["CreativeProgressionScore"]
+    bs = bat_df["BallSecurityScore"]
+    ae = bat_df["AerialScore"]
 
-    # Rating: wRC+ 35%, WAR 30%, OPS+ 20%, BB%-K% 15%
-    batters["Rating"] = _composite(batters, [
-        ("wRC+",  0.35, True),
-        ("WAR",   0.30, True),
-        ("OPS+",  0.20, True),
-        ("BB%",   0.08, True),
-        ("K%",    0.07, False),
+    b["BA"]             = _s2v(sc * 0.5 + bs * 0.5, 0.265, 0.030, 0.180, 0.370).round(3)
+    b["OBP"]            = _s2v(bs * 0.6 + cr * 0.4, 0.335, 0.038, 0.250, 0.470).round(3)
+    b["SLG"]            = _s2v(sc * 0.7 + ae * 0.3, 0.440, 0.065, 0.300, 0.700).round(3)
+    b["OPS"]            = (b["OBP"] + b["SLG"]).round(3)
+    b["HR"]             = _s2v(sc * 0.8 + ae * 0.2, 18, 12, 0, 62).round(0).astype(int)
+    b["RBI"]            = _s2v(sc * 0.6 + ae * 0.4, 72, 28, 10, 150).round(0).astype(int)
+    b["SB"]             = _s2v(bat_df["PressingScore"], 10, 11, 0, 65).round(0).astype(int)
+    b["wRC+"]           = _s2v(sc * 0.5 + bs * 0.3 + cr * 0.2, 108, 22, 50, 210).round(0).astype(int)
+    b["OPS+"]           = _s2v(sc * 0.5 + bs * 0.3 + cr * 0.2, 108, 24, 48, 210).round(0).astype(int)
+    b["BB%"]            = _s2v(bs * 0.7 + cr * 0.3, 9.0, 2.8, 3.0, 19.0).round(1)
+    b["K%"]             = _s2v(100 - bs, 22, 5.5, 8, 42).round(1)
+    b["WAR"]            = _s2v(bat_df["CompositeRecruitmentScore"], 2.5, 2.2, -1.5, 9.5).round(1)
+    b["Exit Velocity"]  = _s2v(sc * 0.6 + ae * 0.4, 89, 4, 78, 98).round(1)
+    b["Hard Hit%"]      = _s2v(sc * 0.7 + ae * 0.3, 38, 8, 18, 60).round(1)
+    b["Type"]           = "Batter"
+    b["Football Minutes_raw"] = bat_df["Football Minutes"].values
+
+    b["Rating"] = _composite(b, [
+        ("wRC+", 0.35, True), ("WAR", 0.30, True),
+        ("OPS+", 0.20, True), ("BB%", 0.08, True), ("K%", 0.07, False),
     ])
-
-    batters["ScoutingUncertainty"] = _uncertainty(
-        batters, "Plate Appearances", 650, "Age", "Games", 162, peak_age=(26, 31)
+    b["Scouting Uncertainty"] = _uncertainty(
+        b, "Age", "Matches played", 162, (26, 31),
+        bat_df["Football Minutes"],
     )
+    frames.append(b)
 
-    # ── Pitchers ───────────────────────────────────────────────────────────────
-    pos_p   = RNG.choice(positions_p, n_pitchers)
-    age_p   = RNG.integers(21, 40, n_pitchers).astype(float)
-    games_p = np.where(pos_p == "SP",
-                       np.clip(RNG.normal(27, 5, n_pitchers), 5, 33),
-                       np.clip(RNG.normal(55, 15, n_pitchers), 10, 80)).astype(int)
-    ip      = np.where(pos_p == "SP",
-                       np.clip(RNG.normal(170, 35, n_pitchers), 20, 230),
-                       np.clip(RNG.normal(60, 20, n_pitchers), 10, 90))
+    # ── Pitchers ──────────────────────────────────────────────────────────────
+    p = _base_cols(pit_df)
+    p["MLB Position"] = pit_df["PositionGroup"].map(MLB_POSITION_MAP).fillna("SP")
+    dd = pit_df["DefensiveDisruptionScore"]
+    pr = pit_df["PressingScore"]
+    bs = pit_df["BallSecurityScore"]
+    comp = pit_df["CompositeRecruitmentScore"]
 
-    pitchers = pd.DataFrame({
-        "Player":    _names(n_pitchers, MLB_FIRST, MLB_LAST),
-        "Team":      RNG.choice(["Yankees","Dodgers","Braves","Astros","Mets",
-                                  "Phillies","Cardinals","Cubs","Red Sox","Giants",
-                                  "Blue Jays","Rays","Mariners","Padres","Tigers"], n_pitchers),
-        "Position":  pos_p,
-        "Age":       age_p,
-        "Games":     games_p,
-        "Plate Appearances": ip,  # IP used as sample proxy
-        "IP":        ip.round(1),
-        "ERA":       np.clip(RNG.normal(3.85, 0.90, n_pitchers), 1.5, 7.0),
-        "FIP":       np.clip(RNG.normal(3.90, 0.85, n_pitchers), 1.8, 6.5),
-        "xFIP":      np.clip(RNG.normal(3.95, 0.70, n_pitchers), 2.0, 6.0),
-        "WHIP":      np.clip(RNG.normal(1.22, 0.22, n_pitchers), 0.70, 2.00),
-        "K/9":       np.clip(RNG.normal(9.5, 2.2, n_pitchers), 4.0, 16.0),
-        "BB/9":      np.clip(RNG.normal(3.0, 0.9, n_pitchers), 0.8, 6.0),
-        "K-BB%":     np.clip(RNG.normal(17, 7, n_pitchers), 2, 38),
-        "ERA+":      np.clip(RNG.normal(110, 28, n_pitchers), 40, 220).astype(int),
-        "WAR":       np.clip(RNG.normal(2.2, 2.0, n_pitchers), -1.0, 8.5),
-        "HR/9":      np.clip(RNG.normal(1.15, 0.35, n_pitchers), 0.2, 2.5),
-        "GB%":       np.clip(RNG.normal(44, 8, n_pitchers), 25, 65),
-        "Saves":     np.where(pos_p == "CL", np.clip(RNG.normal(28, 12, n_pitchers), 0, 50).astype(int), 0),
-        "Type":      "Pitcher",
-    })
+    p["ERA"]     = _s2v(100 - (dd * 0.5 + pr * 0.5), 3.85, 0.90, 1.50, 7.00).round(2)
+    p["FIP"]     = _s2v(100 - (dd * 0.5 + bs * 0.5), 3.90, 0.80, 1.80, 6.50).round(2)
+    p["WHIP"]    = _s2v(100 - (dd * 0.6 + bs * 0.4), 1.22, 0.22, 0.70, 2.00).round(2)
+    p["K/9"]     = _s2v(pr * 0.6 + dd * 0.4, 9.5, 2.2, 4.0, 16.0).round(1)
+    p["BB/9"]    = _s2v(100 - bs, 3.0, 0.85, 0.8, 6.0).round(1)
+    p["K-BB%"]   = _s2v(dd * 0.5 + pr * 0.3 + bs * 0.2, 17, 7, 2, 38).round(1)
+    p["ERA+"]    = _s2v(dd * 0.5 + bs * 0.3 + pr * 0.2, 110, 28, 40, 220).round(0).astype(int)
+    p["GB%"]     = _s2v(dd * 0.6 + pr * 0.4, 44, 8, 25, 65).round(1)
+    p["WAR"]     = _s2v(comp, 2.2, 2.0, -1.0, 8.5).round(1)
+    p["IP"]      = _s2v(pit_df["PressingScore"], 140, 50, 20, 220).round(1)
+    p["Type"]    = "Pitcher"
+    p["Football Minutes_raw"] = pit_df["Football Minutes"].values
 
-    # Rating: FIP- proxy (ERA+) 35%, K-BB% 30%, WAR 25%, GB% 10%
-    pitchers["Rating"] = _composite(pitchers, [
-        ("ERA+",  0.35, True),
-        ("K-BB%", 0.30, True),
-        ("WAR",   0.25, True),
-        ("GB%",   0.10, True),
+    p["Rating"] = _composite(p, [
+        ("ERA+", 0.35, True), ("K-BB%", 0.30, True),
+        ("WAR",  0.25, True), ("GB%",   0.10, True),
     ])
-
-    pitchers["ScoutingUncertainty"] = _uncertainty(
-        pitchers, "IP", 200, "Age", "Games", 33, peak_age=(26, 32)
+    p["Scouting Uncertainty"] = _uncertainty(
+        p, "Age", "Matches played", 33, (26, 32),
+        pit_df["Football Minutes"],
     )
+    frames.append(p)
 
-    df = pd.concat([batters, pitchers], ignore_index=True)
-    df["ConfidenceLabel"] = _confidence_label(df["ScoutingUncertainty"])
-    df = df.sort_values("Rating", ascending=False).reset_index(drop=True)
-
-    # Round numeric columns
-    num = df.select_dtypes(include="number").columns
-    df[num] = df[num].round(2)
-    return df
+    out = pd.concat(frames, ignore_index=True)
+    out["Confidence Label"] = _confidence_label(out["Scouting Uncertainty"])
+    out = out.drop(columns=["Football Minutes_raw"], errors="ignore")
+    num = out.select_dtypes("number").columns
+    out[num] = out[num].round(2)
+    return out.sort_values("Rating", ascending=False).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NBA
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_nba(n: int = 150) -> pd.DataFrame:
-    positions = ["PG","SG","SF","PF","C"]
-    pos  = RNG.choice(positions, n)
-    age  = RNG.integers(19, 38, n).astype(float)
-    gp   = np.clip(RNG.normal(62, 16, n), 10, 82).astype(int)
-    mpg  = np.clip(RNG.normal(27, 7, n), 10, 38)
+NBA_POSITION_MAP = {
+    "AM": "PG", "CM": "PG/SG", "W": "SG/SF",
+    "ST": "SF/PF", "FB": "SF", "DM": "PF", "CB": "C", "GK": "C",
+}
 
-    df = pd.DataFrame({
-        "Player":          _names(n, NBA_FIRST, NBA_LAST),
-        "Team":            RNG.choice(["Lakers","Warriors","Celtics","Bucks","76ers",
-                                        "Nuggets","Suns","Heat","Mavericks","Nets",
-                                        "Clippers","Grizzlies","Thunder","Cavaliers","Timberwolves"], n),
-        "Position":        pos,
-        "Age":             age,
-        "Games Played":    gp,
-        "Min per Game":    mpg.round(1),
-        "PTS":             np.clip(RNG.normal(17, 7, n), 4, 36),
-        "REB":             np.clip(RNG.normal(6, 3, n), 1, 16),
-        "AST":             np.clip(RNG.normal(4, 3, n), 0.5, 12),
-        "STL":             np.clip(RNG.normal(1.1, 0.4, n), 0.2, 2.5),
-        "BLK":             np.clip(RNG.normal(0.7, 0.6, n), 0, 3.2),
-        "TOV":             np.clip(RNG.normal(2.0, 0.8, n), 0.5, 5.0),
-        "FG%":             np.clip(RNG.normal(0.475, 0.055, n), 0.330, 0.650),
-        "3P%":             np.clip(RNG.normal(0.355, 0.055, n), 0.200, 0.480),
-        "FT%":             np.clip(RNG.normal(0.780, 0.075, n), 0.550, 0.960),
-        "TS%":             np.clip(RNG.normal(0.575, 0.055, n), 0.430, 0.720),
-        "PER":             np.clip(RNG.normal(16, 5, n), 5, 32),
-        "BPM":             np.clip(RNG.normal(1.5, 4, n), -6, 12),
-        "VORP":            np.clip(RNG.normal(1.5, 1.8, n), -0.5, 8),
-        "Win Shares":      np.clip(RNG.normal(5, 3.5, n), -0.5, 18),
-        "WS/48":           np.clip(RNG.normal(0.110, 0.065, n), -0.030, 0.290),
-        "USG%":            np.clip(RNG.normal(22, 5, n), 10, 36),
-        "Net Rating":      np.clip(RNG.normal(1.5, 6, n), -12, 16),
-        "+/-":             np.clip(RNG.normal(1.5, 4.5, n), -10, 14),
-    })
+def build_nba(df: pd.DataFrame) -> pd.DataFrame:
+    players = _sample(df, ["AM", "CM", "W", "ST", "DM", "CB", "FB"], 150,
+                      "CompositeRecruitmentScore")
+    out = _base_cols(players)
+    out["NBA Position"] = players["PositionGroup"].map(NBA_POSITION_MAP).fillna("SF")
 
-    # Rating: BPM 30%, WS/48 25%, PER 20%, TS% 15%, Net Rating 10%
-    df["Rating"] = _composite(df, [
-        ("BPM",        0.30, True),
-        ("WS/48",      0.25, True),
-        ("PER",        0.20, True),
-        ("TS%",        0.15, True),
-        ("Net Rating", 0.10, True),
+    cr = players["CreativeProgressionScore"]
+    sc = players["ScoringThreatScore"]
+    bs = players["BallSecurityScore"]
+    dd = players["DefensiveDisruptionScore"]
+    pr = players["PressingScore"]
+    et = players["ExpectedThreatScore"]
+    comp = players["CompositeRecruitmentScore"]
+
+    out["PTS/G"]    = _s2v(sc * 0.6 + et * 0.4, 17, 7, 4, 38).round(1)
+    out["REB/G"]    = _s2v(dd * 0.5 + players["AerialScore"] * 0.5, 6, 3, 1, 16).round(1)
+    out["AST/G"]    = _s2v(cr * 0.7 + bs * 0.3, 4, 3, 0.5, 13).round(1)
+    out["STL/G"]    = _s2v(pr * 0.6 + dd * 0.4, 1.1, 0.4, 0.2, 2.6).round(1)
+    out["BLK/G"]    = _s2v(dd * 0.5 + players["AerialScore"] * 0.5, 0.7, 0.6, 0, 3.5).round(1)
+    out["TOV/G"]    = _s2v(100 - bs, 2.0, 0.8, 0.5, 5.0).round(1)
+    out["FG%"]      = _s2v(sc * 0.5 + bs * 0.5, 0.475, 0.052, 0.330, 0.650).round(3)
+    out["3P%"]      = _s2v(cr * 0.6 + bs * 0.4, 0.355, 0.050, 0.200, 0.480).round(3)
+    out["TS%"]      = _s2v(sc * 0.4 + bs * 0.4 + cr * 0.2, 0.575, 0.052, 0.430, 0.720).round(3)
+    out["PER"]      = _s2v(comp, 16, 5, 5, 32).round(1)
+    out["BPM"]      = _s2v(comp * 0.6 + dd * 0.4, 1.5, 4, -6, 12).round(1)
+    out["WS/48"]    = _s2v(comp, 0.110, 0.062, -0.03, 0.290).round(3)
+    out["Net Rtg"]  = _s2v(comp * 0.5 + dd * 0.5, 1.5, 6, -12, 16).round(1)
+    out["USG%"]     = _s2v(sc * 0.5 + cr * 0.5, 22, 5, 10, 36).round(1)
+    out["Games"]    = _s2v(pr * 0.5 + bs * 0.5, 62, 16, 10, 82).round(0).astype(int)
+
+    out["Rating"] = _composite(out, [
+        ("BPM",     0.30, True), ("WS/48",   0.25, True),
+        ("PER",     0.20, True), ("TS%",     0.15, True),
+        ("Net Rtg", 0.10, True),
     ])
-
-    df["ScoutingUncertainty"] = _uncertainty(
-        df, "Games Played", 82, "Age", "Games Played", 82, peak_age=(24, 29)
+    out["Scouting Uncertainty"] = _uncertainty(
+        out, "Age", "Games", 82, (24, 29), players["Football Minutes"]
     )
-    df["ConfidenceLabel"] = _confidence_label(df["ScoutingUncertainty"])
-
-    num = df.select_dtypes(include="number").columns
-    df[num] = df[num].round(2)
-    return df.sort_values("Rating", ascending=False).reset_index(drop=True)
+    out["Confidence Label"] = _confidence_label(out["Scouting Uncertainty"])
+    num = out.select_dtypes("number").columns
+    out[num] = out[num].round(2)
+    return out.sort_values("Rating", ascending=False).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NHL
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_nhl(n_skaters: int = 120, n_goalies: int = 40) -> pd.DataFrame:
-    sk_pos = RNG.choice(["LW","RW","C","LD","RD"], n_skaters,
-                        p=[0.20, 0.20, 0.25, 0.18, 0.17])
-    age_sk = RNG.integers(18, 38, n_skaters).astype(float)
-    gp_sk  = np.clip(RNG.normal(65, 14, n_skaters), 10, 82).astype(int)
+NHL_POSITION_MAP = {
+    "ST": "LW/RW", "W": "LW/RW", "AM": "C", "CM": "C",
+    "DM": "LD/RD", "FB": "LD/RD", "CB": "LD/RD", "GK": "G",
+}
 
-    skaters = pd.DataFrame({
-        "Player":    _names(n_skaters, NHL_FIRST, NHL_LAST),
-        "Team":      RNG.choice(["Oilers","Avalanche","Bruins","Panthers","Rangers",
-                                  "Lightning","Golden Knights","Maple Leafs","Hurricanes",
-                                  "Stars","Kings","Wild","Jets","Blues","Capitals"], n_skaters),
-        "Position":  sk_pos,
-        "Age":       age_sk,
-        "Games":     gp_sk,
-        "Goals":     np.clip(RNG.normal(20, 12, n_skaters), 0, 65).astype(int),
-        "Assists":   np.clip(RNG.normal(28, 15, n_skaters), 0, 85).astype(int),
-        "Points":    None,
-        "Points/GP": None,
-        "+/-":       np.clip(RNG.normal(2, 12, n_skaters), -30, 35).astype(int),
-        "PIM":       np.clip(RNG.normal(35, 25, n_skaters), 0, 130).astype(int),
-        "TOI/GP":    np.clip(RNG.normal(17, 4, n_skaters), 8, 26),
-        "Corsi%":    np.clip(RNG.normal(50, 4, n_skaters), 38, 62),
-        "Fenwick%":  np.clip(RNG.normal(50, 4, n_skaters), 38, 62),
-        "xGF%":      np.clip(RNG.normal(50, 5, n_skaters), 35, 65),
-        "Sh%":       np.clip(RNG.normal(10.5, 3.5, n_skaters), 2, 22),
-        "iCF/60":    np.clip(RNG.normal(12, 4, n_skaters), 3, 24),
-        "GAR":       np.clip(RNG.normal(4, 6, n_skaters), -8, 22),
-        "Type":      "Skater",
-    })
-    skaters["Points"]    = (skaters["Goals"] + skaters["Assists"])
-    skaters["Points/GP"] = (skaters["Points"] / skaters["Games"].clip(lower=1)).round(2)
+def build_nhl(df: pd.DataFrame) -> pd.DataFrame:
+    skater_df = _sample(df, ["ST", "W", "AM", "CM", "DM", "CB", "FB"], 120,
+                        "CompositeRecruitmentScore")
+    goalie_df = _sample(df, ["GK"], 40, "DefensiveDisruptionScore")
+    frames = []
 
-    # Rating: GAR 35%, Points/GP 30%, Corsi% 20%, xGF% 15%
-    skaters["Rating"] = _composite(skaters, [
-        ("GAR",       0.35, True),
-        ("Points/GP", 0.30, True),
-        ("Corsi%",    0.20, True),
-        ("xGF%",      0.15, True),
+    # Skaters
+    sk = _base_cols(skater_df)
+    sk["NHL Position"] = skater_df["PositionGroup"].map(NHL_POSITION_MAP).fillna("C")
+    sc  = skater_df["ScoringThreatScore"]
+    cr  = skater_df["CreativeProgressionScore"]
+    dd  = skater_df["DefensiveDisruptionScore"]
+    pr  = skater_df["PressingScore"]
+    bs  = skater_df["BallSecurityScore"]
+    comp= skater_df["CompositeRecruitmentScore"]
+
+    sk["Games"]      = _s2v(pr * 0.5 + bs * 0.5, 65, 14, 10, 82).round(0).astype(int)
+    sk["Goals"]      = _s2v(sc * 0.7 + skater_df["ASA_GoalsAddedScore"] * 0.3, 18, 12, 0, 60).round(0).astype(int)
+    sk["Assists"]    = _s2v(cr * 0.7 + bs * 0.3, 25, 15, 0, 75).round(0).astype(int)
+    sk["Points"]     = (sk["Goals"] + sk["Assists"])
+    sk["Pts/GP"]     = (sk["Points"] / sk["Games"].clip(1)).round(2)
+    sk["+/-"]        = _s2v(dd * 0.5 + pr * 0.5, 2, 12, -28, 32).round(0).astype(int)
+    sk["TOI/GP"]     = _s2v(comp, 17, 4, 8, 26).round(1)
+    sk["Corsi%"]     = _s2v(pr * 0.5 + dd * 0.5, 50, 4, 38, 62).round(1)
+    sk["Fenwick%"]   = _s2v(pr * 0.5 + dd * 0.5, 50, 4, 38, 62).round(1)
+    sk["xGF%"]       = _s2v(sc * 0.3 + cr * 0.3 + dd * 0.4, 50, 5, 35, 65).round(1)
+    sk["Sh%"]        = _s2v(sc, 10.5, 3.5, 2, 22).round(1)
+    sk["GAR"]        = _s2v(comp, 4, 6, -8, 22).round(1)
+    sk["Type"]       = "Skater"
+
+    sk["Rating"] = _composite(sk, [
+        ("GAR",    0.35, True), ("Pts/GP", 0.30, True),
+        ("Corsi%", 0.20, True), ("xGF%",  0.15, True),
     ])
-    skaters["ScoutingUncertainty"] = _uncertainty(
-        skaters, "Games", 82, "Age", "Games", 82, peak_age=(25, 30)
+    sk["Scouting Uncertainty"] = _uncertainty(
+        sk, "Age", "Games", 82, (25, 30), skater_df["Football Minutes"]
     )
+    frames.append(sk)
 
-    # ── Goalies ───────────────────────────────────────────────────────────────
-    age_g = RNG.integers(20, 40, n_goalies).astype(float)
-    gp_g  = np.clip(RNG.normal(45, 15, n_goalies), 10, 70).astype(int)
+    # Goalies
+    gk = _base_cols(goalie_df)
+    gk["NHL Position"] = "G"
+    dd_g = goalie_df["DefensiveDisruptionScore"]
+    bs_g = goalie_df["BallSecurityScore"]
+    comp_g = goalie_df["CompositeRecruitmentScore"]
 
-    goalies = pd.DataFrame({
-        "Player":    _names(n_goalies, NHL_FIRST, NHL_LAST),
-        "Team":      RNG.choice(["Oilers","Avalanche","Bruins","Panthers","Rangers",
-                                  "Lightning","Golden Knights","Maple Leafs","Hurricanes",
-                                  "Stars","Kings","Wild","Jets","Blues","Capitals"], n_goalies),
-        "Position":  "G",
-        "Age":       age_g,
-        "Games":     gp_g,
-        "Goals":     np.nan,
-        "Assists":   np.nan,
-        "Points":    np.nan,
-        "Points/GP": np.nan,
-        "+/-":       np.nan,
-        "PIM":       np.nan,
-        "TOI/GP":    np.nan,
-        "Corsi%":    np.nan,
-        "Fenwick%":  np.nan,
-        "xGF%":      np.nan,
-        "Sh%":       np.nan,
-        "iCF/60":    np.nan,
-        "SV%":       np.clip(RNG.normal(0.912, 0.012, n_goalies), 0.875, 0.940),
-        "GAA":       np.clip(RNG.normal(2.65, 0.40, n_goalies), 1.60, 4.20),
-        "GSAA":      np.clip(RNG.normal(5, 10, n_goalies), -18, 30),
-        "GAR":       np.clip(RNG.normal(4, 8, n_goalies), -12, 25),
-        "Type":      "Goalie",
-    })
-    goalies["Rating"] = _composite(goalies, [
-        ("GSAA",  0.40, True),
-        ("SV%",   0.35, True),
-        ("GAA",   0.15, False),
-        ("GAR",   0.10, True),
+    gk["Games"]  = _s2v(comp_g, 45, 14, 10, 70).round(0).astype(int)
+    gk["SV%"]    = _s2v(dd_g * 0.6 + bs_g * 0.4, 0.912, 0.012, 0.876, 0.940).round(3)
+    gk["GAA"]    = _s2v(100 - (dd_g * 0.7 + bs_g * 0.3), 2.65, 0.38, 1.60, 4.20).round(2)
+    gk["GSAA"]   = _s2v(dd_g * 0.5 + comp_g * 0.5, 5, 10, -18, 30).round(1)
+    gk["GAR"]    = _s2v(comp_g, 4, 8, -12, 25).round(1)
+    gk["Type"]   = "Goalie"
+
+    gk["Rating"] = _composite(gk, [
+        ("GSAA", 0.40, True), ("SV%", 0.35, True),
+        ("GAA",  0.15, False), ("GAR", 0.10, True),
     ])
-    goalies["ScoutingUncertainty"] = _uncertainty(
-        goalies, "Games", 70, "Age", "Games", 70, peak_age=(26, 33)
+    gk["Scouting Uncertainty"] = _uncertainty(
+        gk, "Age", "Games", 70, (26, 33), goalie_df["Football Minutes"]
     )
+    frames.append(gk)
 
-    df = pd.concat([skaters, goalies], ignore_index=True)
-    df["ConfidenceLabel"] = _confidence_label(df["ScoutingUncertainty"])
-    num = df.select_dtypes(include="number").columns
-    df[num] = df[num].round(2)
-    return df.sort_values("Rating", ascending=False).reset_index(drop=True)
+    out = pd.concat(frames, ignore_index=True)
+    out["Confidence Label"] = _confidence_label(out["Scouting Uncertainty"])
+    num = out.select_dtypes("number").columns
+    out[num] = out[num].round(2)
+    return out.sort_values("Rating", ascending=False).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NFL
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_nfl(n_qb: int = 32, n_rb: int = 40, n_wr: int = 50,
-              n_te: int = 25, n_def: int = 60) -> pd.DataFrame:
+NFL_POSITION_MAP = {
+    "AM": "QB", "CM": "QB", "ST": "RB", "W": "WR",
+    "FB": "WR/TE", "DM": "LB", "CB": "DL", "GK": "DL",
+}
+
+def build_nfl(df: pd.DataFrame) -> pd.DataFrame:
     frames = []
 
-    # QB
-    age_qb = RNG.integers(22, 40, n_qb).astype(float)
-    gp_qb  = np.clip(RNG.normal(14, 4, n_qb), 1, 17).astype(int)
-    qbs = pd.DataFrame({
-        "Player":       _names(n_qb, NFL_FIRST, NFL_LAST),
-        "Team":         RNG.choice(["Chiefs","Bills","Eagles","49ers","Cowboys",
-                                     "Ravens","Bengals","Chargers","Dolphins","Jets",
-                                     "Packers","Seahawks","Rams","Saints","Broncos"], n_qb),
-        "Position":     "QB",
-        "Age":          age_qb,
-        "Games":        gp_qb,
-        "Dropbacks":    (gp_qb * RNG.uniform(28, 42, n_qb)).astype(int),
-        "Pass Yards":   np.clip(RNG.normal(3800, 900, n_qb), 500, 5500).astype(int),
-        "Pass TD":      np.clip(RNG.normal(27, 9, n_qb), 3, 55).astype(int),
-        "INT":          np.clip(RNG.normal(10, 4, n_qb), 1, 22).astype(int),
-        "Comp%":        np.clip(RNG.normal(65, 5, n_qb), 52, 78),
-        "YPA":          np.clip(RNG.normal(7.5, 1.2, n_qb), 5.0, 11.0),
-        "QBR":          np.clip(RNG.normal(55, 18, n_qb), 15, 90),
-        "Passer Rating":np.clip(RNG.normal(95, 18, n_qb), 50, 135),
-        "Rush Yards QB":np.clip(RNG.normal(250, 280, n_qb), 0, 900).astype(int),
-        "DYAR":         np.clip(RNG.normal(400, 400, n_qb), -500, 1500).astype(int),
-        "DVOA%":        np.clip(RNG.normal(10, 20, n_qb), -35, 55),
-        "Type":         "QB",
-    })
-    qbs["TD/INT"] = (qbs["Pass TD"] / qbs["INT"].clip(lower=1)).round(2)
-    qbs["Rating"] = _composite(qbs, [
-        ("QBR",          0.35, True),
-        ("DYAR",         0.25, True),
-        ("YPA",          0.20, True),
-        ("TD/INT",       0.15, True),
-        ("Comp%",        0.05, True),
+    # QBs — playmakers
+    qb_df = _sample(df, ["AM", "CM"], 32, "CreativeProgressionScore")
+    qb = _base_cols(qb_df)
+    qb["NFL Position"] = "QB"
+    cr = qb_df["CreativeProgressionScore"]
+    bs = qb_df["BallSecurityScore"]
+    et = qb_df["ExpectedThreatScore"]
+
+    qb["Games"]         = _s2v(bs, 14, 3, 3, 17).round(0).astype(int)
+    qb["Pass Yards"]    = _s2v(cr * 0.6 + et * 0.4, 3800, 900, 500, 5500).round(0).astype(int)
+    qb["Pass TD"]       = _s2v(et * 0.6 + cr * 0.4, 27, 9, 3, 55).round(0).astype(int)
+    qb["INT"]           = _s2v(100 - bs, 10, 4, 1, 22).round(0).astype(int)
+    qb["Comp%"]         = _s2v(bs * 0.7 + cr * 0.3, 65, 5, 52, 78).round(1)
+    qb["YPA"]           = _s2v(et * 0.6 + cr * 0.4, 7.5, 1.2, 5.0, 11.0).round(1)
+    qb["QBR"]           = _s2v(qb_df["CompositeRecruitmentScore"], 55, 18, 15, 90).round(1)
+    qb["DYAR"]          = _s2v(qb_df["CompositeRecruitmentScore"], 400, 380, -500, 1500).round(0).astype(int)
+    qb["TD/INT"]        = (qb["Pass TD"] / qb["INT"].clip(1)).round(2)
+
+    qb["Rating"] = _composite(qb, [
+        ("QBR",   0.35, True), ("DYAR",  0.25, True),
+        ("YPA",   0.20, True), ("TD/INT",0.20, True),
     ])
-    qbs["ScoutingUncertainty"] = _uncertainty(
-        qbs, "Dropbacks", 550, "Age", "Games", 17, peak_age=(26, 32)
+    qb["Scouting Uncertainty"] = _uncertainty(
+        qb, "Age", "Games", 17, (26, 32), qb_df["Football Minutes"]
     )
-    frames.append(qbs)
+    frames.append(qb)
 
-    # RB
-    age_rb = RNG.integers(21, 33, n_rb).astype(float)
-    gp_rb  = np.clip(RNG.normal(14, 3, n_rb), 1, 17).astype(int)
-    rbs = pd.DataFrame({
-        "Player":       _names(n_rb, NFL_FIRST, NFL_LAST),
-        "Team":         RNG.choice(["Chiefs","Bills","Eagles","49ers","Cowboys",
-                                     "Ravens","Bengals","Chargers","Dolphins","Jets"], n_rb),
-        "Position":     "RB",
-        "Age":          age_rb,
-        "Games":        gp_rb,
-        "Dropbacks":    np.nan,
-        "Rush Yards":   np.clip(RNG.normal(850, 380, n_rb), 50, 2100).astype(int),
-        "Rush TD":      np.clip(RNG.normal(7, 4, n_rb), 0, 21).astype(int),
-        "YPC":          np.clip(RNG.normal(4.3, 0.7, n_rb), 2.5, 6.5),
-        "Receptions":   np.clip(RNG.normal(40, 20, n_rb), 5, 90).astype(int),
-        "Rec Yards":    np.clip(RNG.normal(320, 180, n_rb), 20, 700).astype(int),
-        "Yards/Carry":  np.clip(RNG.normal(4.3, 0.7, n_rb), 2.5, 6.5),
-        "Broken Tackles": np.clip(RNG.normal(25, 15, n_rb), 0, 70).astype(int),
-        "DVOA%":        np.clip(RNG.normal(5, 20, n_rb), -35, 45),
-        "DYAR":         np.clip(RNG.normal(80, 130, n_rb), -200, 400).astype(int),
-        "Carries":      np.clip(RNG.normal(180, 70, n_rb), 20, 350).astype(int),
-        "Type":         "RB",
-    })
-    rbs["Rating"] = _composite(rbs, [
-        ("DVOA%",    0.35, True),
-        ("YPC",      0.30, True),
-        ("DYAR",     0.20, True),
-        ("Receptions", 0.15, True),
+    # RBs — strikers
+    rb_df = _sample(df, ["ST"], 40, "ScoringThreatScore")
+    rb = _base_cols(rb_df)
+    rb["NFL Position"] = "RB"
+    sc = rb_df["ScoringThreatScore"]
+    pr = rb_df["PressingScore"]
+
+    rb["Games"]       = _s2v(pr, 13, 3, 3, 17).round(0).astype(int)
+    rb["Carries"]     = _s2v(sc * 0.6 + pr * 0.4, 180, 65, 20, 350).round(0).astype(int)
+    rb["Rush Yards"]  = _s2v(sc * 0.7 + pr * 0.3, 850, 380, 50, 2100).round(0).astype(int)
+    rb["YPC"]         = _s2v(sc, 4.3, 0.65, 2.5, 6.5).round(1)
+    rb["Rush TD"]     = _s2v(sc * 0.7 + rb_df["ASA_GoalsAddedScore"] * 0.3, 7, 4, 0, 21).round(0).astype(int)
+    rb["Receptions"]  = _s2v(rb_df["CreativeProgressionScore"], 38, 18, 5, 85).round(0).astype(int)
+    rb["Rec Yards"]   = _s2v(rb_df["CreativeProgressionScore"], 300, 170, 20, 700).round(0).astype(int)
+    rb["DVOA%"]       = _s2v(rb_df["CompositeRecruitmentScore"], 5, 20, -35, 45).round(1)
+    rb["DYAR"]        = _s2v(rb_df["CompositeRecruitmentScore"], 80, 130, -200, 400).round(0).astype(int)
+
+    rb["Rating"] = _composite(rb, [
+        ("DVOA%", 0.35, True), ("YPC",  0.30, True),
+        ("DYAR",  0.20, True), ("Receptions", 0.15, True),
     ])
-    rbs["ScoutingUncertainty"] = _uncertainty(
-        rbs, "Carries", 300, "Age", "Games", 17, peak_age=(23, 28)
+    rb["Scouting Uncertainty"] = _uncertainty(
+        rb, "Age", "Games", 17, (23, 28), rb_df["Football Minutes"]
     )
-    frames.append(rbs)
+    frames.append(rb)
 
-    # WR / TE
-    for pos, nn in [("WR", n_wr), ("TE", n_te)]:
-        age_w = RNG.integers(21, 35, nn).astype(float)
-        gp_w  = np.clip(RNG.normal(14, 3, nn), 1, 17).astype(int)
-        tgts  = np.clip(RNG.normal(90, 35, nn), 10, 180).astype(int)
-        rec   = (tgts * RNG.uniform(0.55, 0.80, nn)).astype(int)
-        yards = np.clip(RNG.normal(800, 350, nn), 50, 1850).astype(int)
-        skill = pd.DataFrame({
-            "Player":    _names(nn, NFL_FIRST, NFL_LAST),
-            "Team":      RNG.choice(["Chiefs","Bills","Eagles","49ers","Cowboys",
-                                      "Ravens","Bengals","Chargers","Dolphins","Jets"], nn),
-            "Position":  pos,
-            "Age":       age_w,
-            "Games":     gp_w,
-            "Dropbacks": np.nan,
-            "Targets":   tgts,
-            "Receptions":rec,
-            "Rec Yards": yards,
-            "Rec TD":    np.clip(RNG.normal(6, 4, nn), 0, 18).astype(int),
-            "Catch%":    (rec / tgts.clip(1) * 100).round(1),
-            "YPR":       (yards / rec.clip(1)).round(1),
-            "Air Yards": np.clip(RNG.normal(1100, 500, nn), 100, 2500).astype(int),
-            "YAC":       np.clip(RNG.normal(300, 150, nn), 0, 700).astype(int),
-            "DVOA%":     np.clip(RNG.normal(8, 22, nn), -40, 60),
-            "DYAR":      np.clip(RNG.normal(120, 160, nn), -250, 500).astype(int),
-            "Type":      pos,
-        })
-        skill["Rating"] = _composite(skill, [
-            ("DVOA%",     0.35, True),
-            ("DYAR",      0.25, True),
-            ("YPR",       0.20, True),
-            ("Catch%",    0.20, True),
-        ])
-        skill["ScoutingUncertainty"] = _uncertainty(
-            skill, "Targets", 150, "Age", "Games", 17, peak_age=(24, 29)
-        )
-        frames.append(skill)
+    # WRs — wingers
+    wr_df = _sample(df, ["W", "FB"], 60, "CreativeProgressionScore")
+    wr = _base_cols(wr_df)
+    wr["NFL Position"] = "WR/TE"
+    cr = wr_df["CreativeProgressionScore"]
+    sc = wr_df["ScoringThreatScore"]
+    bs = wr_df["BallSecurityScore"]
 
-    # Defence (generic)
-    age_d = RNG.integers(21, 36, n_def).astype(float)
-    gp_d  = np.clip(RNG.normal(15, 2, n_def), 5, 17).astype(int)
-    def_pos = RNG.choice(["DE","DT","LB","CB","S"], n_def)
-    defence = pd.DataFrame({
-        "Player":         _names(n_def, NFL_FIRST, NFL_LAST),
-        "Team":           RNG.choice(["Chiefs","Bills","Eagles","49ers","Cowboys",
-                                       "Ravens","Bengals","Chargers","Dolphins","Jets"], n_def),
-        "Position":       def_pos,
-        "Age":            age_d,
-        "Games":          gp_d,
-        "Dropbacks":      np.nan,
-        "Solo Tackles":   np.clip(RNG.normal(50, 25, n_def), 5, 130).astype(int),
-        "Sacks":          np.clip(RNG.normal(4.5, 4, n_def), 0, 22.5),
-        "TFL":            np.clip(RNG.normal(6, 4, n_def), 0, 22).astype(int),
-        "QB Hits":        np.clip(RNG.normal(12, 8, n_def), 0, 40).astype(int),
-        "INT":            np.clip(RNG.normal(1.5, 1.5, n_def), 0, 8).astype(int),
-        "PBU":            np.clip(RNG.normal(5, 4, n_def), 0, 20).astype(int),
-        "Forced Fumbles": np.clip(RNG.normal(1.2, 1.2, n_def), 0, 6).astype(int),
-        "DVOA%":          np.clip(RNG.normal(5, 20, n_def), -35, 55),
-        "DYAR":           np.clip(RNG.normal(40, 80, n_def), -150, 250).astype(int),
-        "Type":           "Defence",
-    })
-    defence["Rating"] = _composite(defence, [
-        ("DVOA%",    0.30, True),
-        ("Sacks",    0.25, True),
-        ("DYAR",     0.25, True),
-        ("TFL",      0.20, True),
+    wr["Games"]       = _s2v(bs, 13, 3, 3, 17).round(0).astype(int)
+    wr["Targets"]     = _s2v(cr * 0.6 + sc * 0.4, 90, 35, 10, 175).round(0).astype(int)
+    wr["Receptions"]  = _s2v(bs * 0.5 + cr * 0.5, 58, 22, 5, 125).round(0).astype(int)
+    wr["Rec Yards"]   = _s2v(cr * 0.5 + sc * 0.5, 800, 340, 50, 1850).round(0).astype(int)
+    wr["Rec TD"]      = _s2v(sc, 6, 4, 0, 18).round(0).astype(int)
+    wr["Catch%"]      = (wr["Receptions"] / wr["Targets"].clip(1) * 100).round(1)
+    wr["YPR"]         = (wr["Rec Yards"] / wr["Receptions"].clip(1)).round(1)
+    wr["DVOA%"]       = _s2v(wr_df["CompositeRecruitmentScore"], 8, 22, -40, 60).round(1)
+    wr["DYAR"]        = _s2v(wr_df["CompositeRecruitmentScore"], 120, 155, -250, 500).round(0).astype(int)
+
+    wr["Rating"] = _composite(wr, [
+        ("DVOA%",  0.35, True), ("DYAR",   0.25, True),
+        ("YPR",    0.20, True), ("Catch%", 0.20, True),
     ])
-    defence["ScoutingUncertainty"] = _uncertainty(
-        defence, "Solo Tackles", 100, "Age", "Games", 17, peak_age=(25, 30)
+    wr["Scouting Uncertainty"] = _uncertainty(
+        wr, "Age", "Games", 17, (24, 29), wr_df["Football Minutes"]
     )
-    frames.append(defence)
+    frames.append(wr)
 
-    df = pd.concat(frames, ignore_index=True)
-    df["ConfidenceLabel"] = _confidence_label(df["ScoutingUncertainty"])
-    num = df.select_dtypes(include="number").columns
-    df[num] = df[num].round(2)
-    return df.sort_values("Rating", ascending=False).reset_index(drop=True)
+    # Defence — defensive players
+    def_df = _sample(df, ["DM", "CB", "GK"], 75, "DefensiveDisruptionScore")
+    def_ = _base_cols(def_df)
+    def_["NFL Position"] = def_df["PositionGroup"].map(NFL_POSITION_MAP).fillna("LB")
+    dd  = def_df["DefensiveDisruptionScore"]
+    pr  = def_df["PressingScore"]
+    comp= def_df["CompositeRecruitmentScore"]
+
+    def_["Games"]          = _s2v(pr, 15, 2, 5, 17).round(0).astype(int)
+    def_["Solo Tackles"]   = _s2v(dd * 0.6 + pr * 0.4, 50, 25, 5, 130).round(0).astype(int)
+    def_["Sacks"]          = _s2v(dd * 0.7 + pr * 0.3, 4.5, 3.8, 0, 22.5).round(1)
+    def_["TFL"]            = _s2v(dd * 0.6 + pr * 0.4, 6, 4, 0, 22).round(0).astype(int)
+    def_["QB Hits"]        = _s2v(pr * 0.5 + dd * 0.5, 12, 8, 0, 38).round(0).astype(int)
+    def_["INT"]            = _s2v(def_df["BallSecurityScore"], 1.5, 1.5, 0, 8).round(0).astype(int)
+    def_["PBU"]            = _s2v(dd * 0.5 + def_df["BallSecurityScore"] * 0.5, 5, 4, 0, 20).round(0).astype(int)
+    def_["DVOA%"]          = _s2v(comp, 5, 20, -35, 55).round(1)
+    def_["DYAR"]           = _s2v(comp, 40, 78, -150, 250).round(0).astype(int)
+
+    def_["Rating"] = _composite(def_, [
+        ("DVOA%", 0.30, True), ("Sacks", 0.25, True),
+        ("DYAR",  0.25, True), ("TFL",   0.20, True),
+    ])
+    def_["Scouting Uncertainty"] = _uncertainty(
+        def_, "Age", "Games", 17, (25, 30), def_df["Football Minutes"]
+    )
+    frames.append(def_)
+
+    out = pd.concat(frames, ignore_index=True)
+    out["Confidence Label"] = _confidence_label(out["Scouting Uncertainty"])
+    num = out.select_dtypes("number").columns
+    out[num] = out[num].round(2)
+    return out.sort_values("Rating", ascending=False).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Cricket
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_cricket(n: int = 120) -> pd.DataFrame:
-    formats   = RNG.choice(["Test","ODI","T20I"], n, p=[0.35, 0.35, 0.30])
-    roles     = RNG.choice(["Batter","Bowler","All-rounder","WK-Batter"], n,
-                           p=[0.40, 0.30, 0.20, 0.10])
-    age       = RNG.integers(18, 40, n).astype(float)
-    innings   = np.where(formats == "Test",
-                         np.clip(RNG.normal(30, 20, n), 5, 100).astype(int),
-                         np.clip(RNG.normal(40, 20, n), 5, 100).astype(int))
+def build_cricket(df: pd.DataFrame) -> pd.DataFrame:
+    players = _sample(df, ["ST", "W", "AM", "CM", "DM", "CB", "FB", "GK"], 150,
+                      "CompositeRecruitmentScore")
+    out = _base_cols(players)
 
-    # Strike rate varies by format
-    sr_mean = np.where(formats == "T20I", 135,
-              np.where(formats == "ODI",  88, 55))
+    sc  = players["ScoringThreatScore"]
+    cr  = players["CreativeProgressionScore"]
+    dd  = players["DefensiveDisruptionScore"]
+    pr  = players["PressingScore"]
+    bs  = players["BallSecurityScore"]
+    ae  = players["AerialScore"]
+    comp= players["CompositeRecruitmentScore"]
 
-    df = pd.DataFrame({
-        "Player":         _names(n, CRICKET_FIRST, CRICKET_LAST),
-        "Team":           RNG.choice(["India","Australia","England","Pakistan","New Zealand",
-                                       "South Africa","West Indies","Sri Lanka","Bangladesh","Zimbabwe"], n),
-        "Role":           roles,
-        "Format":         formats,
-        "Age":            age,
-        "Innings Batted": innings,
-        # Batting
-        "Bat Average":    np.where(roles == "Bowler",
-                                   np.clip(RNG.normal(15, 8, n), 3, 35),
-                                   np.clip(RNG.normal(38, 15, n), 10, 70)),
-        "Strike Rate":    np.clip(sr_mean + RNG.normal(0, 15, n), 30, 220),
-        "Runs":           np.clip(RNG.normal(1200, 900, n), 50, 4500).astype(int),
-        "100s":           np.clip(RNG.normal(3, 4, n), 0, 18).astype(int),
-        "50s":            np.clip(RNG.normal(7, 6, n), 0, 30).astype(int),
-        "HS":             np.clip(RNG.normal(95, 50, n), 10, 250).astype(int),
-        # Bowling
-        "Wickets":        np.where(roles == "Batter",
-                                   np.clip(RNG.normal(5, 8, n), 0, 30).astype(int),
-                                   np.clip(RNG.normal(60, 40, n), 5, 200).astype(int)),
-        "Bowl Average":   np.where(roles == "Batter",
-                                   np.clip(RNG.normal(50, 20, n), 25, 100),
-                                   np.clip(RNG.normal(28, 8, n), 14, 55)),
-        "Economy":        np.where(formats == "T20I",
-                                   np.clip(RNG.normal(8.0, 1.2, n), 5.0, 12.0),
-                          np.where(formats == "ODI",
-                                   np.clip(RNG.normal(5.2, 0.8, n), 3.5, 8.0),
-                                   np.clip(RNG.normal(3.0, 0.6, n), 1.8, 5.5))),
-        "Bowl SR":        np.clip(RNG.normal(30, 12, n), 10, 65),
-        "5-wicket hauls": np.where(roles == "Batter", 0,
-                                   np.clip(RNG.normal(3, 4, n), 0, 18).astype(int)),
-        "Innings Bowled": np.where(roles == "Batter",
-                                   np.clip(RNG.normal(5, 5, n), 0, 20).astype(int),
-                                   np.clip(RNG.normal(35, 20, n), 5, 100).astype(int)),
-    })
+    # Role: attacking → batter, defensive → bowler, balanced → all-rounder
+    bat_w = ((sc + cr) / 2).clip(0, 100)
+    bowl_w = ((dd + pr) / 2).clip(0, 100)
+    total  = (bat_w + bowl_w).clip(lower=1)
 
-    # Bat rating (higher avg + SR → better)
-    bat_score = _composite(df, [
-        ("Bat Average", 0.45, True),
-        ("Strike Rate", 0.30, True),
-        ("100s",        0.15, True),
-        ("50s",         0.10, True),
+    role = pd.Series("All-Rounder", index=players.index)
+    role[bat_w / total >= 0.60]  = "Batter"
+    role[bowl_w / total >= 0.60] = "Bowler"
+    out["Role"] = role
+
+    # Format: skewed toward longer formats for more experienced players
+    out["Format"] = pd.cut(
+        players["Football Minutes"].fillna(900),
+        bins=[0, 700, 1400, 99999],
+        labels=["T20I", "ODI", "Test"],
+    ).astype(str)
+
+    # Batting stats
+    out["Bat Average"]  = _s2v(sc * 0.5 + bs * 0.5, 38, 14, 10, 72).round(1)
+    out["Strike Rate"]  = _s2v(sc * 0.6 + pr * 0.4, 72, 28, 30, 180).round(1)
+    out["Runs"]         = _s2v(comp * 0.6 + sc * 0.4, 1200, 850, 50, 4500).round(0).astype(int)
+    out["100s"]         = _s2v(sc * 0.6 + cr * 0.4, 3, 4, 0, 18).round(0).astype(int)
+    out["50s"]          = _s2v(sc * 0.5 + bs * 0.5, 7, 5, 0, 30).round(0).astype(int)
+
+    # Bowling stats
+    out["Wickets"]      = _s2v(dd * 0.6 + pr * 0.4, 55, 38, 0, 200).round(0).astype(int)
+    out["Bowl Average"] = _s2v(100 - (dd * 0.6 + bs * 0.4), 28, 8, 14, 55).round(1)
+    out["Economy"]      = _s2v(100 - (pr * 0.5 + dd * 0.5), 5.5, 1.2, 3.0, 10.5).round(1)
+    out["Bowl SR"]      = _s2v(100 - (dd * 0.6 + pr * 0.4), 30, 12, 10, 65).round(1)
+    out["5-wkt Hauls"]  = _s2v(dd * 0.7 + pr * 0.3, 3, 4, 0, 18).round(0).astype(int)
+
+    # Innings (sample size)
+    out["Innings"] = _s2v(bs * 0.5 + comp * 0.5, 38, 20, 5, 100).round(0).astype(int)
+
+    # Rating: blend batting + bowling weighted by role
+    bat_score  = _composite(out, [
+        ("Bat Average", 0.45, True), ("Strike Rate", 0.30, True),
+        ("100s", 0.15, True), ("50s", 0.10, True),
     ])
-    # Bowl rating (lower avg + economy + SR → better)
-    bowl_score = _composite(df, [
-        ("Bowl Average", 0.40, False),
-        ("Economy",      0.30, False),
-        ("Bowl SR",      0.20, False),
-        ("Wickets",      0.10, True),
+    bowl_score = _composite(out, [
+        ("Bowl Average", 0.40, False), ("Economy", 0.30, False),
+        ("Bowl SR", 0.20, False), ("Wickets", 0.10, True),
     ])
+    bw = (bat_w / total).values
+    out["Rating"] = (bw * bat_score + (1 - bw) * bowl_score).clip(0, 100).round(1)
 
-    # Weight by role
-    bat_w  = pd.Series(np.where(roles == "Batter",      0.90,
-                       np.where(roles == "WK-Batter",    0.80,
-                       np.where(roles == "All-rounder",  0.50, 0.20))), index=df.index)
-    bowl_w = 1 - bat_w
-
-    df["Rating"]       = (bat_w * bat_score + bowl_w * bowl_score).clip(0, 100).round(1)
-    df["ScoutingUncertainty"] = _uncertainty(
-        df, "Innings Batted", 80, "Age", "Innings Batted", 80, peak_age=(26, 32)
+    out["Scouting Uncertainty"] = _uncertainty(
+        out, "Age", "Innings", 80, (26, 32), players["Football Minutes"]
     )
-    df["ConfidenceLabel"] = _confidence_label(df["ScoutingUncertainty"])
-
-    num = df.select_dtypes(include="number").columns
-    df[num] = df[num].round(2)
-    return df.sort_values("Rating", ascending=False).reset_index(drop=True)
+    out["Confidence Label"] = _confidence_label(out["Scouting Uncertainty"])
+    num = out.select_dtypes("number").columns
+    out[num] = out[num].round(2)
+    return out.sort_values("Rating", ascending=False).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Main
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run(output: Path) -> None:
+def run(min_minutes: int, output: Path) -> None:
     print(f"\n{'='*60}")
-    print("  Multi-Sport Scouting Report")
+    print("  Multi-Sport Scouting Report — Real Football Players")
     print(f"{'='*60}")
 
-    print("Building MLB data…")
-    mlb = build_mlb()
-    print("Building NBA data…")
-    nba = build_nba()
-    print("Building NHL data…")
-    nhl = build_nhl()
-    print("Building NFL data…")
-    nfl = build_nfl()
-    print("Building Cricket data…")
-    cricket = build_cricket()
+    players = load_players(min_minutes)
+
+    print("Building MLB sheet…")
+    mlb = build_mlb(players)
+    print("Building NBA sheet…")
+    nba = build_nba(players)
+    print("Building NHL sheet…")
+    nhl = build_nhl(players)
+    print("Building NFL sheet…")
+    nfl = build_nfl(players)
+    print("Building Cricket sheet…")
+    cricket = build_cricket(players)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     print(f"\nWriting workbook → {output}")
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        _write(writer, "MLB",     mlb)
-        _write(writer, "NBA",     nba)
-        _write(writer, "NHL",     nhl)
-        _write(writer, "NFL",     nfl)
+        _write(writer, "MLB", mlb)
+        _write(writer, "NBA", nba)
+        _write(writer, "NHL", nhl)
+        _write(writer, "NFL", nfl)
         _write(writer, "Cricket", cricket)
 
     size_mb = output.stat().st_size / 1_048_576
@@ -747,10 +634,9 @@ def run(output: Path) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Multi-sport scouting workbook")
-    parser.add_argument(
-        "--output", type=Path,
-        default=DATA_DIR / "Multi-Sport Scouting Report.xlsx",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-minutes", type=int, default=400)
+    parser.add_argument("--output", type=Path,
+                        default=DATA_DIR / "Multi-Sport Scouting Report.xlsx")
     args = parser.parse_args()
-    run(args.output)
+    run(args.min_minutes, args.output)
