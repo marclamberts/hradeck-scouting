@@ -144,7 +144,7 @@ SCORE_COLS = [
     "ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore",
     "PressingScore", "BallSecurityScore", "ExpectedThreatScore",
     "ASA_GoalsAddedScore", "AerialScore", "SetPieceScore",
-    "CompositeRecruitmentScore", "Rating", "ScoutingUncertainty",
+    "CompositeRecruitmentScore", "Rating", "ScoutingUncertainty", "ConfidenceLabel",
 ]
 
 DISPLAY_BASE = [
@@ -541,40 +541,40 @@ POSITION_DISPLAY: dict[str, list[str]] = {
            "Shots on target, %", "Goal conversion, %", "Touches in box per 90",
            "Aerial duels won, %", "Dribbles per 90", "xA per 90",
            "ScoringThreatScore", "ExpectedThreatScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
     "W":  ["Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
            "Key passes per 90", "Dribbles per 90", "Successful dribbles, %",
            "Crosses per 90", "Accurate crosses, %", "Progressive runs per 90",
            "ScoringThreatScore", "CreativeProgressionScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
     "AM": ["Key passes per 90", "xA per 90", "Assists per 90", "Smart passes per 90",
            "Goals per 90", "xG per 90", "Touches in box per 90", "Through passes per 90",
            "Dribbles per 90", "Progressive passes per 90",
            "CreativeProgressionScore", "ExpectedThreatScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
     "CM": ["Passes per 90", "Accurate passes, %", "Progressive passes per 90",
            "Key passes per 90", "xA per 90", "Progressive runs per 90",
            "Successful defensive actions per 90", "Interceptions per 90", "Duels won, %",
            "CreativeProgressionScore", "BallSecurityScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
     "DM": ["Successful defensive actions per 90", "Defensive duels per 90",
            "Defensive duels won, %", "Interceptions per 90", "PAdj Interceptions",
            "Aerial duels won, %", "Passes per 90", "Accurate passes, %",
            "Progressive passes per 90",
            "DefensiveDisruptionScore", "PressingScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
     "FB": ["Crosses per 90", "Accurate crosses, %", "xA per 90", "Assists per 90",
            "Progressive runs per 90", "Dribbles per 90",
            "Successful defensive actions per 90", "Defensive duels won, %",
            "Aerial duels won, %", "Progressive passes per 90",
            "CreativeProgressionScore", "DefensiveDisruptionScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
     "CB": ["Successful defensive actions per 90", "Defensive duels per 90",
            "Defensive duels won, %", "Aerial duels per 90", "Aerial duels won, %",
            "Interceptions per 90", "PAdj Interceptions", "Shots blocked per 90",
            "Accurate passes, %", "Progressive passes per 90",
            "DefensiveDisruptionScore", "BallSecurityScore", "CompositeRecruitmentScore",
-           "Rating", "ScoutingUncertainty"],
+           "Rating", "ScoutingUncertainty", "ConfidenceLabel"],
 }
 
 
@@ -618,6 +618,8 @@ def build_scouting_uncertainty(df: pd.DataFrame) -> pd.DataFrame:
         out["Rating"] = pd.to_numeric(df["Rating"], errors="coerce").round(1)
     if "ScoutingUncertainty" in df.columns:
         out["Scouting Uncertainty"] = pd.to_numeric(df["ScoutingUncertainty"], errors="coerce").round(1)
+    if "ConfidenceLabel" in df.columns:
+        out["Confidence Label"] = df["ConfidenceLabel"]
 
     sort_col = "Scouting Uncertainty" if "Scouting Uncertainty" in out.columns else out.columns[0]
     return out.sort_values(sort_col).reset_index(drop=True)
@@ -742,7 +744,7 @@ def run(threshold: float, min_minutes: int, output: Path) -> None:
         "ASA_GoalsAddedScore", "AerialScore", "SetPieceScore",
         "CompositeRecruitmentScore",
         # Scout numbers
-        "Rating", "ScoutingUncertainty",
+        "Rating", "ScoutingUncertainty", "ConfidenceLabel",
         # SP + Anomaly tags
         "_sp_primary_role", "_sp_composite",
         "_anomaly_type", "_anomaly_score", "_peak_z",

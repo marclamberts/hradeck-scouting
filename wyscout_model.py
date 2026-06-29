@@ -140,7 +140,7 @@ WYSCOUT_DB_DIR = Path(__file__).parent / "data" / "Wyscout DB"
 
 ALL_SCORE_COLS = list(SCORE_BLUEPRINTS.keys()) + [
     "AerialScore", "SetPieceScore", "CompositeRecruitmentScore",
-    "Rating", "ScoutingUncertainty",
+    "Rating", "ScoutingUncertainty", "ConfidenceLabel",
 ]
 
 # ── League quality index ───────────────────────────────────────────────────────
@@ -442,6 +442,16 @@ def compute_wyscout_scores(df: pd.DataFrame) -> pd.DataFrame:
         ).clip(0, 1)
 
         result["ScoutingUncertainty"] = (_combined * 100).clip(0, 100).round(1)
+
+    # ConfidenceLabel — plain-English tier based on ScoutingUncertainty
+    if "ConfidenceLabel" not in result.columns and "ScoutingUncertainty" in result.columns:
+        def _label(u: float) -> str:
+            if u <= 20: return "High Confidence"
+            if u <= 35: return "Good Confidence"
+            if u <= 50: return "Moderate Confidence"
+            if u <= 65: return "Low Confidence"
+            return "Very Low Confidence"
+        result["ConfidenceLabel"] = result["ScoutingUncertainty"].apply(_label)
 
     return result
 
