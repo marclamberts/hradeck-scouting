@@ -1,0 +1,157 @@
+Player,Team,_League,Age,Position,Passport country,Foot,Height,Minutes played,Matches played,Goals,Assists,xG,xA,Progressive passes per 90,"Accurate progressive passes, %",Key passes per 90,Passes per 90,"Accurate passes, %","Duels won, %",Interceptions per 90
+A. Hron,Slovan Liberec U17,Czech U17,15.0,"LCMF, RCMF",Czech Republic,unknown,0,35,2,0,0,0.16,0.0,,,,,,,
+Adam Beran,FK Mladá Boleslav U17,Czech U17,15.0,LCMF,Czech Republic,,179,50,1,0,0,0.03,0.0,1.8,100.0,0.0,16.2,66.67,71.43,9.0
+D. Střihavka,Slovan Liberec U17,Czech U17,15.0,"LCMF, RWF, RCMF",Czech Republic,unknown,0,814,16,3,1,1.53,0.54,5.75,67.31,0.33,24.55,68.92,52.79,4.2
+F. Matěj,Slovan Liberec U17,Czech U17,15.0,"RCMF, DMF",Czech Republic,,0,86,2,0,0,0.15,0.12,4.19,25.0,0.0,47.09,77.78,42.11,2.09
+M. Korbel,Dukla Praha U17,Czech U17,15.0,"RCMF, LCMF, AMF",Czech Republic,unknown,155,1392,20,3,0,4.11,0.81,4.14,65.63,0.26,28.71,76.58,48.28,2.52
+Š. Šimon,Pardubice U17,Czech U17,15.0,"RCMF, LCMF",Czech Republic,,0,785,10,1,1,0.63,1.44,5.96,57.69,0.34,28.09,78.78,45.32,2.18
+A. Tichánek,Vysočina Jihlava U19,Czech U19,16.0,"LCMF, RCMF, AMF",Czech Republic,unknown,0,882,11,1,3,1.64,2.06,5.82,66.67,0.31,22.04,62.04,46.73,1.33
+A. Van Geet,Slovan Liberec U19,Czech U19,16.0,"RCMF, LDMF, RDMF",Czech Republic,unknown,0,876,11,1,0,0.3,0.31,5.03,59.18,0.1,36.47,84.23,53.08,4.11
+D. Kolar,České Budějovice U17,Czech U17,16.0,"RCMF, DMF",Czech Republic,unknown,0,795,9,1,2,1.27,0.93,8.83,84.62,0.45,42.11,77.42,56.45,3.74
+F. Rada,Viktoria Plzeň U17,Czech U17,16.0,"RCMF, LDMF, RDMF",Czech Republic,unknown,0,719,12,1,2,1.82,1.31,7.89,73.02,0.63,35.05,73.93,61.08,4.13
+J. Kosar,FC Hradec Králové U17,Czech U17,16.0,"LCMF, LWF",Czech Republic,unknown,0,74,8,0,0,0.0,0.0,4.86,50.0,0.0,24.32,75.0,33.33,4.86
+J. Zadrobílek,Sparta Praha U19,Czech U17,16.0,"LCMF, RCMF",Czech Republic,,0,1063,15,11,0,6.91,1.52,7.87,78.49,0.51,31.83,64.1,52.66,2.96
+J. Zadrobílek,Sparta Praha U19,Czech U19,16.0,"LCMF, CF, RCMF",Czech Republic,,0,138,3,0,0,0.44,0.29,6.52,70.0,0.65,25.43,66.67,58.33,3.91
+K. Klíma,Sparta Praha U17,Czech U17,16.0,"LCMF, RCMF",Czech Republic,unknown,0,309,5,0,0,0.22,0.88,6.12,76.19,0.87,27.67,82.11,57.81,4.08
+L. Forejt,Sparta Praha U17,Czech U17,16.0,"RCMF, CB, DMF",Czech Republic,unknown,0,1000,14,1,1,0.97,0.1,8.37,64.52,0.18,39.51,82.0,53.8,3.78
+L. Havrlík,Sparta Praha U17,Czech U17,16.0,"RCMF, DMF",Czech Republic,unknown,0,424,6,0,0,1.1,1.35,7.85,62.16,0.42,32.05,68.87,47.32,5.73
+M. Jakub,Sigma Olomouc U17,Czech U17,16.0,"RCMF, LCMF",Czech Republic,,0,1578,22,2,1,1.52,1.61,6.5,71.05,0.34,30.46,75.66,48.72,4.56
+M. Pesek,České Budějovice U17,Czech U17,16.0,"RCMF, DMF",Czech Republic,unknown,0,1448,20,2,3,1.94,1.7,5.41,80.46,0.5,25.3,75.68,52.33,2.49
+S. Mladen,Dukla Praha U17,Czech U17,16.0,"LCMF, RAMF, RCMF",Czech Republic,unknown,0,994,12,6,2,2.46,3.62,6.97,68.83,0.81,27.71,66.01,47.4,3.17
+S. Pavlik,České Budějovice U17,Czech U17,16.0,"LCMF, CF, AMF",Czech Republic,unknown,0,1587,20,8,3,9.63,5.37,6.98,78.05,0.74,30.68,67.1,47.27,2.44
+Š. Sedlák,FC Vysočina Jihlava U17,Czech U17,16.0,"LCMF, DMF",Czech Republic,unknown,0,907,13,2,2,1.32,1.57,7.94,72.5,0.79,30.86,75.88,42.92,3.97
+Š. Sedlák,Vysočina Jihlava U19,Czech U19,16.0,"RCMF, LCMF",Czech Republic,unknown,0,615,8,1,1,1.37,1.16,5.41,70.27,0.59,22.68,61.94,55.1,3.51
+A. Hink,Vysočina Jihlava U19,Czech U17,17.0,"RCMF, DMF, LCMF",Czech Republic,unknown,0,1208,16,8,0,4.42,0.3,6.78,74.73,0.07,33.9,81.32,45.91,2.24
+B. Marek,Slovan Liberec U19,Czech U17,17.0,"LCMF, RCMF",Czech Republic,,0,957,12,1,3,1.41,0.78,4.33,56.52,0.56,29.81,78.23,49.84,5.64
+C. Bolorbold,Sparta Praha U19,Czech U17,17.0,"LCMF, RCMF","Mongolia, Czech Republic",,0,226,3,0,0,0.0,0.41,5.97,86.67,0.4,44.2,90.99,42.37,3.19
+C. Bolorbold,Sparta Praha U19,Czech U19,17.0,"RCMF, LCMF, DMF","Mongolia, Czech Republic",,0,1513,19,1,3,1.18,3.93,5.83,75.51,0.54,34.2,80.87,44.64,2.62
+C. David,Baník Ostrava U17,Czech U17,17.0,"LCMF, RCMF, RDMF",Czech Republic,unknown,0,621,9,1,1,0.9,0.61,6.81,63.83,0.14,31.59,74.77,49.66,3.33
+D. Kolar,České Budějovice U17,Czech U19,17.0,"LCMF, RCMF, DMF",Czech Republic,unknown,0,560,7,0,1,0.16,0.87,5.3,72.73,0.32,31.5,73.98,48.6,1.77
+D. Ledvinka,Dukla Praha U19,Czech U19,17.0,"LCMF, RCMF, RW",Czech Republic,unknown,0,528,12,0,0,0.7,0.46,4.09,54.17,0.17,23.69,61.87,48.84,3.92
+F. Juranka,Mladá Boleslav U19,Czech U19,17.0,"RCMF, LCMF",Czech Republic,unknown,0,718,13,0,0,0.76,0.0,3.38,74.07,0.0,23.82,71.58,55.11,2.13
+F. Rajcan,,Czech U19,17.0,"RCMF, RAMF, LCMF",Slovakia,unknown,0,742,10,2,2,0.54,0.61,8.37,78.26,0.49,43.42,74.58,60.28,4.37
+H. Sochurek,Sparta Praha U19,Czech II,17.0,"RCMF, LWB, LWF",Czech Republic,unknown,0,313,5,0,0,0.04,0.28,5.18,66.67,0.29,28.18,83.67,59.26,1.44
+H. Sochurek,Sparta Praha U19,Czech U19,17.0,"LCMF, RCMF, LW",Czech Republic,unknown,0,547,6,0,0,0.62,0.1,3.46,76.19,0.0,34.06,82.61,57.04,2.96
+H. Sochurek,Sparta Praha U19,Czech,17.0,"RCMF, AMF",Czech Republic,unknown,0,539,8,0,2,0.07,0.68,5.01,90.0,0.83,37.74,91.59,52.81,2.84
+J. Base,FC Hradec Králové U17,Czech U17,17.0,"RCMF, RDMF",Czech Republic,unknown,0,1277,16,5,0,4.25,0.29,4.79,51.47,0.21,24.53,69.83,48.62,2.89
+J. Cahlík,Baník Ostrava U17,Czech U19,17.0,"RCMF, RDMF, AMF",Czech Republic,unknown,0,942,11,3,0,1.68,1.1,5.64,66.1,0.38,30.86,71.83,45.81,3.15
+J. Kuneš,Slavia Praha U17,Czech U19,17.0,"RCMF, RCB, LDMF",Czech Republic,unknown,0,679,11,0,2,0.03,0.64,6.76,58.82,0.4,39.63,82.61,38.85,4.24
+J. Kupera,Slavia Praha U17,Czech U17,17.0,"LCMF, RCMF, DMF",Czech Republic,,0,1318,17,1,1,1.69,0.37,7.92,74.14,0.14,37.9,83.06,48.08,2.12
+K. Adam,Sigma Olomouc U17,Czech U17,17.0,"RCMF, AMF",Czech Republic,,0,146,7,0,0,1.49,0.0,6.78,63.64,0.0,30.82,72.0,34.48,3.08
+K. Radovan,České Budějovice U17,Czech U17,17.0,"LCMF, DMF, AMF",Czech Republic,,0,119,6,0,0,0.0,0.11,2.27,100.0,0.0,18.91,76.0,35.29,0.76
+M. Matyáš,Sigma Olomouc U17,Czech U17,17.0,"LCMF, AMF, LW",Czech Republic,,0,991,21,4,2,3.0,1.97,4.0,75.0,0.45,25.34,79.93,52.56,2.09
+M. Uhlík,Mladá Boleslav U19,Czech U19,17.0,"RCMF, LCMF",Czech Republic,unknown,0,223,4,0,0,0.17,0.15,4.84,66.67,0.0,35.11,78.16,45.24,2.02
+O. Frolík,Slavia Praha U19,Czech U19,17.0,"LCMF, RCMF",Czech Republic,unknown,0,1356,17,1,8,1.63,5.47,6.7,72.28,0.73,34.45,74.18,54.8,3.32
+P. Lubor,Slovan Liberec U19,Czech U17,17.0,"LCMF, CF, LAMF",Czech Republic,,0,1010,13,3,3,1.89,1.17,8.82,65.66,0.89,36.18,71.43,43.88,3.03
+R. Filip,Baník Ostrava U19,Czech U19,17.0,"RCMF, RAMF, LCMF",Slovakia,unknown,0,742,10,2,2,0.54,0.61,8.37,78.26,0.49,43.42,74.58,60.28,4.37
+R. Kastyl,Sigma Olomouc U19,Czech U19,17.0,"RCMF, RDMF, LCMF",Czech Republic,,0,481,7,1,0,1.05,0.92,5.8,80.65,0.56,29.75,81.13,58.33,2.25
+R. Kaštyl,Sigma Olomouc U19,Czech U19,17.0,"RCMF, RDMF, LCMF",Czech Republic,unknown,0,566,12,1,0,1.05,0.92,5.57,80.0,0.48,28.62,81.11,54.97,2.7
+T. Barnas,Dukla Praha U19,Czech U19,17.0,"RCMF, LCMF",Slovakia,unknown,0,673,19,1,0,0.38,0.23,4.95,62.16,0.0,33.43,80.4,42.74,2.27
+T. Hellebrand,Zlín U19,Czech U19,17.0,RCMF,Czech Republic,unknown,0,95,1,0,0,0.13,0.21,8.53,88.89,0.0,29.37,87.1,43.18,4.74
+T. Pernica,Slovácko Under 17,Czech U17,17.0,RCMF,Czech Republic,,0,48,1,0,0,0.03,0.14,3.75,100.0,0.0,41.25,68.18,75.0,1.88
+V. Martin,Dukla Praha U17,Czech U17,17.0,"LCMF, RCMF",Czech Republic,,0,688,16,0,1,0.33,1.22,6.28,77.08,0.13,22.37,76.02,48.62,2.49
+A. Petic,Podbrezová,Slovakia,18.0,RCMF,Slovakia,unknown,0,7,1,0,0,0.0,0.0,,,,,,,
+A. Rajnoha,Slavia Praha U19,Czech II,18.0,"RCMF, LCMF, DMF",Slovakia,unknown,0,725,11,0,1,0.22,1.23,4.59,67.57,0.12,28.18,77.53,49.57,4.34
+A. Sivicek,Dukla Banská Bystrica U19,Slovakia II,18.0,"LCMF, LDMF, RCMF",Slovakia,unknown,0,701,9,0,0,0.1,0.03,3.21,60.0,0.0,28.5,81.98,56.8,3.85
+D. Šobáň,Pardubice U19,Czech U19,18.0,"RCMF, DMF, RCB",Czech Republic,unknown,0,432,9,2,1,0.35,0.22,5.63,74.07,0.21,28.54,83.21,51.39,2.71
+F. Kasana,Trenčín,Slovakia,18.0,"RCMF, AMF, RWF",Slovakia,unknown,0,349,6,0,0,0.94,0.01,2.84,54.55,0.0,12.89,72.0,35.8,4.38
+I. Hryhoruk,České Budějovice U19,Czech U19,18.0,"RCMF, LCMF",Czech Republic,unknown,0,524,7,1,5,0.82,1.7,9.27,87.04,1.2,31.43,75.41,56.35,4.12
+J. Abrhám,Viktoria Plzeň U19,Czech U19,18.0,"LCMF, RCMF, AMF",Czech Republic,,0,732,8,1,1,2.03,0.88,6.15,74.0,0.25,34.3,78.85,39.52,1.35
+J. Ficek,Vysočina Jihlava U19,Czech U19,18.0,"LCMF, AMF",Czech Republic,unknown,0,278,7,0,0,0.0,0.0,6.15,52.63,0.0,29.14,67.78,45.07,2.91
+J. Graclík,Baník Ostrava U19,Czech U19,18.0,"LCMF, LAMF, CF",Czech Republic,unknown,0,979,12,1,0,1.09,1.84,8.09,69.32,0.28,36.68,78.2,47.13,3.31
+J. Nedbal,Dukla Praha U19,Czech U19,18.0,"RCMF, AMF",Czech Republic,unknown,0,1152,15,4,0,4.55,0.56,3.98,52.94,0.47,23.36,73.58,48.7,2.11
+J. Zima,Pardubice U19,Czech U19,18.0,"LCMF, LDMF",Czech Republic,unknown,0,788,9,4,0,2.36,0.55,7.54,71.21,0.11,32.78,76.66,61.18,3.88
+K. Belžík,Slavia Praha II,Czech II,18.0,"LCMF, LWB",Czech Republic,left,180,1350,20,1,1,1.3,2.89,6.27,67.02,0.2,34.13,75.78,45.04,4.0
+K. Stručka,Žilina U19,Slovakia II,18.0,"RCMF, LCMF",Slovakia,left,0,214,3,0,0,0.0,0.16,6.73,81.25,0.0,37.85,86.67,44.19,5.47
+M. Bačík,Ružomberok,Slovakia,18.0,"RCMF, LW, LCMF",Slovakia,right,0,1104,20,1,0,1.61,0.8,2.69,66.67,0.41,17.93,72.27,42.76,2.36
+M. Jenčuš,DAC,Slovakia,18.0,"LCMF, RCMF",Slovakia,unknown,0,39,2,0,0,0.0,0.0,,,,,,,
+M. Mateáš,Slovan Bratislava,Slovakia II,18.0,"LCMF, LDMF, RDMF",Slovakia,unknown,0,2392,27,2,4,3.24,1.51,6.36,66.86,0.34,40.07,79.72,42.83,1.92
+M. Nemec,Lokomotíva Zvolen,Slovakia II,18.0,"LCMF, RW",Slovakia,unknown,0,19,2,0,0,0.0,0.0,,,,,,,
+Martin Nemcik,Karviná U19,Czech U19,18.0,"RCMF, AMF, CF",Czech Republic,,0,291,6,2,0,1.3,0.34,4.02,46.15,0.31,17.94,74.14,30.61,2.78
+O. Adam,Sparta Praha U19,Czech U19,18.0,"RCMF, DMF, LCMF",Czech Republic,,0,97,4,0,0,0.97,0.0,5.57,66.67,0.0,15.77,76.47,40.0,2.78
+P. Baleja,Žilina II,Slovakia,18.0,"RCMF, LWF, RWF",Slovakia,unknown,0,43,3,0,0,0.09,0.12,,,,,,,
+P. Filippov,Podbrezová,Czech U19,18.0,"RCMF, LCMF, DMF",Czech Republic,,0,776,11,1,1,1.02,2.04,6.84,69.49,0.7,35.84,76.7,48.77,2.78
+P. Filippov,Podbrezová,Slovakia,18.0,RCMF,Czech Republic,,0,9,1,0,0,0.0,0.0,,,,,,,
+P. Sehnal,Slovácko U19,Czech U19,18.0,"LCMF, RCMF, LDMF",Czech Republic,unknown,0,1177,15,1,1,0.82,1.47,5.12,74.63,0.23,26.76,77.14,50.18,3.29
+P. Streska,Sparta Praha U19,Czech U19,18.0,"RCMF, RB, DMF",Czech Republic,unknown,0,495,10,0,0,0.05,0.19,5.45,63.33,0.18,36.0,80.81,63.73,2.91
+P. Tobias,Sparta Praha U17,Czech U17,18.0,"LCMF, RCMF",Czech Republic,unknown,0,312,5,0,2,0.44,0.43,6.35,45.45,0.58,30.29,76.19,57.58,2.88
+S. Klieštík,Mladá Boleslav U19,Czech U19,18.0,"LCMF, RCMF",Czech Republic,unknown,0,552,13,1,0,0.7,0.27,5.22,62.5,0.16,25.27,76.13,35.65,2.28
+S. Nináč,Baník Ostrava U19,Czech II,18.0,"LCMF, RWF, CF",Slovakia,unknown,0,54,4,0,0,0.0,0.0,1.67,100.0,0.0,18.33,90.91,42.86,0.0
+Simon Vlna,Baník Ostrava,Czech U19,18.0,"RCMF, RDMF",Slovakia,right,0,160,2,0,0,0.08,0.1,10.13,55.56,0.0,42.19,82.67,41.3,3.94
+T. Meduna,Hradec Králové U19,Czech U19,18.0,"RCMF, LCMF, LDMF",Czech Republic,,0,2284,26,4,2,4.15,1.73,3.39,67.44,0.35,24.39,82.07,44.88,2.68
+V. Kotisek,Sparta Praha U19,Czech U19,18.0,"LCMF, RCMF, DMF",Czech Republic,unknown,0,1178,15,3,1,3.02,2.69,3.44,73.33,0.53,31.48,83.74,48.66,2.22
+A. Hubka,Slovan Liberec U19,Czech U19,19.0,"LCMF, CF, AMF",Czech Republic,unknown,0,358,19,1,0,1.16,0.12,5.03,80.0,0.0,24.64,73.47,33.33,2.51
+D. Hájek,Vlašim,Czech II,19.0,"LCMF, RCMF",Czech Republic,right,176,852,22,0,0,0.21,0.46,3.27,58.06,0.11,28.1,85.34,55.91,3.06
+D. Straka,Púchov,Slovakia II,19.0,"RCMF, LCMF",Slovakia,unknown,0,367,9,0,1,0.29,0.34,6.87,57.14,0.25,32.37,71.21,43.14,4.41
+J. Brunner,Púchov,Slovakia II,19.0,"RCMF, DMF, RW",Slovakia,unknown,0,106,7,0,0,0.01,0.01,6.79,75.0,0.0,32.26,71.05,47.37,3.4
+J. Michlík,Pohronie,Slovakia II,19.0,"LCMF, AMF, LW",Slovakia,unknown,0,1523,18,4,2,2.46,1.23,4.08,55.07,0.47,27.24,68.98,44.83,2.13
+J. Pavek,Sigma Olomouc II,Czech U19,19.0,"RCMF, AMF, LCMF",Czech Republic,unknown,0,182,7,0,0,0.31,0.0,5.93,41.67,0.0,26.7,68.52,77.27,5.44
+K. Strucka,Malženice,Slovakia II,19.0,"RCMF, RDMF",Slovakia,unknown,0,526,10,0,0,0.14,0.19,5.48,59.38,0.0,33.71,77.16,51.18,4.96
+L. Moudrý,Sparta Praha II,Czech II,19.0,"RCMF, LCMF",Czech Republic,left,0,2440,29,2,5,3.22,3.78,4.06,64.55,0.18,29.58,75.69,43.72,2.8
+M. Bacik,Ružomberok U19,Slovakia,19.0,"RCMF, LW, LWF",Slovakia,unknown,0,1533,29,1,0,2.09,1.25,2.88,67.35,0.41,18.79,70.94,44.05,2.29
+M. Brázda,Zlín U19,Czech U19,19.0,"LCMF, LDMF, AMF",Czech Republic,unknown,0,1255,14,2,0,3.72,2.72,8.53,67.23,0.43,35.71,75.5,49.08,3.44
+M. Kubrycht,Viktoria Plzeň U19,Czech U19,19.0,"LCMF, AMF, LW",Czech Republic,unknown,0,936,13,2,0,2.06,1.07,2.88,86.67,0.38,21.63,77.78,47.96,1.63
+M. Veselák,Viktoria Plzeň U19,Czech U19,19.0,"RCMF, CF, LCMF",Czech Republic,unknown,0,414,16,0,0,0.0,0.09,2.17,40.0,0.0,25.43,82.05,43.9,2.39
+N. Vincent,České Budějovice U19,Czech U19,19.0,"RCMF, LCMF",Czech Republic,,0,1242,16,0,2,0.72,1.47,6.45,65.17,0.22,38.19,75.71,50.0,3.7
+P. Krejza,České Budějovice U19,Czech U19,19.0,"LCMF, RCMF",Czech Republic,,0,1168,19,1,1,0.47,1.17,6.86,62.92,0.23,27.97,73.83,47.69,2.85
+R. Petruška,Žilina II,Slovakia II,19.0,"LCMF, RCMF, DMF",Czech Republic,right,177,1901,24,4,3,2.84,1.91,6.96,71.43,0.47,42.47,80.27,40.86,2.56
+S. Barta,Banik Lehota pod Vtacnikom,Slovakia II,19.0,RCMF,Slovakia,,0,9,1,0,0,0.0,0.0,,,,,,,
+S. Fronko,Slovan Bratislava II,Slovakia II,19.0,"RCMF, DMF, LDMF",Slovakia,unknown,0,136,4,0,0,0.04,0.1,3.97,50.0,0.66,30.44,76.09,38.46,2.65
+S. Gresko,Pohronie,Slovakia II,19.0,"LCMF, RCMF",Slovakia,,0,1880,23,1,0,1.82,1.04,5.17,69.44,0.19,43.04,86.76,55.12,3.26
+S. Ivan,Pohronie,Slovakia II,19.0,"RCMF, DMF",Slovakia,unknown,0,1305,24,0,2,0.27,0.69,4.76,60.87,0.21,37.79,85.22,51.8,3.59
+Simon Vlna,Baník Ostrava,Slovakia II,19.0,"RCMF, AMF, LCMF",Slovakia,right,0,904,12,3,0,1.32,0.55,6.37,79.69,0.2,38.43,79.79,48.46,3.98
+T. Frýdl,Baník Ostrava II,Czech II,19.0,"RCMF, DMF, RDMF",Czech Republic,unknown,0,1457,19,0,3,1.18,1.51,5.56,62.22,0.25,30.7,76.46,55.64,3.64
+A. Musák,Baník Ostrava II,Czech II,20.0,"LCMF, RWF","Slovakia, Ukraine",both,182,233,3,1,0,0.32,0.71,3.48,66.67,0.39,33.61,80.46,36.59,2.32
+A. Musák,Baník Ostrava II,Czech,20.0,"LCMF, RCMF, RAMF","Slovakia, Ukraine",both,182,826,19,0,0,1.06,0.5,4.47,68.29,0.33,34.21,86.31,52.0,2.51
+A. Musák,Baník Ostrava II,Slovakia,20.0,"LCMF, RCMF, CF","Slovakia, Ukraine",both,182,522,6,1,0,0.88,1.16,4.66,81.48,0.0,31.72,82.61,47.57,1.72
+B. Angyal,Šamorín,Slovakia II,20.0,LCMF,Slovakia,right,0,148,3,0,0,0.0,0.0,3.04,20.0,0.0,39.53,86.15,57.14,2.43
+C. Ogbu Emmanuel,Baník Ostrava II,Czech II,20.0,"RCMF, LCMF, LWF",Czech Republic,unknown,0,673,14,3,0,3.56,0.38,3.88,58.62,0.13,29.15,74.77,46.67,3.61
+D. Planka,Baník Ostrava,Czech,20.0,"LCMF, LAMF",Czech Republic,right,173,2511,32,2,4,2.23,3.88,3.87,74.07,0.29,29.39,85.61,40.95,1.86
+D. Roušar,Příbram,Czech II,20.0,"LCMF, LDMF, DMF",Czech Republic,unknown,0,66,2,0,0,0.0,0.06,2.73,50.0,0.0,15.0,81.82,42.86,0.0
+J. Feit,Sparta Praha II,Czech II,20.0,"LCMF, DMF",Czech Republic,,0,1046,21,0,1,0.19,0.22,4.39,56.86,0.34,29.25,82.35,50.3,3.61
+J. Tošnar,Sparta Praha II,Czech II,20.0,"RCMF, LCMF",Czech Republic,unknown,0,845,17,1,0,0.69,0.56,5.86,67.27,0.11,41.01,82.86,46.71,3.09
+M. Henyig,Malženice,Slovakia II,20.0,"RCMF, LCMF, RDMF",Slovakia,right,0,1254,24,0,1,0.57,1.43,3.16,68.18,0.22,29.5,84.91,48.55,3.16
+N. Kapuš,Púchov,Slovakia II,20.0,"LCMF, RCMF, RW",Slovakia,right,0,1879,29,0,2,1.51,1.31,4.26,66.29,0.29,24.57,74.66,44.39,3.3
+S. Bočkay,Banik Lehota pod Vtacnikom,Slovakia II,20.0,"LCMF, RCMF, AMF",Slovakia,,0,158,4,0,0,0.0,0.02,1.71,33.33,0.57,26.2,84.78,41.94,2.85
+S. Samaj,Žilina II,Slovakia II,20.0,"RCMF, LCMF",Slovakia,unknown,0,1785,24,0,0,0.42,0.91,6.45,60.16,0.1,42.71,80.52,52.53,5.19
+T. Hájovský,Trenčín,Slovakia,20.0,RCMF,Slovakia,right,0,2241,27,2,1,1.24,0.8,4.78,65.55,0.12,31.61,84.12,51.11,2.61
+T. Jelínek,Pardubice,Czech II,20.0,"RCMF, DMF, LCMF",Czech Republic,,178,1249,13,1,2,1.09,3.02,8.07,66.96,0.36,42.73,76.05,53.99,5.84
+T. Jelínek,Pardubice,Czech,20.0,"RCMF, LCMF, DMF",Czech Republic,,178,779,12,1,1,0.37,1.04,6.82,64.41,0.58,27.96,65.7,55.56,4.27
+V. Zahradnicek,Prostějov,Czech II,20.0,"RCMF, CF, RDMF",Czech Republic,unknown,0,385,9,0,0,0.13,0.5,3.74,56.25,0.23,22.68,74.23,52.38,1.17
+Š. Faško,Podbrezová,Slovakia,20.0,"LCMF, DMF, RCMF",Slovakia,left,0,152,5,0,0,0.0,0.06,4.74,75.0,0.59,31.38,83.02,47.37,4.74
+A. Bužek,Slavia Praha,Czech II,21.0,"RCMF, RAMF, LCMF",Czech Republic,right,180,115,2,0,0,0.06,0.06,10.96,78.57,0.0,43.04,78.18,45.0,9.39
+A. Bužek,Slavia Praha,Czech,21.0,"RCMF, LDMF, RB",Czech Republic,right,180,1269,20,1,1,0.94,0.81,5.25,66.22,0.35,34.33,79.55,50.25,3.48
+L. Ambros,Górnik Zabrze,Poland,21.0,"RCMF, LCMF, AMF",Czech Republic,left,182,1968,26,1,3,3.25,1.91,4.85,80.19,0.46,37.55,85.38,43.17,3.38
+L. Mikulaj,Trenčín,Slovakia,21.0,"LCMF, AMF",Slovakia,,190,728,8,2,1,1.44,1.27,2.72,63.64,0.62,21.26,86.05,50.0,3.34
+M. Lexa,Slovan Liberec,Czech,21.0,"LCMF, RCMF, LW",Czech Republic,right,180,788,20,0,0,0.25,0.7,4.11,61.11,0.23,21.36,67.91,52.73,2.97
+M. Žitný,Dukla Praha,Czech,21.0,"LCMF, LDMF, RCMF",Czech Republic,left,189,1009,19,0,1,0.0,0.32,4.55,60.78,0.18,23.19,75.0,54.79,4.1
+P. Gaszczyk,Dukla Praha,Czech,21.0,"RCMF, RDMF",Czech Republic,right,179,642,13,0,0,0.26,0.25,5.33,65.79,0.14,30.7,80.37,36.0,2.1
+R. Horák,Slovácko,Czech II,21.0,"LCMF, RCMF, DMF",Czech Republic,,0,1140,13,0,0,0.03,0.49,7.34,75.27,0.08,46.03,87.14,56.99,4.97
+R. Horák,Slovácko,Czech,21.0,"RCMF, CF, RWB",Czech Republic,,0,610,11,1,0,0.61,0.11,4.57,54.84,0.0,32.02,79.26,42.11,3.39
+S. Grygar,Ružomberok,Slovakia,21.0,"LCMF, RCMF, DMF",Czech Republic,right,185,2065,25,0,1,1.14,1.55,6.19,66.2,0.31,28.5,75.84,52.44,4.84
+A. Gajdoš,Slovan Bratislava,Slovakia,22.0,"LCMF, AMF, RCMF",Slovakia,right,170,1417,21,2,2,3.17,2.66,6.8,80.37,0.38,44.4,88.56,52.05,2.1
+D. Krch,České Budějovice,Czech II,22.0,"LCMF, LDMF",Czech Republic,,0,1807,23,0,2,1.38,0.84,4.93,62.63,0.15,31.38,76.98,47.28,3.54
+D. Látal,Baník Ostrava,Czech,22.0,"RCMF, RAMF, LWF",Czech Republic,right,189,69,3,0,0,0.0,0.0,5.22,75.0,0.0,15.65,75.0,20.0,0.0
+H. Hruska,Vlašim,Czech II,22.0,"LCMF, RCMF, AMF",Czech Republic,,0,1417,24,0,2,3.11,1.58,6.16,76.29,0.32,32.01,74.6,44.74,3.56
+J. Murgaš,Ružomberok,Slovakia,22.0,"LCMF, LDMF, RCMF",Slovakia,right,178,616,10,1,0,0.8,0.35,5.55,63.16,0.29,34.92,77.82,41.61,3.94
+M. Kušnír,Inter Bratislava,Slovakia II,22.0,"RCMF, LDMF",Slovakia,unknown,0,2301,30,5,6,3.69,2.86,5.4,63.77,0.27,30.04,74.09,51.81,2.58
+M. Náprstek,Teplice,Czech,22.0,"LCMF, RCMF",Czech Republic,left,184,1292,24,1,0,1.0,0.8,3.97,59.65,0.14,20.76,69.8,45.14,2.44
+M. Sauer,Toulouse,France,22.0,"RCMF, LCMF",Slovakia,right,180,807,25,1,0,1.36,0.08,3.9,62.86,0.11,28.1,79.37,43.37,3.35
+Omar Ahmed Shami,Al Raed,Saudi II,22.0,"RCMF, RDMF, AMF","Saudi Arabia, Czech Republic",unknown,0,1815,26,1,2,1.03,1.15,4.31,79.31,0.25,30.35,82.84,46.85,2.33
+P. Vydra,Sparta Praha,Czech,22.0,"LCMF, RCB, RCMF",Czech Republic,right,190,1536,21,3,4,2.37,1.06,7.15,71.31,0.47,41.13,84.33,46.44,2.93
+S. Bednár,Šamorín,Slovakia II,22.0,"LCMF, AMF, RWF",Slovakia,unknown,0,350,6,0,0,0.12,0.19,4.37,76.47,0.51,28.8,75.89,41.03,2.83
+V. Chyla,Podbrezová,Slovakia,22.0,"LCMF, RCMF",Slovakia,,183,1857,32,2,0,2.45,0.37,5.72,70.34,0.19,33.83,79.08,48.34,4.56
+Š. Chaloupek,Slavia Praha,Czech II,22.0,RCMF,Czech Republic,right,190,38,1,0,0,0.0,0.0,,,,,,,
+Š. Planeta,Příbram,Czech II,22.0,"LCMF, RCMF, LDMF",Czech Republic,,0,214,4,0,0,0.0,0.0,3.79,88.89,0.0,28.18,89.55,39.22,2.94
+A. Sojka,Viktoria Plzeň,Czech,23.0,"LCMF, LWB",Czech Republic,left,0,2154,33,3,2,3.37,1.71,6.14,67.35,0.25,36.23,79.58,47.83,2.92
+D. Holaň,Baník Ostrava II,Czech II,23.0,"LCMF, DMF",Czech Republic,,0,2141,26,4,0,1.86,3.3,7.23,72.09,0.29,37.83,76.44,56.32,4.16
+D. Holoubek,FS Jelgava,Latvia,23.0,"LCMF, RCMF, DMF",Czech Republic,right,0,1267,14,0,1,0.54,1.07,6.32,67.42,0.36,42.55,81.64,53.82,4.05
+K. Daněk,LASK,Austria,23.0,"RCMF, AMF, CF",Czech Republic,left,182,1485,24,2,2,3.13,2.65,3.58,77.97,0.67,26.18,79.17,45.86,3.15
+M. Diakite,Šamorín,Slovakia II,23.0,LCMF,Slovakia,,195,9,1,0,0,0.0,0.09,,,,,,,
+M. Domik,Slávia TU Košice,Slovakia II,23.0,"LCMF, RCMF, AMF",Slovakia,,0,681,13,0,1,0.09,0.64,4.89,56.76,0.4,35.29,77.9,44.72,2.91
+M. Domik,Slávia TU Košice,Slovakia,23.0,"RCMF, LWB, LWF",Slovakia,,0,367,7,0,1,0.41,0.02,3.43,85.71,0.25,32.86,82.09,47.83,2.45
+M. Kudela,Hanácká,Czech II,23.0,"RCMF, DMF, LCMF",Czech Republic,,0,443,13,0,0,0.47,0.11,4.47,68.18,0.0,32.71,80.75,49.15,2.03
+M. Šviderský,Slovácko,Czech,23.0,"RCMF, RDMF, LCMF",Slovakia,left,184,1219,20,0,0,0.54,0.77,5.32,65.28,0.3,31.45,76.76,51.26,4.58
+P. Kulíšek,Hanácká,Czech II,23.0,"RCMF, DMF, LCMF",Czech Republic,right,188,1622,25,0,0,1.24,0.37,5.55,62.0,0.06,28.85,80.38,57.72,3.44
+S. Varga,Šamorín,Slovakia II,23.0,"RCMF, RDMF","Slovakia, Hungary",unknown,0,1715,27,4,1,2.09,2.1,6.66,62.2,0.47,33.59,73.75,53.43,3.94
+T. Buchvaldek,Ružomberok,Slovakia,23.0,"RCMF, CF, LCMF",Czech Republic,,0,351,9,0,0,0.3,0.13,2.56,60.0,0.0,20.0,74.36,41.94,2.56
