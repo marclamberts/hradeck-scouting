@@ -1,0 +1,261 @@
+"""
+screen_six_eight.py
+────────────────────
+Screens the full Wyscout database for two central-midfield archetypes:
+
+  Number 6  — defensive midfielder (DMF/LDMF/RDMF): progressive passing
+              combined with defensive-actions volume.
+  Number 8  — box-to-box central midfielder (CMF/LCMF/RCMF): progressive
+              passing, key passes, through passes, and shot output.
+
+Each archetype gets a 0-100 "Six Score" / "Eight Score", computed as a
+weighted blend of percentile ranks within a broad same-position pool
+(all leagues, 400+ minutes — the same floor used elsewhere in this repo
+for the Lamberts/Benham/RedBull models), so the score reflects standing
+against a realistic recruitment pool rather than just the shortlist itself.
+
+Filters applied to the final shortlists
+────────────────────────────────────────
+  Age            <= 23 (max-age, "U23")
+  Market value   < max-value (0/blank market value passes — Wyscout leaves
+                 it blank for most lower-league players; excluding those
+                 would gut the pool)
+  Nationality    passport country matches the selected region
+
+Regions
+───────
+  cz_sk   — Czech Republic, Slovakia
+  other   — Baltics (Estonia, Latvia, Lithuania) + Scandinavia
+            (Sweden, Norway, Denmark) + Finland, Iceland, Poland, Slovenia
+
+Output
+──────
+  One workbook per region, each with "Number 6" and "Number 8" tabs:
+    data/CZ_SK_U23_Six_Eight.xlsx
+    data/Baltics_Scandi_Poland_Slovenia_U23_Six_Eight.xlsx
+
+Usage
+─────
+  python screen_six_eight.py [--min-minutes 400] [--max-age 23] [--max-value 800000]
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from openpyxl import Workbook
+
+from build_lamberts_total import write_data_sheet
+
+ROOT = Path(__file__).parent
+WYSCOUT_DIR = ROOT / "data" / "Wyscout DB"
+
+SIX_POSITIONS = {"DMF", "LDMF", "RDMF"}
+EIGHT_POSITIONS = {"CMF", "LCMF", "RCMF"}
+
+SIX_BLUEPRINT: list[tuple[str, float]] = [
+    ("Progressive passes per 90",           3.0),
+    ("Accurate passes, %",                  1.5),
+    ("Passes per 90",                       1.0),
+    ("Interceptions per 90",                2.0),
+    ("PAdj Interceptions",                  1.5),
+    ("Successful defensive actions per 90", 2.5),
+    ("Defensive duels won, %",              2.0),
+    ("Aerial duels won, %",                 1.0),
+]
+
+EIGHT_BLUEPRINT: list[tuple[str, float]] = [
+    ("Progressive passes per 90", 2.5),
+    ("Key passes per 90",         2.5),
+    ("Through passes per 90",     2.0),
+    ("Shots per 90",              1.5),
+    ("Goals per 90",              1.5),
+    ("xG per 90",                 1.5),
+    ("Progressive runs per 90",   1.5),
+    ("Accurate passes, %",        1.0),
+]
+
+REGIONS: dict[str, tuple[str, ...]] = {
+    "cz_sk": ("Czech Republic", "Slovakia"),
+    "other": (
+        "Estonia", "Latvia", "Lithuania",            # Baltics
+        "Sweden", "Norway", "Denmark",                # Scandinavia
+        "Finland", "Iceland", "Poland", "Slovenia",
+    ),
+}
+
+OUTPUT_FILES = {
+    "cz_sk": ROOT / "data" / "CZ_SK_U23_Six_Eight.xlsx",
+    "other": ROOT / "data" / "Baltics_Scandi_Poland_Slovenia_U23_Six_Eight.xlsx",
+}
+
+DISPLAY_COLS_SIX = [
+    "Player", "Team", "_League", "Age", "Passport country", "Foot",
+    "Minutes played", "Market value", "Six Score",
+    "Progressive passes per 90", "Accurate passes, %",
+    "Interceptions per 90", "PAdj Interceptions",
+    "Successful defensive actions per 90", "Defensive duels won, %",
+    "Aerial duels won, %",
+]
+
+DISPLAY_COLS_EIGHT = [
+    "Player", "Team", "_League", "Age", "Passport country", "Foot",
+    "Minutes played", "Market value", "Eight Score",
+    "Progressive passes per 90", "Key passes per 90",
+    "Through passes per 90", "Shots per 90", "Goals per 90", "xG per 90",
+    "Progressive runs per 90",
+]
+
+
+def load_pool(min_minutes: int) -> pd.DataFrame:
+    frames = []
+    for path in sorted(WYSCOUT_DIR.glob("*.xlsx")):
+        try:
+            df = pd.read_excel(path)
+        except Exception:
+            continue
+        df.columns = [str(c).strip() for c in df.columns]
+        if "Position" not in df.columns:
+            continue
+        df = df.copy()
+        df["_League"] = path.stem
+
+        first_pos = df["Position"].astype(str).str.split(",").str[0].str.strip()
+        df["_arch"] = np.where(
+            first_pos.isin(SIX_POSITIONS), "SIX",
+            np.where(first_pos.isin(EIGHT_POSITIONS), "EIGHT", None),
+        )
+        df = df[df["_arch"].notna()]
+        if df.empty:
+            continue
+
+        mins = pd.to_numeric(df.get("Minutes played"), errors="coerce").fillna(0)
+        df = df[mins >= min_minutes]
+        if not df.empty:
+            frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def score_archetype(pool: pd.DataFrame, arch: str, blueprint: list[tuple[str, float]],
+                     score_name: str) -> pd.DataFrame:
+    mask = pool["_arch"] == arch
+    grp = pool.loc[mask].copy()
+    raw = pd.Series(0.0, index=grp.index)
+    total_w = 0.0
+    for metric, w in blueprint:
+        if metric not in grp.columns:
+            continue
+        vals = pd.to_numeric(grp[metric], errors="coerce").fillna(0)
+        raw += w * (vals.rank(pct=True) * 100)
+        total_w += w
+    if total_w > 0:
+        raw /= total_w
+    pool.loc[mask, score_name] = (raw.rank(pct=True) * 100).round(2)
+    return pool
+
+
+def filter_region(df: pd.DataFrame, nationalities: tuple[str, ...],
+                   max_age: int, max_value: float, score_col: str) -> pd.DataFrame:
+    passport = df["Passport country"].fillna("").astype(str)
+    is_nat = passport.apply(lambda s: any(n in s for n in nationalities))
+    age = pd.to_numeric(df["Age"], errors="coerce")
+    mv = pd.to_numeric(df.get("Market value"), errors="coerce").fillna(0)
+    out = df.loc[is_nat & (age <= max_age) & (mv < max_value)].copy()
+    # Same player/team can appear in split league files (e.g. "Italy III -
+    # Part III/IV") or first-team + reserve exports; keep the top-scoring row.
+    out = out.sort_values(score_col, ascending=False).drop_duplicates(
+        subset=["Player", "Team"], keep="first"
+    )
+    return out
+
+
+def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
+                           region_label: str, max_age: int, max_value: float,
+                           output: Path) -> None:
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    ws6 = wb.create_sheet("Number 6")
+    out6 = six_df[[c for c in DISPLAY_COLS_SIX if c in six_df.columns]].rename(
+        columns={"_League": "League"}
+    ).sort_values("Six Score", ascending=False)
+    write_data_sheet(
+        ws6,
+        f"NUMBER 6 — DEFENSIVE MIDFIELDER, AGE ≤ {max_age}, MKT VAL < €{max_value:,.0f}",
+        f"{region_label}  ·  {len(out6)} candidates  ·  "
+        "Progressive passing + defensive-actions volume  ·  Ranked by Six Score",
+        out6,
+    )
+
+    ws8 = wb.create_sheet("Number 8")
+    out8 = eight_df[[c for c in DISPLAY_COLS_EIGHT if c in eight_df.columns]].rename(
+        columns={"_League": "League"}
+    ).sort_values("Eight Score", ascending=False)
+    write_data_sheet(
+        ws8,
+        f"NUMBER 8 — BOX-TO-BOX MIDFIELDER, AGE ≤ {max_age}, MKT VAL < €{max_value:,.0f}",
+        f"{region_label}  ·  {len(out8)} candidates  ·  "
+        "Progressive passing, key passes, through passes, shot output  ·  Ranked by Eight Score",
+        out8,
+    )
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(output)
+
+
+REGION_LABELS = {
+    "cz_sk": "Czech Republic + Slovakia",
+    "other": "Baltics (Estonia/Latvia/Lithuania) + Scandinavia (Sweden/Norway/Denmark) "
+             "+ Finland + Iceland + Poland + Slovenia",
+}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-minutes", type=int, default=400)
+    parser.add_argument("--max-age", type=int, default=23)
+    parser.add_argument("--max-value", type=float, default=800_000)
+    args = parser.parse_args()
+
+    print("Loading Wyscout database (DM + CM positions, all leagues)…")
+    pool = load_pool(args.min_minutes)
+    print(f"  → {len(pool)} players in scoring pool "
+          f"({(pool['_arch']=='SIX').sum()} Six, {(pool['_arch']=='EIGHT').sum()} Eight)")
+
+    pool = score_archetype(pool, "SIX", SIX_BLUEPRINT, "Six Score")
+    pool = score_archetype(pool, "EIGHT", EIGHT_BLUEPRINT, "Eight Score")
+
+    six_pool = pool[pool["_arch"] == "SIX"]
+    eight_pool = pool[pool["_arch"] == "EIGHT"]
+
+    for region, nationalities in REGIONS.items():
+        six_out = filter_region(six_pool, nationalities, args.max_age, args.max_value, "Six Score")
+        eight_out = filter_region(eight_pool, nationalities, args.max_age, args.max_value, "Eight Score")
+
+        output = OUTPUT_FILES[region]
+        write_region_workbook(
+            six_out, eight_out, REGION_LABELS[region], args.max_age, args.max_value, output
+        )
+
+        six_csv = output.with_name(output.stem + "_Number6.csv")
+        eight_csv = output.with_name(output.stem + "_Number8.csv")
+        six_out[[c for c in DISPLAY_COLS_SIX if c in six_out.columns]].sort_values(
+            "Six Score", ascending=False
+        ).to_csv(six_csv, index=False)
+        eight_out[[c for c in DISPLAY_COLS_EIGHT if c in eight_out.columns]].sort_values(
+            "Eight Score", ascending=False
+        ).to_csv(eight_csv, index=False)
+
+        print(f"\n{region}: {len(six_out)} No.6 / {len(eight_out)} No.8 candidates")
+        print(f"  Excel → {output}")
+        print(f"  CSV   → {six_csv}")
+        print(f"  CSV   → {eight_csv}")
+
+
+if __name__ == "__main__":
+    main()

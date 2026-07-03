@@ -1,0 +1,272 @@
+Player,Team,_League,Age,Passport country,Foot,Minutes played,Market value,Eight Score,Progressive passes per 90,Key passes per 90,Through passes per 90,Shots per 90,Goals per 90,xG per 90,Progressive runs per 90
+V. Byskov,Midtjylland,Denmark,21.0,Denmark,right,1257,450000,98.45,7.3,0.64,0.72,2.08,0.5,0.2,1.22
+T. Jørgensen,Viborg,Denmark,20.0,Denmark,left,2758,0,98.41,7.83,0.65,0.69,1.96,0.13,0.17,3.39
+T. Fredriksen,Eidsvold,Norway III,23.0,Norway,unknown,536,0,98.38,11.25,0.34,1.18,1.68,0.17,0.09,1.51
+M. Munck,Vendsyssel,Denmark III,21.0,Denmark,right,1666,200000,97.87,7.51,0.22,0.7,2.11,0.27,0.23,3.19
+R. Bąk,Chrobry Głogów,Poland III,21.0,Poland,right,1559,0,97.53,8.02,0.58,0.58,1.79,0.29,0.17,1.44
+L. Thorell,Mjällby,Sweden,21.0,"Sweden, Poland",right,686,0,96.62,8.92,0.52,1.18,1.05,0.13,0.06,2.36
+A. Wołczek,Sandecja Nowy Sącz,Poland III,20.0,Poland,left,2519,0,96.3,7.0,0.39,0.64,2.11,0.36,0.19,1.29
+U. Seferi,Kvik Halden,Norway III,23.0,Norway,right,674,75000,94.9,6.28,0.67,0.4,1.74,0.27,0.21,4.54
+S. Kądziołka,Stal Rzeszów,Poland II,20.0,Poland,right,1779,0,94.83,6.78,0.51,0.81,1.37,0.15,0.11,1.57
+D. Kaygin,Ingolstadt,Germany III,22.0,"Germany, Sweden",right,1506,400000,94.73,4.9,0.6,0.78,2.09,0.42,0.21,2.15
+L. Topalović,Internazionale II,Italy III - Part IV,20.0,Slovenia,right,2013,0,94.26,6.44,0.8,0.36,2.86,0.18,0.17,1.56
+L. Kolstad,Eidsvold,Norway III,20.0,Norway,,575,0,91.74,12.99,0.16,0.94,2.19,0.0,0.11,2.97
+I. Hjorteseth,Sotra,Norway III,22.0,Norway,left,628,250000,90.79,7.02,0.29,0.86,1.72,0.0,0.11,2.29
+A. Przyborek,Lazio,Poland,19.0,Poland,right,1035,0,90.62,6.26,0.35,0.52,2.0,0.17,0.1,2.09
+J. Bieroński,Tychy 71,Poland II,23.0,Poland,right,1508,150000,90.52,7.58,0.3,0.84,1.55,0.12,0.11,0.84
+J. Meltofte Janssen,Nordsjælland U21,Denmark,19.0,Denmark,,1830,0,90.03,9.54,0.49,0.84,0.79,0.15,0.06,0.39
+W. Wendt,Stabæk,Norway II,20.0,Norway,unknown,819,0,89.63,5.82,0.55,0.44,2.2,0.11,0.14,1.65
+M. Kizyma,Podbeskidzie Bielsko-Biała,Poland III,23.0,Poland,right,2355,0,89.25,7.94,0.28,0.68,1.52,0.08,0.08,1.4
+J. Becker,Sundby,Denmark IV,23.0,Denmark,unknown,2470,0,89.12,7.14,0.29,0.58,1.35,0.18,0.12,1.46
+T. Nielsen,Helsingør,Denmark III,20.0,Denmark,,626,0,88.44,5.89,1.01,0.43,1.01,0.14,0.09,1.87
+M. Skøtt,Roskilde,Denmark III,20.0,Denmark,right,1015,0,88.24,5.76,0.53,0.27,1.51,0.27,0.2,1.15
+E. Chabo,Eskilstuna,Sweden III,23.0,Sweden,right,473,0,87.62,5.14,0.57,0.38,2.09,0.19,0.14,2.28
+Y. Mokdad,Holbæk B&I,Denmark IV,22.0,"Denmark, Algeria",both,1140,0,87.46,6.47,0.24,0.32,1.74,0.16,0.13,2.68
+P. Gogół,Zagłębie Sosnowiec,Poland III,23.0,Poland,,1932,0,86.87,4.89,0.75,0.28,1.96,0.05,0.17,2.47
+M. Lynge,Brønshøj,Denmark IV,20.0,Denmark,,1798,0,86.37,7.51,0.2,0.5,1.1,0.15,0.13,0.95
+F. Bzdyl,Žilina,Slovakia,18.0,Poland,right,1047,0,86.26,7.56,0.26,0.26,2.06,0.09,0.07,1.72
+H. Aviander,GIF Sundsvall,Sweden II,21.0,Sweden,right,890,0,86.23,5.46,0.3,0.51,1.11,0.3,0.27,0.91
+S. Bosnic,Trollhättan,Sweden III,21.0,"Bosnia and Herzegovina, Sweden",left,562,0,86.01,8.97,0.32,0.96,1.28,0.0,0.05,1.6
+M. Breznik,Malženice,Slovakia II,22.0,Slovenia,left,1828,150000,85.08,7.73,0.49,1.38,0.59,0.1,0.04,1.67
+L. Remmem,Haugesund,Norway II,20.0,Norway,,769,0,85.07,3.51,0.82,0.0,2.57,0.35,0.34,3.51
+V. Møller,AaB,Denmark II,19.0,Denmark,unknown,1456,0,84.95,4.82,0.62,0.19,1.55,0.25,0.25,1.48
+D. Makuch,Unia Skierniewice,Poland III,23.0,Poland,,2655,0,84.9,7.86,0.2,0.88,1.76,0.07,0.12,0.68
+H. Melland,Aalesund,Norway,21.0,Norway,right,468,0,84.52,3.85,0.58,0.38,2.5,0.58,0.49,1.35
+O. Amby,Skive,Denmark III,21.0,Denmark,,2258,100000,83.98,10.48,0.24,1.16,1.32,0.0,0.04,1.55
+H. Noori,Enköping,Sweden III,22.0,Sweden,unknown,713,0,83.88,5.68,0.0,0.5,1.39,0.38,0.23,2.9
+R. Štorman,Karviná,Czech,21.0,Slovenia,right,1707,0,83.51,5.54,0.42,0.37,1.63,0.26,0.11,1.21
+D. Stalmach,Magdeburg,Germany II,20.0,Poland,right,1116,0,83.22,4.92,0.24,0.65,1.53,0.16,0.13,1.45
+R. Thorkelsson,GAIS,Sweden,20.0,Iceland,right,758,0,83.09,4.04,0.47,0.36,2.14,0.24,0.23,2.26
+B. Tobiassen,Stabæk,Norway II,19.0,Norway,right,669,0,82.92,4.71,1.35,0.27,2.56,0.13,0.32,1.08
+K. Fietz,Olimpia Grudziądz,Poland III,22.0,Poland,right,1186,0,82.78,4.48,0.38,0.53,1.14,0.15,0.1,1.82
+S. Agaptšev,Trans,Estonia,19.0,Estonia,unknown,967,0,82.68,6.14,0.47,0.37,1.4,0.19,0.18,0.74
+M. Saaby,Kolding IF,Denmark II,23.0,Denmark,,2280,0,81.72,8.37,0.32,0.47,0.71,0.04,0.04,1.93
+I. Ellbring,Trelleborg,Sweden III,21.0,Sweden,,512,0,81.69,3.16,0.53,0.35,1.58,0.18,0.23,1.41
+K. Marrah,Hammarby Talang,Sweden III,19.0,Sweden,unknown,727,0,81.38,6.44,0.0,0.25,2.6,0.25,0.26,3.84
+M. Ritari,Rosengård,Sweden III,20.0,Finland,,701,0,80.96,9.63,0.26,0.64,1.41,0.0,0.04,1.28
+S. Auklend,Bodø / Glimt,Norway,22.0,Norway,right,687,0,80.93,4.85,0.26,0.26,1.7,0.13,0.37,2.88
+M. Bomholt,Rosenborg,Norway,20.0,Denmark,,857,0,79.07,4.1,0.53,0.42,1.58,0.11,0.1,1.79
+S. Nordbø,Jerv,Norway III,22.0,Norway,left,721,0,78.86,7.24,0.12,1.25,1.5,0.12,0.04,1.0
+J. Hamburger-Toft,Vanløse,Denmark IV,23.0,Denmark,,1799,0,78.76,6.35,0.25,0.45,1.2,0.2,0.1,1.35
+Benjamin Kold,Næstved,Denmark III,22.0,Denmark,right,1885,0,78.59,8.31,0.1,0.48,1.53,0.24,0.11,0.48
+A. Lausen,Esbjerg,Denmark II,23.0,Denmark,,2610,250000,78.17,6.86,0.17,0.41,2.28,0.1,0.16,0.83
+K. Jónsson,Triestina,Italy III - Part III,23.0,Iceland,right,3558,50000,78.1,7.01,0.18,0.43,1.32,0.08,0.08,1.32
+R. Shein,Fredrikstad,Norway,22.0,Estonia,both,958,0,77.39,6.11,0.19,0.19,1.22,0.19,0.12,3.1
+M. Clement,VSK Århus,Denmark III,22.0,Denmark,,1080,0,75.67,6.42,0.33,0.25,0.75,0.17,0.11,1.0
+D. Pejičić,Maribor,Slovenia,18.0,Slovenia,right,1536,0,75.18,3.63,0.59,0.29,1.93,0.29,0.38,0.82
+F. Lukic,Austria Wien II,Austria II,20.0,Sweden,,1391,0,75.15,6.79,0.52,0.32,0.26,0.13,0.04,2.14
+L. Bech Hermansen,Kjelsås,Norway III,22.0,Norway,,588,0,74.59,6.73,0.31,0.31,0.61,0.15,0.1,2.14
+M. Holt,Vendsyssel,Denmark III,20.0,Denmark,,1093,0,74.47,4.2,0.33,0.25,1.98,0.25,0.19,2.31
+I. Lawrynowicz,Unia Skierniewice,Poland III,23.0,Poland,left,1344,0,73.9,7.17,0.27,0.2,1.21,0.07,0.09,1.21
+E. Ostrc,AŠK Bravo,Slovenia,23.0,Slovenia,right,435,350000,73.48,9.52,0.41,0.62,0.83,0.0,0.06,0.41
+M. Kosior,Unia Skierniewice,Poland III,23.0,Poland,unknown,1772,0,73.37,5.69,0.3,0.56,1.27,0.05,0.06,0.91
+M. Pedersen,Jaro,Finland,21.0,Norway,right,622,0,72.04,5.93,0.72,0.14,1.01,0.0,0.17,1.45
+W. Axelsson Tervonen,Hammarby Talang,Sweden III,23.0,Sweden,unknown,429,0,71.87,6.5,0.42,0.63,0.63,0.0,0.03,1.47
+M. Rytter,VSK Århus,Denmark III,21.0,Denmark,right,2172,0,71.79,6.84,0.21,0.79,0.54,0.04,0.05,1.53
+C. Yirenkyi,Nordsjælland,Denmark,20.0,Denmark,,2867,0,71.7,6.03,0.5,0.28,0.6,0.06,0.06,1.32
+J. Żywicki,Chojniczanka Chojnice,Poland III,20.0,Poland,unknown,1216,0,70.72,4.96,0.22,0.44,2.29,0.3,0.15,0.81
+K. Davidsen,Holstein Kiel,Germany II,21.0,Denmark,right,1912,0,69.93,4.66,0.28,0.56,1.27,0.14,0.1,0.94
+T. Proczek,Znicz Pruszków,Poland II,23.0,Poland,,1529,0,69.81,5.0,0.41,0.35,1.41,0.06,0.11,1.29
+H. Åslund,Karlberg,Sweden III,19.0,Sweden,,601,0,69.79,5.09,0.3,0.45,1.2,0.15,0.14,0.6
+W. Marshage,Sollentuna,Sweden III,21.0,Sweden,right,581,0,69.0,12.39,0.15,0.93,0.77,0.0,0.05,1.24
+A. Pálmason,KR,Iceland,16.0,Iceland,,552,0,68.98,4.08,0.33,0.0,1.63,0.33,0.29,2.12
+W. Kirk,Silkeborg U19,Denmark,19.0,Denmark,unknown,815,0,68.9,5.74,0.22,0.55,1.33,0.11,0.21,0.55
+N. Juul-Sandberg,Middelfart,Denmark II,20.0,Denmark,right,1747,0,67.93,7.32,0.41,0.26,0.41,0.05,0.04,1.49
+J. Adkonis,Pogoń Grod. Mazowiecki,Poland II,18.0,Poland,both,2274,0,67.65,5.66,0.28,0.16,1.78,0.08,0.12,1.19
+M. Remeikis,Hegelmann Litauen,Lithuania,23.0,Lithuania,right,924,350000,67.24,6.33,0.29,0.68,0.49,0.19,0.11,0.49
+V. Holsæther,Lørenskog,Norway III,23.0,Norway,,462,0,66.97,3.7,0.58,0.39,2.14,0.0,0.16,1.36
+E. Grzywacz,Nürnberg,Germany 4 - Part I,20.0,Poland,,1028,0,66.45,6.3,0.88,0.26,0.61,0.0,0.06,1.49
+I. Patrikejevs,FK Liepāja,Latvia,20.0,Latvia,left,877,0,66.11,4.41,0.82,0.1,1.44,0.21,0.2,0.82
+K. Terlecki,Łódzki KS,Poland II,20.0,Poland,left,1904,0,65.16,5.11,0.43,0.19,1.23,0.05,0.07,1.42
+A. Nowak,NKP Podhale,Poland III,19.0,Poland,unknown,467,0,64.76,5.4,0.19,0.39,1.16,0.19,0.07,0.96
+G. Sandberg,Oddevold,Sweden II,23.0,Sweden,right,759,200000,64.59,5.45,0.24,0.12,1.54,0.24,0.18,0.83
+H. Lindahl,Eskilsminne,Sweden III,18.0,Sweden,,563,0,64.32,6.71,0.0,0.48,1.44,0.16,0.12,1.12
+N. Akogyeram-Fjeldberg,Odds,Norway II,20.0,Norway,unknown,743,0,64.3,2.66,0.24,0.0,1.45,0.36,0.3,1.7
+R. Siht,Nõmme Kalju,Estonia,19.0,Estonia,unknown,1220,0,64.25,4.94,0.96,0.22,1.03,0.07,0.18,0.66
+W. Urbanski,Legia Warszawa,Poland,21.0,Poland,right,876,0,64.18,4.01,0.31,0.41,1.03,0.1,0.2,1.23
+G. Žaleiko,FS Jelgava,Latvia,21.0,Latvia,right,1289,0,63.69,6.63,0.28,0.63,0.91,0.0,0.04,1.19
+J. Skau,Jaro,Finland,23.0,Norway,right,874,100000,63.57,9.99,0.1,0.93,0.72,0.0,0.05,1.34
+W. Nowak,Wisła Płock,Poland,21.0,Poland,,2797,0,63.19,2.99,0.45,0.19,1.67,0.13,0.16,1.35
+A. Skogmar,Malmö FF,Sweden,20.0,"Thailand, Sweden",right,450,0,62.95,2.8,1.0,0.0,1.2,0.4,0.08,1.6
+K. Palumets,Podbrezová,Slovakia,23.0,Estonia,left,2154,200000,62.76,6.89,0.42,0.29,0.79,0.13,0.06,0.46
+E. Krasniqi,Kvik Halden,Norway III,23.0,Norway,unknown,588,0,62.54,4.74,0.46,0.31,1.53,0.15,0.23,0.31
+M. Kristensen,Fremad Amager,Denmark III,23.0,Denmark,right,430,100000,62.22,6.7,0.42,0.42,1.26,0.0,0.03,1.05
+J. Kucharski,Stal Rzeszów,Poland II,17.0,Poland,both,689,0,61.9,2.09,0.52,0.13,2.09,0.13,0.11,1.31
+A. Sher,Sarpsborg 08,Norway,23.0,"Sweden, Iraq",right,902,750000,61.63,5.29,0.2,0.7,1.0,0.1,0.06,0.5
+K. Barslund,Brommapojkarna,Sweden,22.0,Denmark,right,598,350000,61.24,5.87,0.45,0.75,0.45,0.15,0.03,0.15
+S. Sköldqvist,Eskilstuna,Sweden III,22.0,Sweden,unknown,619,0,61.19,4.8,0.58,0.15,1.16,0.15,0.19,0.73
+K. Skóra,Zagłębie Sosnowiec,Poland III,22.0,Poland,right,1138,400000,61.11,3.16,0.16,0.24,4.67,0.4,0.35,2.06
+S. Kvia-Egeskog,Viking,Norway,22.0,Norway,right,909,750000,60.94,2.18,0.4,0.1,1.09,0.4,0.28,1.09
+G. Thórdarson,Lech Poznań,Poland,21.0,Iceland,right,574,0,60.75,2.67,0.31,0.31,1.57,0.31,0.26,0.31
+L. Tinggaard Helmi,Hørsholm-Usserød,Denmark IV,21.0,Denmark,unknown,2049,0,60.45,9.75,0.13,0.44,0.66,0.04,0.06,1.27
+G. Kranjcic,Farense,Slovenia,20.0,Slovenia,left,880,0,60.35,5.32,0.31,0.61,1.23,0.0,0.06,0.92
+S. Maszkowski,Jastrzębie,Poland III,20.0,Poland,,893,0,60.13,5.54,0.5,1.01,0.71,0.0,0.02,1.31
+B. Naustdal,Jerv,Norway III,23.0,Norway,right,435,0,60.06,8.9,0.41,0.62,0.21,0.0,0.0,0.62
+F. Liszka,Považská Bystrica,Slovakia II,22.0,Poland,,1453,0,59.82,5.82,0.19,0.74,1.05,0.06,0.1,0.81
+N. Osterc,Ilirija,Slovenia II,19.0,Slovenia,unknown,815,0,59.59,5.74,0.22,0.22,0.88,0.11,0.03,2.76
+L. Nielsen,Skive,Denmark III,20.0,Denmark,right,484,0,58.86,6.69,1.49,0.19,0.93,0.0,0.05,1.3
+A. Horup,AB,Denmark III,20.0,Denmark,unknown,728,0,58.69,6.8,0.0,0.37,1.11,0.25,0.14,1.11
+N. Björk,FBK Karlstad,Sweden III,22.0,Sweden,,713,0,58.47,5.81,0.25,0.5,0.63,0.0,0.04,1.89
+D. Šluta,Transinvest Vilnius,Lithuania,21.0,Lithuania,right,731,0,58.42,4.06,0.25,0.25,1.35,0.12,0.15,1.35
+J. Nielsen,Silkeborg,Denmark,20.0,Denmark,right,974,0,57.88,5.82,0.18,0.28,0.55,0.18,0.04,2.13
+T. Magnússon,Hearts,Scotland,23.0,Iceland,,1381,50000,57.86,5.15,0.26,0.26,1.43,0.2,0.23,0.33
+A. Beck Jensen,Viborg,Denmark,22.0,Denmark,right,1313,0,57.71,3.91,0.27,0.07,1.51,0.14,0.13,2.4
+J. Paananen,Oulu,Finland,19.0,Finland,unknown,717,0,57.51,6.28,0.38,1.13,0.88,0.0,0.02,0.63
+E. Tjøstheim,Follo,Norway III,23.0,Norway,right,561,0,57.44,5.13,0.0,0.48,1.12,0.32,0.23,0.96
+M. Wziech,Łódzki KS,Poland III,23.0,Poland,,914,0,56.19,4.53,0.2,0.49,2.56,0.0,0.14,1.48
+G. Dahl,Vejgaard B,Denmark IV,22.0,Denmark,right,1738,150000,55.89,5.49,0.36,0.41,0.57,0.0,0.09,1.4
+M. Andersson,Laholms FK,Sweden III,20.0,Sweden,unknown,573,0,55.63,3.93,0.47,0.16,1.1,0.0,0.14,1.73
+C. Froulund,Frem,Denmark IV,19.0,Denmark,,1715,0,55.33,6.35,0.26,0.31,0.63,0.1,0.08,0.58
+D. Bergman,Ängelholm,Sweden III,22.0,"Sweden, Peru",right,743,0,54.96,8.96,0.0,0.36,0.97,0.24,0.08,0.61
+G. Larsen,HB Køge,Denmark II,19.0,Denmark,unknown,1882,0,54.74,5.02,0.38,0.48,0.81,0.0,0.06,1.24
+V. Froholdt,Porto,Portugal,20.0,Denmark,right,3164,0,54.47,2.19,0.31,0.03,1.02,0.17,0.17,1.79
+O. Rosengren,Malmö FF,Sweden,23.0,Sweden,right,797,0,54.16,5.42,0.0,0.11,2.26,0.11,0.25,1.36
+M. Kalemba,Tychy 71,Poland II,20.0,"Poland, Germany",right,738,0,54.11,4.76,0.37,0.37,0.85,0.0,0.04,1.59
+M. Arsalo,SJK,Finland,23.0,Finland,right,728,100000,54.05,11.74,0.12,0.62,0.99,0.0,0.01,0.87
+L. Vabö,Sandviken,Sweden II,21.0,Sweden,left,416,0,53.56,5.41,0.65,0.0,1.3,0.0,0.15,0.43
+A. Rønning,Kristiansund,Norway,20.0,Norway,both,563,0,52.88,3.52,0.16,0.16,2.56,0.16,0.26,2.72
+O. Wojciechowski,Polonia Warszawa,Poland II,21.0,Poland,right,1644,200000,52.15,4.32,0.27,0.27,0.88,0.11,0.12,1.64
+L. Schmidt,Vejgaard B,Denmark IV,20.0,Denmark,,1064,0,51.87,4.65,0.25,0.59,1.02,0.0,0.07,1.69
+A. Kozubal,Lech Poznań,Poland,21.0,Poland,right,2762,650000,51.26,6.06,0.16,0.16,1.14,0.03,0.1,0.88
+A. Potur,HamKam,Norway,23.0,Norway,left,655,325000,51.16,3.16,0.41,0.0,1.1,0.0,0.25,2.89
+K. Dziedzic,Warta Poznań,Poland III,20.0,Poland,right,1159,0,50.73,5.82,0.16,0.39,1.16,0.08,0.07,0.93
+F. Koperski,Olimpia Grudziądz,Poland III,22.0,Poland,right,853,200000,50.04,3.06,0.21,0.21,1.48,0.11,0.19,2.53
+A. Ahlstrand,Hässleholms IF,Sweden III,22.0,Sweden,right,519,0,49.87,6.24,0.0,0.69,1.04,0.0,0.16,0.69
+T. Knaus,Dravinja,Slovenia II,22.0,Slovenia,right,401,0,49.08,7.86,0.0,0.0,1.35,0.22,0.15,0.9
+P. Langhoff,Djurgården,Denmark II,22.0,Denmark,,1706,0,48.94,6.86,0.16,0.69,0.32,0.0,0.01,1.21
+L. Christophersen,FA 2000,Denmark IV,23.0,Denmark,,699,0,48.88,3.99,0.26,0.26,1.93,0.0,0.32,1.29
+M. Simonič,Aluminij,Slovenia,20.0,Slovenia,right,1960,0,48.84,5.05,0.28,0.6,0.92,0.05,0.05,0.55
+P. Johansen,Tromsdalen,Norway III,22.0,Norway,right,575,0,48.17,7.98,0.0,2.03,0.63,0.0,0.05,0.78
+J. Hjertø-Dahl,Tromsø,Norway,20.0,Norway,right,1026,0,47.71,3.51,0.0,0.09,2.19,0.44,0.21,1.67
+N. Vasin,Polonia Warszawa,Poland II,19.0,Poland,right,536,0,47.68,3.02,0.34,0.67,2.35,0.0,0.12,0.5
+M. Kowalczyk,Katowice,Poland,22.0,Poland,right,2378,0,47.07,4.13,0.19,0.45,1.17,0.04,0.12,0.98
+F. Andersson,Sandviken,Sweden II,20.0,Sweden,unknown,722,0,46.87,6.86,0.25,0.12,0.62,0.0,0.08,1.0
+E. Kjær,Thisted,Denmark III,20.0,Denmark,,512,0,46.39,3.52,0.53,0.35,0.88,0.0,0.03,2.46
+J. Vester,Viborg,Denmark,20.0,Denmark,right,569,350000,46.24,4.11,0.32,0.16,1.11,0.32,0.11,0.63
+J. Paszkowski,Kalisz,Poland III,19.0,Poland,right,2157,0,46.17,5.13,0.13,0.38,1.25,0.13,0.05,1.17
+M. Maksimkin,Trans,Estonia,23.0,Estonia,right,408,0,45.45,3.53,0.44,1.1,1.32,0.0,0.04,0.66
+L. Elvestad Neto,Brattvåg,Norway III,21.0,Norway,right,653,0,45.29,4.0,0.28,0.14,0.41,0.14,0.09,1.65
+A. Södeliden,Skövde AIK,Sweden III,19.0,Sweden,unknown,732,0,45.14,4.8,0.49,0.37,0.61,0.12,0.03,0.74
+V. Engstrøm,Thisted,Denmark III,20.0,Denmark,,820,0,45.06,4.06,0.11,0.22,1.76,0.33,0.28,0.88
+E. Kolve,Jerv,Norway III,21.0,Norway,right,401,0,44.6,3.37,0.22,0.22,0.67,0.22,0.15,1.57
+M. Tøfting,Lyseng,Denmark IV,20.0,Denmark,unknown,771,0,44.52,3.97,0.23,0.58,0.7,0.12,0.13,0.82
+O. Jacobsen,VSK Århus,Denmark III,22.0,Denmark,,1003,0,44.45,7.18,0.09,0.36,0.63,0.0,0.07,0.99
+L. Róbertsson,Värnamo,Sweden II,21.0,Iceland,right,859,125000,44.06,6.29,0.1,0.21,0.94,0.31,0.13,0.31
+J. Kolan,Zagłębie Lubin,Poland,21.0,Poland,right,1340,0,43.99,6.65,0.2,0.47,1.07,0.07,0.05,0.13
+R. Koch Groth Pedersen,Middelfart,Denmark II,19.0,Denmark,unknown,573,0,43.98,6.44,0.31,0.16,1.57,0.0,0.05,0.47
+P. Kristal,Köln II,Germany 4 - Part IV,18.0,Estonia,right,1994,0,43.05,6.05,0.23,0.5,0.59,0.0,0.04,0.86
+V. Westh,Silkeborg,Denmark,22.0,Denmark,,1362,250000,42.95,7.6,0.2,0.33,0.46,0.0,0.01,1.19
+S. Richardsen,Lørenskog,Norway III,21.0,Norway,,472,0,41.8,3.24,0.95,0.19,1.33,0.0,0.37,0.57
+A. Brönner,IFK Norrköping,Sweden II,18.0,Sweden,unknown,694,0,41.75,5.97,0.13,0.13,1.56,0.0,0.06,1.3
+K. Jakubczyk,Arka Gdynia,Poland,21.0,Poland,unknown,2687,0,41.68,2.28,0.23,0.2,0.84,0.07,0.06,3.18
+S. Fumen Michael,Vendsyssel,Denmark III,19.0,"Nigeria, Denmark",,920,0,41.63,5.87,0.2,0.39,0.68,0.0,0.02,1.66
+E. Patut,Mariehamn,Finland,22.0,Finland,right,701,50000,41.26,4.62,0.26,0.26,0.51,0.13,0.08,1.03
+T. Lauritsen,Vejle,Denmark,21.0,Denmark,right,983,450000,41.16,5.58,0.27,0.09,1.19,0.0,0.05,1.65
+E. Özkan,Östersunds FK,Sweden II,22.0,Sweden,right,529,125000,40.73,3.91,0.68,0.0,1.7,0.0,0.08,0.51
+L. Privošnik,Dravinja,Slovenia II,23.0,Slovenia,,1792,0,40.18,5.07,0.2,0.6,1.05,0.0,0.08,0.7
+V. Kabzinski,Łódzki KS II,Poland III,19.0,Poland,,1652,0,39.96,4.79,0.22,0.65,0.6,0.11,0.03,0.87
+T. Olesen,Næstved,Denmark III,20.0,Denmark,,1242,0,39.79,2.83,0.51,0.0,1.3,0.0,0.16,1.52
+H. Bruseth,Kristiansund,Norway,22.0,Norway,left,775,450000,38.94,5.57,0.23,0.58,0.46,0.0,0.04,0.93
+B. Lelito,NKP Podhale,Poland III,21.0,Poland,unknown,987,0,38.86,2.19,0.09,0.36,1.55,0.09,0.16,1.0
+S. Wagnsson,FBK Karlstad,Sweden III,23.0,Sweden,unknown,849,0,37.54,6.15,0.42,0.74,0.42,0.0,0.01,0.32
+O. Højlund,Eintracht Frankfurt,Germany,21.0,Denmark,right,1209,700000,37.44,4.39,0.3,0.22,0.52,0.07,0.04,0.97
+V. Johansson,Laholms FK,Sweden III,20.0,Sweden,,512,0,36.83,2.99,0.0,0.0,2.29,0.35,0.19,3.87
+M. Belmaillah,Sundby,Denmark IV,20.0,Denmark,unknown,1561,0,36.61,4.67,0.23,0.12,0.86,0.12,0.09,0.75
+W. Radoslaw Waldemar,Priboj,Serbia II,19.0,Poland,unknown,907,0,36.54,3.67,0.3,0.4,0.5,0.1,0.08,0.89
+T. Lindgren,Umeå,Sweden III,19.0,Sweden,,521,0,36.09,5.87,0.52,0.17,0.52,0.0,0.01,1.55
+T. Rengard,Junkeren/Mo,Norway III,21.0,Norway,unknown,469,0,35.65,3.84,0.0,0.19,2.49,0.0,0.19,3.07
+V. Halvorsen,Sarpsborg 08,Norway,21.0,Norway,right,722,0,35.63,3.37,0.25,0.25,0.75,0.25,0.22,0.37
+G. Nokkvason,Stjarnan,Iceland,22.0,Iceland,right,682,0,34.45,4.22,0.4,0.13,0.26,0.13,0.09,0.92
+V. Janhunen,MP,Finland II,21.0,Finland,unknown,767,0,34.23,3.99,0.12,0.47,1.17,0.0,0.08,1.06
+P. Grabowski,Łódzki KS II,Poland III,19.0,Poland,left,1325,0,33.84,4.14,0.07,0.14,1.49,0.14,0.12,1.02
+T. Hansen,Hobro,Denmark II,20.0,Denmark,,1352,0,33.79,3.33,0.07,0.0,1.0,0.2,0.25,1.4
+I. Kaczmarski,Internazionale II,Italy III - Part III,22.0,Poland,right,2391,300000,33.64,4.82,0.26,0.3,0.75,0.0,0.04,1.28
+H. Norrlin,Enköping,Sweden III,19.0,Sweden,unknown,498,0,33.46,5.06,0.36,0.36,0.36,0.0,0.01,1.08
+B. Laturnus,Örgryte,Sweden,22.0,"Canada, Sweden",unknown,765,0,33.38,6.0,0.12,0.59,0.12,0.0,0.0,1.29
+S. Thorstensen,Ranheim,Norway II,20.0,Norway,right,423,0,33.0,6.38,0.85,0.0,0.43,0.0,0.02,0.21
+J. Selnæs,Raufoss,Norway II,21.0,Norway,unknown,407,0,32.64,5.09,0.0,0.66,1.33,0.0,0.1,0.44
+S. Praleika,Banga,Lithuania,18.0,Lithuania,unknown,1229,0,31.61,6.44,0.15,0.37,0.73,0.07,0.02,0.44
+E. Forsberg,Oddevold,Sweden II,20.0,Sweden,,564,0,31.59,6.22,0.32,0.0,0.48,0.0,0.02,1.12
+S. Jansson,Värnamo,Sweden II,20.0,Sweden,right,501,0,30.81,6.11,0.54,0.18,0.54,0.0,0.02,0.54
+A. Jørgensen,Helsingør,Denmark III,19.0,Denmark,right,1134,0,30.68,4.76,0.24,0.32,0.48,0.0,0.02,1.11
+G. Nyheim,Lillestrøm,Norway,20.0,Norway,right,550,0,30.44,2.78,0.16,0.0,1.15,0.33,0.14,0.82
+G. Europaeus,Gnistan,Finland,21.0,Finland,,787,0,29.79,4.57,0.23,0.34,0.57,0.0,0.04,0.91
+J. Vester,Sandefjord,Norway,21.0,Denmark,right,422,350000,28.43,3.63,0.0,0.0,2.13,0.21,0.54,0.43
+N. Pavlovskij,Džiugas Telšiai,Lithuania,19.0,Lithuania,right,457,0,28.42,4.73,0.2,0.39,0.59,0.0,0.02,0.98
+A. Machaal,SJK,Finland II,19.0,Finland,unknown,556,0,28.08,4.53,0.16,0.0,1.29,0.0,0.04,2.27
+H. Haraldsson,ÍA,Iceland,20.0,Iceland,right,756,0,27.77,5.24,0.36,0.24,0.48,0.0,0.03,0.24
+N. Johansson,Varbergs,Sweden II,22.0,Sweden,,650,0,26.83,6.23,0.55,0.0,0.42,0.0,0.05,0.55
+V. Gromek,Stoke City U21,Poland III,21.0,Poland,,933,0,26.69,4.05,0.1,0.39,1.54,0.0,0.17,0.68
+T. Olsen,Rana,Norway III,21.0,Norway,left,693,0,25.96,5.19,0.26,0.13,0.78,0.0,0.14,0.65
+M. Bartosz,NKP Podhale,Poland III,21.0,Poland,unknown,1724,0,25.88,5.32,0.1,0.37,0.89,0.0,0.01,1.04
+P. Mazur,Juventus Next Gen,Italy III - Part III,19.0,Poland,unknown,636,0,25.63,5.09,0.14,0.28,0.71,0.0,0.02,0.99
+Z. Zuzek,Dravinja,Slovenia II,19.0,Slovenia,unknown,923,0,25.26,4.39,0.2,0.2,1.37,0.1,0.06,0.29
+H. Hemmingsen,Næsby,Denmark IV,21.0,Denmark,,1833,0,25.16,7.76,0.0,0.1,0.64,0.0,0.05,0.83
+J. Niedzielski,Warta Poznań,Poland III,21.0,Poland,,1320,0,25.02,7.91,0.07,0.27,0.34,0.0,0.02,0.95
+R. Minerba,FA 2000,Denmark IV,21.0,Denmark,,2299,25000,24.65,4.38,0.2,0.31,0.39,0.08,0.06,0.9
+M. Heyde,Nordsjælland U21,Denmark,19.0,Denmark,right,509,0,24.02,8.84,0.0,0.18,1.06,0.0,0.04,0.35
+M. Beyer,Ishøj,Denmark III,20.0,Denmark,right,566,0,23.86,2.86,0.16,0.16,0.32,0.16,0.02,2.23
+J. Ficko,Primorje,Slovenia,22.0,Slovenia,right,1977,0,23.48,3.28,0.14,0.23,0.96,0.05,0.09,0.91
+K. Sommerfeld,Rekord Bielsko-Biała,Poland II,22.0,Poland,both,580,0,23.45,4.34,0.16,0.31,1.09,0.0,0.04,0.78
+F. Kristoffersen,Træff,Norway III,22.0,Norway,right,663,0,23.3,3.94,0.14,0.14,1.22,0.0,0.29,0.68
+E. Halldórsson,Thór,Iceland,17.0,Iceland,unknown,583,0,22.98,4.01,0.31,0.0,1.08,0.0,0.03,1.08
+M. Lorber,Lokomotiva Zagreb,Slovenia,22.0,Slovenia,right,658,0,22.69,5.74,0.0,0.27,0.68,0.0,0.04,1.23
+E. Silseth,Træff,Norway III,20.0,Norway,unknown,527,0,22.62,3.24,0.34,0.51,0.68,0.0,0.03,0.85
+J. Petzold,Follo,Norway III,20.0,Norway,unknown,687,0,22.42,2.36,0.26,0.13,0.79,0.13,0.17,0.52
+M. Schütt Rasmussen,HB Køge,Denmark II,20.0,Denmark,,977,0,22.33,4.42,0.37,0.18,0.74,0.0,0.01,1.11
+J. Kovačič,Mura U17,Slovenia,17.0,Slovenia,unknown,441,0,22.13,2.65,0.2,0.61,0.61,0.0,0.04,1.02
+A. Kristiansen,Vendsyssel,Denmark III,18.0,Denmark,,769,0,21.61,3.04,0.35,0.12,0.94,0.0,0.12,0.82
+J. Hjalmar,Norrby,Sweden II,20.0,Sweden,,871,0,21.27,5.48,0.1,0.0,1.45,0.0,0.09,0.52
+A. Baždarić,Trenčín,Slovakia,20.0,"Slovenia, Croatia",left,1041,0,21.14,5.1,0.09,0.43,0.86,0.0,0.04,0.95
+G. Kabal,Nõmme United,Estonia,18.0,Estonia,,676,0,20.22,5.86,0.13,0.13,0.93,0.0,0.11,0.27
+V. Svensson,Brønshøj,Denmark IV,20.0,Denmark,both,1025,0,19.45,3.16,0.09,0.18,1.67,0.09,0.17,0.09
+A. Søgaard,HIK,Denmark III,18.0,Denmark,unknown,702,0,19.14,3.33,0.0,0.26,0.77,0.13,0.17,1.03
+K. Ćwielong,Sandecja Nowy Sącz,Poland III,18.0,Poland,,438,0,19.12,3.9,0.0,0.0,1.44,0.0,0.11,1.85
+J. Štukelj,Krško,Slovenia II,19.0,Slovenia,unknown,884,0,18.96,3.46,0.31,0.41,0.61,0.0,0.02,1.22
+A. Bakeng-Rogne,Pors Grenland,Norway III,21.0,Norway,right,679,0,16.59,2.92,0.27,0.13,0.93,0.0,0.07,1.06
+I. Wiman,Tvååker,Sweden III,22.0,Sweden,,761,0,16.42,5.91,0.12,0.47,0.0,0.0,0.0,0.47
+M. Trengereid,Arendal,Norway III,22.0,Norway,left,581,0,16.13,3.56,0.0,0.0,0.93,0.0,0.22,1.39
+M. Mork,Træff,Norway III,18.0,Norway,unknown,657,0,15.83,5.75,0.0,0.41,0.96,0.0,0.05,0.55
+A. Asmussen,Rimini,Italy III - Part IV,20.0,Denmark,,800,0,15.65,2.14,0.11,0.11,0.9,0.11,0.19,0.23
+O. Multala,Ilves,Finland,19.0,Finland,unknown,516,0,14.95,4.71,0.17,0.17,0.17,0.17,0.02,0.35
+M. Nedergaard,Skive,Denmark III,21.0,Denmark,,1876,0,14.65,5.57,0.14,0.05,0.67,0.0,0.03,1.15
+A. Vodopivec,Dravinja,Slovenia II,19.0,Slovenia,unknown,559,0,13.99,3.22,0.16,0.0,1.29,0.0,0.06,0.97
+T. Horneland Hildal,Lysekloster,Norway III,23.0,Norway,,681,0,13.63,5.02,0.0,0.4,0.4,0.0,0.01,1.85
+M. Fjodorovs,FK Grobiņa,Latvia,22.0,Latvia,right,652,100000,13.57,9.25,0.0,0.28,0.41,0.0,0.04,0.28
+P. Mang,Lyseng,Denmark IV,21.0,Denmark,right,1431,0,12.87,4.21,0.06,0.13,0.44,0.06,0.09,1.19
+R. Huhtamäki,KäPa,Finland II,19.0,Finland,unknown,573,0,12.43,5.03,0.0,0.31,0.79,0.0,0.06,0.16
+J. Jaroch,Unia Skierniewice,Poland III,18.0,Poland,unknown,455,0,11.98,5.54,0.0,0.2,0.99,0.0,0.02,0.59
+O. Ocampo Hägglund,Trollhättan,Sweden III,22.0,Sweden,unknown,461,0,11.94,7.03,0.0,0.2,0.39,0.0,0.01,0.39
+A. Bukowski,Stal Mielec,Poland II,23.0,Poland,right,719,0,11.78,3.13,0.0,0.13,0.5,0.13,0.13,0.38
+I. Mendolin,Oulu,Finland,19.0,Finland,right,836,0,10.83,5.28,0.11,0.11,0.75,0.11,0.02,0.43
+S. Brodersen,Ishøj,Denmark III,23.0,Denmark,,567,0,10.44,5.24,0.0,0.0,0.16,0.16,0.04,0.79
+C. Axede,Norrby,Sweden II,20.0,Sweden,right,688,0,10.14,4.45,0.13,0.0,0.92,0.0,0.13,0.13
+I. Kartau,Harju JK,Estonia,20.0,Estonia,,1226,0,9.87,5.73,0.07,0.73,0.15,0.0,0.0,0.37
+M. Aaserud,Sotra,Norway III,22.0,Norway,right,673,0,9.02,5.48,0.13,0.0,0.4,0.0,0.02,0.67
+B. Wandachowicz,Sokół Kleczew,Poland III,20.0,Poland,,1433,0,8.38,4.77,0.13,0.31,0.57,0.0,0.04,0.31
+T. Lundbergh,Malmö FF,Sweden,17.0,Sweden,unknown,588,0,7.52,6.73,0.15,0.0,0.15,0.0,0.01,0.0
+N. Leinonen,KäPa,Finland II,23.0,Finland,,511,0,7.48,2.29,0.18,0.35,0.53,0.0,0.03,0.88
+D. Alfonsi,Karlstad,Sweden III,19.0,Sweden,right,410,0,7.45,4.83,0.0,0.22,0.88,0.0,0.05,0.66
+M. Vrabec,ND Slovan Ljubljana,Slovenia II,20.0,Slovenia,unknown,1041,0,7.37,5.53,0.0,0.26,0.09,0.0,0.0,1.3
+E. Kiiskilä,Inter Turku,Finland,18.0,Finland,unknown,440,0,6.35,3.48,0.0,0.2,0.41,0.0,0.06,0.82
+I. Vural,Pisa,Italy,19.0,"Sweden, Türkiye",right,811,0,6.25,2.89,0.11,0.11,0.67,0.0,0.06,0.67
+T. Engebakken,Raufoss,Norway II,19.0,Norway,unknown,437,0,5.88,3.3,0.0,0.0,1.03,0.0,0.07,1.65
+F. Kocaba,Zagłębie Lubin,Poland,21.0,Poland,right,2717,0,5.36,4.17,0.13,0.13,0.5,0.07,0.03,0.53
+N. Geiger,Karlberg,Sweden III,20.0,Sweden,,546,0,5.3,3.79,0.0,0.33,0.16,0.0,0.0,1.48
+T. Sommer,FA 2000,Denmark IV,20.0,Denmark,,1355,0,5.0,4.05,0.13,0.27,0.4,0.0,0.01,0.8
+K. Karlsson,Degerfors,Sweden,21.0,Sweden,right,785,0,4.58,6.31,0.0,0.11,0.11,0.0,0.0,0.46
+K. Łukasiak,Katowice,Poland,22.0,Poland,right,718,0,4.53,4.51,0.0,0.25,0.5,0.0,0.07,0.13
+B. Zawojski,Zagłębie Sosnowiec,Poland III,19.0,Poland,unknown,511,0,4.43,2.82,0.0,0.0,1.41,0.0,0.06,0.88
+S. Soo,Harju JK,Estonia,21.0,Estonia,right,479,0,4.09,4.89,0.0,0.38,0.19,0.0,0.04,0.19
+R. Pllana,Pors Grenland,Norway III,23.0,Norway,,485,0,3.62,4.45,0.0,0.0,0.56,0.0,0.06,0.74
+A. Kujović,Jesenice,Slovenia II,22.0,Slovenia,right,776,0,3.6,4.06,0.12,0.35,0.35,0.0,0.01,0.7
+S. Prestmo,Moss,Norway II,19.0,Norway,unknown,683,0,3.55,3.56,0.0,0.13,0.66,0.0,0.03,0.66
+S. Beck,Strømmen,Norway II,23.0,Norway,left,677,0,3.46,4.39,0.0,0.0,1.06,0.0,0.04,0.27
+Alan Jahic,Vanløse,Denmark IV,19.0,Denmark,unknown,614,0,3.24,3.52,0.0,0.15,0.15,0.0,0.03,1.47
+J. Staniszewski,Pogoń Grod. Mazowiecki,Poland II,20.0,Poland,right,802,0,3.13,2.92,0.11,0.0,0.79,0.0,0.03,0.45
+T. Ytterland,Levanger,Norway III,20.0,Norway,,564,0,2.74,2.71,0.0,0.64,0.32,0.0,0.05,0.32
+N. Barkovskis,SK Super Nova,Latvia,19.0,Latvia,left,544,0,2.65,3.14,0.0,0.0,0.5,0.17,0.04,0.5
+B. Manniche,Fremad Amager,Denmark III,21.0,Denmark,unknown,462,0,1.81,4.09,0.0,0.19,0.39,0.0,0.03,0.19
+B. Piotrowski,Polonia Warszawa,Poland II,20.0,Poland,right,576,0,0.84,2.81,0.0,0.0,0.94,0.0,0.05,0.47
+F. Fenger,Lyseng U21,Denmark IV,20.0,Denmark,,832,0,0.73,4.33,0.11,0.11,0.11,0.0,0.03,0.22
+V. Halset,Bjarg,Norway III,23.0,Norway,,604,0,0.56,2.83,0.0,0.3,0.6,0.0,0.01,0.3
