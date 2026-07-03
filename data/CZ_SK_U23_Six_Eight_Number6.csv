@@ -1,4 +1,4 @@
-Player,Team,_League,Age,Passport country,Foot,Minutes played,Market value,Six Score,Progressive passes per 90,"Accurate passes, %",Interceptions per 90,PAdj Interceptions,Successful defensive actions per 90,"Defensive duels won, %","Aerial duels won, %"
+Player,Team,League,Age,Passport country,Foot,Minutes played,Market value,Six Score,Progressive passes per 90,"Accurate passes, %",Interceptions per 90,PAdj Interceptions,Successful defensive actions per 90,"Defensive duels won, %","Aerial duels won, %"
 D. Jambor,Chrudim,Czech II,23.0,Czech Republic,right,2220,175000,96.08,7.5,84.0,5.11,6.81,12.57,66.94,49.33
 O. Kričfaluši,Baník Ostrava,Czech,22.0,Czech Republic,right,2478,0,94.47,11.26,78.21,4.76,7.08,9.73,65.55,56.0
 M. Chvalník,Slovan Liberec U17,Czech U17,16.0,Czech Republic,,505,0,94.07,7.49,76.03,5.17,6.04,16.04,78.38,50.0

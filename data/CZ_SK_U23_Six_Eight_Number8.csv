@@ -1,4 +1,4 @@
-Player,Team,_League,Age,Passport country,Foot,Minutes played,Market value,Eight Score,Progressive passes per 90,Key passes per 90,Through passes per 90,Shots per 90,Goals per 90,xG per 90,Progressive runs per 90
+Player,Team,League,Age,Passport country,Foot,Minutes played,Market value,Eight Score,Progressive passes per 90,Key passes per 90,Through passes per 90,Shots per 90,Goals per 90,xG per 90,Progressive runs per 90
 J. Zadrobílek,Sparta Praha U19,Czech U17,16.0,Czech Republic,,1063,0,98.92,7.87,0.51,0.93,4.15,0.93,0.58,1.69
 Š. Sedlák,FC Vysočina Jihlava U17,Czech U17,16.0,Czech Republic,unknown,907,0,98.67,7.94,0.79,1.09,1.79,0.2,0.13,2.18
 M. Brázda,Zlín U19,Czech U19,19.0,Czech Republic,unknown,1255,0,98.12,8.53,0.43,0.72,2.44,0.14,0.27,2.73

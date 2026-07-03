@@ -20,13 +20,19 @@ Filters applied to the final shortlists
   Market value   < max-value (0/blank market value passes — Wyscout leaves
                  it blank for most lower-league players; excluding those
                  would gut the pool)
-  Nationality    passport country matches the selected region
+  Region         cz_sk is filtered by passport nationality (Czech Republic
+                 or Slovakia, wherever the player plays). other is filtered
+                 by which domestic league Excel file the player is IN
+                 (Estonia.xlsx, Sweden.xlsx, ... regardless of passport),
+                 i.e. it's a "who plays in these leagues" screen, not a
+                 "who holds these passports" screen.
 
 Regions
 ───────
-  cz_sk   — Czech Republic, Slovakia
-  other   — Baltics (Estonia, Latvia, Lithuania) + Scandinavia
-            (Sweden, Norway, Denmark) + Finland, Iceland, Poland, Slovenia
+  cz_sk   — nationality: Czech Republic, Slovakia
+  other   — league files: Baltics (Estonia, Latvia, Lithuania) + Scandinavia
+            (Sweden I-III, Norway I-III, Denmark I-IV) + Finland I-II,
+            Iceland, Poland I-III, Slovenia I-II
 
 Output
 ──────
@@ -77,13 +83,19 @@ EIGHT_BLUEPRINT: list[tuple[str, float]] = [
     ("Accurate passes, %",        1.0),
 ]
 
-REGIONS: dict[str, tuple[str, ...]] = {
-    "cz_sk": ("Czech Republic", "Slovakia"),
-    "other": (
-        "Estonia", "Latvia", "Lithuania",            # Baltics
-        "Sweden", "Norway", "Denmark",                # Scandinavia
-        "Finland", "Iceland", "Poland", "Slovenia",
-    ),
+# mode "nationality" filters on Passport country; mode "league" filters on
+# which Wyscout league file (_League, i.e. the file stem) the row came from.
+REGIONS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "cz_sk": ("nationality", ("Czech Republic", "Slovakia")),
+    "other": ("league", (
+        "Estonia", "Latvia", "Lithuania",                                  # Baltics
+        "Sweden", "Sweden II", "Sweden III",                               # Scandinavia
+        "Norway", "Norway II", "Norway III",
+        "Denmark", "Denmark II", "Denmark III", "Denmark IV",
+        "Finland", "Finland II", "Iceland",
+        "Poland", "Poland II", "Poland III",
+        "Slovenia", "Slovenia II",
+    )),
 }
 
 OUTPUT_FILES = {
@@ -159,13 +171,19 @@ def score_archetype(pool: pd.DataFrame, arch: str, blueprint: list[tuple[str, fl
     return pool
 
 
-def filter_region(df: pd.DataFrame, nationalities: tuple[str, ...],
+def filter_region(df: pd.DataFrame, mode: str, values: tuple[str, ...],
                    max_age: int, max_value: float, score_col: str) -> pd.DataFrame:
-    passport = df["Passport country"].fillna("").astype(str)
-    is_nat = passport.apply(lambda s: any(n in s for n in nationalities))
+    if mode == "nationality":
+        passport = df["Passport country"].fillna("").astype(str)
+        keep = passport.apply(lambda s: any(v in s for v in values))
+    elif mode == "league":
+        keep = df["_League"].isin(values)
+    else:
+        raise ValueError(f"Unknown region mode: {mode}")
+
     age = pd.to_numeric(df["Age"], errors="coerce")
     mv = pd.to_numeric(df.get("Market value"), errors="coerce").fillna(0)
-    out = df.loc[is_nat & (age <= max_age) & (mv < max_value)].copy()
+    out = df.loc[keep & (age <= max_age) & (mv < max_value)].copy()
     # Same player/team can appear in split league files (e.g. "Italy III -
     # Part III/IV") or first-team + reserve exports; keep the top-scoring row.
     out = out.sort_values(score_col, ascending=False).drop_duplicates(
@@ -209,9 +227,9 @@ def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
 
 
 REGION_LABELS = {
-    "cz_sk": "Czech Republic + Slovakia",
-    "other": "Baltics (Estonia/Latvia/Lithuania) + Scandinavia (Sweden/Norway/Denmark) "
-             "+ Finland + Iceland + Poland + Slovenia",
+    "cz_sk": "Czech Republic + Slovakia (by nationality)",
+    "other": "Baltics + Scandinavia + Finland + Iceland + Poland + Slovenia leagues "
+             "(by league played in, any nationality)",
 }
 
 
@@ -233,9 +251,9 @@ def main() -> None:
     six_pool = pool[pool["_arch"] == "SIX"]
     eight_pool = pool[pool["_arch"] == "EIGHT"]
 
-    for region, nationalities in REGIONS.items():
-        six_out = filter_region(six_pool, nationalities, args.max_age, args.max_value, "Six Score")
-        eight_out = filter_region(eight_pool, nationalities, args.max_age, args.max_value, "Eight Score")
+    for region, (mode, values) in REGIONS.items():
+        six_out = filter_region(six_pool, mode, values, args.max_age, args.max_value, "Six Score")
+        eight_out = filter_region(eight_pool, mode, values, args.max_age, args.max_value, "Eight Score")
 
         output = OUTPUT_FILES[region]
         write_region_workbook(
@@ -244,12 +262,12 @@ def main() -> None:
 
         six_csv = output.with_name(output.stem + "_Number6.csv")
         eight_csv = output.with_name(output.stem + "_Number8.csv")
-        six_out[[c for c in DISPLAY_COLS_SIX if c in six_out.columns]].sort_values(
-            "Six Score", ascending=False
-        ).to_csv(six_csv, index=False)
-        eight_out[[c for c in DISPLAY_COLS_EIGHT if c in eight_out.columns]].sort_values(
-            "Eight Score", ascending=False
-        ).to_csv(eight_csv, index=False)
+        six_out[[c for c in DISPLAY_COLS_SIX if c in six_out.columns]].rename(
+            columns={"_League": "League"}
+        ).sort_values("Six Score", ascending=False).to_csv(six_csv, index=False)
+        eight_out[[c for c in DISPLAY_COLS_EIGHT if c in eight_out.columns]].rename(
+            columns={"_League": "League"}
+        ).sort_values("Eight Score", ascending=False).to_csv(eight_csv, index=False)
 
         print(f"\n{region}: {len(six_out)} No.6 / {len(eight_out)} No.8 candidates")
         print(f"  Excel → {output}")
