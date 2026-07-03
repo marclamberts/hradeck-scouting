@@ -34,9 +34,21 @@ Regions
             (Sweden I-III, Norway I-III, Denmark I-IV) + Finland I-II,
             Iceland, Poland I-III, Slovenia I-II
 
+Squad level
+───────────
+  Every row is tagged "Squad Type":
+    Youth Academy      — team name or league itself is a U15-U23 youth side
+                          (e.g. "Slavia Praha U19", the "Czech U17" league)
+    Reserve / B Team    — team name ends in a reserve suffix (II, III, B)
+                          e.g. "Baník Ostrava II", "Internazionale II"
+    Senior First Team   — everything else
+  "Academy" collapses the first two into one Yes/No flag (neither plays in
+  the club's senior first team), and each Number 6 / Number 8 sheet is
+  split into a "- Senior" and "- Academy" tab on that flag.
+
 Output
 ──────
-  One workbook per region, each with "Number 6" and "Number 8" tabs:
+  One workbook per region, each with 4 tabs (Number 6/8 x Senior/Academy):
     data/CZ_SK_U23_Six_Eight.xlsx
     data/Baltics_Scandi_Poland_Slovenia_U23_Six_Eight.xlsx
 
@@ -47,6 +59,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import numpy as np
@@ -57,6 +70,19 @@ from build_lamberts_total import write_data_sheet
 
 ROOT = Path(__file__).parent
 WYSCOUT_DIR = ROOT / "data" / "Wyscout DB"
+
+YOUTH_RE = re.compile(r"\bU1[5-9]\b|\bU2[0-3]\b")
+RESERVE_RE = re.compile(r"\b(II|III|B)$")
+
+
+def classify_squad(team: object, league: object) -> str:
+    league_s = str(league or "")
+    team_s = str(team or "")
+    if YOUTH_RE.search(league_s) or YOUTH_RE.search(team_s):
+        return "Youth Academy"
+    if RESERVE_RE.search(team_s):
+        return "Reserve / B Team"
+    return "Senior First Team"
 
 SIX_POSITIONS = {"DMF", "LDMF", "RDMF"}
 EIGHT_POSITIONS = {"CMF", "LCMF", "RCMF"}
@@ -104,7 +130,7 @@ OUTPUT_FILES = {
 }
 
 DISPLAY_COLS_SIX = [
-    "Player", "Team", "_League", "Age", "Passport country", "Foot",
+    "Player", "Team", "_League", "Squad Type", "Age", "Passport country", "Foot",
     "Minutes played", "Market value", "Six Score",
     "Progressive passes per 90", "Accurate passes, %",
     "Interceptions per 90", "PAdj Interceptions",
@@ -113,7 +139,7 @@ DISPLAY_COLS_SIX = [
 ]
 
 DISPLAY_COLS_EIGHT = [
-    "Player", "Team", "_League", "Age", "Passport country", "Foot",
+    "Player", "Team", "_League", "Squad Type", "Age", "Passport country", "Foot",
     "Minutes played", "Market value", "Eight Score",
     "Progressive passes per 90", "Key passes per 90",
     "Through passes per 90", "Shots per 90", "Goals per 90", "xG per 90",
@@ -150,7 +176,12 @@ def load_pool(min_minutes: int) -> pd.DataFrame:
 
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    pool = pd.concat(frames, ignore_index=True)
+    pool["Squad Type"] = [
+        classify_squad(t, lg) for t, lg in zip(pool["Team"], pool["_League"])
+    ]
+    pool["Academy"] = pool["Squad Type"] != "Senior First Team"
+    return pool
 
 
 def score_archetype(pool: pd.DataFrame, arch: str, blueprint: list[tuple[str, float]],
@@ -198,29 +229,29 @@ def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
     wb = Workbook()
     wb.remove(wb.active)
 
-    ws6 = wb.create_sheet("Number 6")
-    out6 = six_df[[c for c in DISPLAY_COLS_SIX if c in six_df.columns]].rename(
-        columns={"_League": "League"}
-    ).sort_values("Six Score", ascending=False)
-    write_data_sheet(
-        ws6,
-        f"NUMBER 6 — DEFENSIVE MIDFIELDER, AGE ≤ {max_age}, MKT VAL < €{max_value:,.0f}",
-        f"{region_label}  ·  {len(out6)} candidates  ·  "
-        "Progressive passing + defensive-actions volume  ·  Ranked by Six Score",
-        out6,
-    )
+    specs = [
+        ("Number 6", six_df, DISPLAY_COLS_SIX, "Six Score", "NUMBER 6 — DEFENSIVE MIDFIELDER",
+         "Progressive passing + defensive-actions volume"),
+        ("Number 8", eight_df, DISPLAY_COLS_EIGHT, "Eight Score", "NUMBER 8 — BOX-TO-BOX MIDFIELDER",
+         "Progressive passing, key passes, through passes, shot output"),
+    ]
 
-    ws8 = wb.create_sheet("Number 8")
-    out8 = eight_df[[c for c in DISPLAY_COLS_EIGHT if c in eight_df.columns]].rename(
-        columns={"_League": "League"}
-    ).sort_values("Eight Score", ascending=False)
-    write_data_sheet(
-        ws8,
-        f"NUMBER 8 — BOX-TO-BOX MIDFIELDER, AGE ≤ {max_age}, MKT VAL < €{max_value:,.0f}",
-        f"{region_label}  ·  {len(out8)} candidates  ·  "
-        "Progressive passing, key passes, through passes, shot output  ·  Ranked by Eight Score",
-        out8,
-    )
+    for base_name, df, display_cols, score_col, title, blurb in specs:
+        for tab_suffix, academy_flag in (("Senior", False), ("Academy", True)):
+            sub = df[df["Academy"] == academy_flag] if "Academy" in df.columns else df
+            out = sub[[c for c in display_cols if c in sub.columns]].rename(
+                columns={"_League": "League"}
+            ).sort_values(score_col, ascending=False)
+            ws = wb.create_sheet(f"{base_name} - {tab_suffix}")
+            scope = ("senior first-team players only" if tab_suffix == "Senior"
+                     else "youth academy + reserve/B-team players only")
+            write_data_sheet(
+                ws,
+                f"{title}, AGE ≤ {max_age}, MKT VAL < €{max_value:,.0f} — {tab_suffix.upper()}",
+                f"{region_label}  ·  {len(out)} candidates ({scope})  ·  "
+                f"{blurb}  ·  Ranked by {score_col}",
+                out,
+            )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output)
