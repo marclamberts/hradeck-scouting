@@ -339,15 +339,24 @@ def trend_label(age: float, peak_age: float) -> str:
 
 
 def dev_tier(rank: float) -> str:
+    """
+    Labels the 3-year outlook, not youth per se — Trajectory Score blends
+    Current Level with a curve-implied 3-year projection, and because the
+    fitted curves are gentle, the projection rarely swings far from today's
+    level. So this tier answers 'how good will they still be in 3 years',
+    which for most players tracks 'how good are they now'. Use the dedicated
+    Breakout Prospects / Decline Risk sheets to isolate youth upside or
+    aging risk specifically.
+    """
     if rank >= 90:
-        return "BREAKOUT"
+        return "ELITE HORIZON"
     if rank >= 75:
-        return "HIGH CEILING"
+        return "STRONG HORIZON"
     if rank >= 50:
-        return "ASCENDING VALUE"
+        return "SOLID HORIZON"
     if rank >= 25:
-        return "STABLE"
-    return "DECLINE RISK"
+        return "LIMITED HORIZON"
+    return "FADING HORIZON"
 
 
 def apply_trajectory(df: pd.DataFrame, curves: dict[str, dict]) -> pd.DataFrame:
@@ -480,11 +489,11 @@ def _autofit(ws) -> None:
 
 
 TIER_COLORS = {
-    "BREAKOUT":        C["breakout"],
-    "HIGH CEILING":    C["highceil"],
-    "ASCENDING VALUE": C["ascending"],
-    "STABLE":          C["stable"],
-    "DECLINE RISK":    C["decline"],
+    "ELITE HORIZON":   C["breakout"],
+    "STRONG HORIZON":  C["highceil"],
+    "SOLID HORIZON":   C["ascending"],
+    "LIMITED HORIZON": C["stable"],
+    "FADING HORIZON":  C["decline"],
 }
 TREND_COLORS = {
     "ASCENDING":        C["trend_asc"],
@@ -608,7 +617,7 @@ def build_readme(ws, leagues: list[str], total: int, min_minutes: int) -> None:
         "All Players":        f"Full {total:,}-player database ranked by Trajectory Score",
         "GK / CB / FB / DM / CM / W / FW": "Position-specific development boards",
         "Breakout Prospects": "Under-24 players furthest above the age curve — buy-low targets",
-        "Decline Risk":       "Players tiered DECLINE RISK despite high current output — avoid or sell-high",
+        "Decline Risk":       "High current output, already past expected peak age — aging risk / sell-high",
     }
     for sheet_name, desc in desc_map.items():
         ws.append([None, sheet_name, desc])
@@ -627,11 +636,14 @@ def build_readme(ws, leagues: list[str], total: int, min_minutes: int) -> None:
         ("Proj +1Y/+3Y/+5Y", "Age-curve value at that future age, plus the player's current residual carried forward"),
         ("Trajectory Score", "0.35 × Current Level + 0.65 × Proj +3Y — current form weighted toward near-term outlook"),
         ("Trajectory Rank",  "Percentile of Trajectory Score within the player's position group"),
-        ("BREAKOUT",         "Trajectory Rank ≥ 90 — highest-upside signings"),
-        ("HIGH CEILING",     "Trajectory Rank ≥ 75"),
-        ("ASCENDING VALUE",  "Trajectory Rank ≥ 50"),
-        ("STABLE",           "Trajectory Rank ≥ 25"),
-        ("DECLINE RISK",     "Trajectory Rank < 25 — model expects fall-off within the projection window"),
+        ("Dev Tier",         "3-year outlook label. Because fitted curves decline gently, this tracks current level"
+                              " closely for most players — use Breakout Prospects / Decline Risk to isolate youth"
+                              " upside or aging risk specifically"),
+        ("ELITE HORIZON",    "Trajectory Rank ≥ 90"),
+        ("STRONG HORIZON",   "Trajectory Rank ≥ 75"),
+        ("SOLID HORIZON",    "Trajectory Rank ≥ 50"),
+        ("LIMITED HORIZON",  "Trajectory Rank ≥ 25"),
+        ("FADING HORIZON",   "Trajectory Rank < 25"),
         ("ASCENDING",        "3+ years before expected peak age"),
         ("APPROACHING PEAK", "1–3 years before expected peak age"),
         ("PEAK WINDOW",      "Within 1 year of expected peak age"),
@@ -724,12 +736,22 @@ def build_breakout_sheet(ws, master: pd.DataFrame) -> None:
 
 
 def build_decline_sheet(ws, master: pd.DataFrame) -> None:
-    df = master[(master["Dev Tier"] == "DECLINE RISK") & (master["Current Level"] >= 60)]
-    df = df.sort_values("Current Level", ascending=False).head(150)
+    """
+    Flags proven, high-output players who are already past their position's
+    expected peak age. The Trajectory Score gap alone rarely surfaces this —
+    the fitted curves decline gently (a few points over 3 years), so this
+    sheet keys off Trend + Current Level directly instead.
+    """
+    mask = (master["Current Level"] >= 65) & (master["Trend"].isin(["EARLY DECLINE", "LATE DECLINE"]))
+    df = master[mask].copy()
+    severity = {"LATE DECLINE": 0, "EARLY DECLINE": 1}
+    df["_sev"] = df["Trend"].map(severity)
+    df = df.sort_values(["_sev", "Current Level"], ascending=[True, False]).drop(columns="_sev").head(150)
     write_data_sheet(
         ws,
-        f"DECLINE RISK — High Current Output, Falling Trajectory",
-        "Model expects fall-off within the projection window despite strong current numbers — avoid overpaying / sell-high candidates",
+        f"DECLINE RISK — High Current Output, Past Expected Peak Age",
+        "Current Level ≥ 65 and already in EARLY/LATE DECLINE for their position — proven quality, but aging risk. "
+        "Short-term/loan targets or sell-high candidates rather than long-term deals",
         df,
     )
 
@@ -763,9 +785,9 @@ def run(leagues: list[str] | None, min_minutes: int, output: Path) -> None:
     master = build_master(raw)
     print(f"  → {len(master)} total players scored")
 
-    breakout_n = (master["Dev Tier"] == "BREAKOUT").sum()
-    decline_n = (master["Dev Tier"] == "DECLINE RISK").sum()
-    print(f"  → {breakout_n} BREAKOUT  |  {decline_n} DECLINE RISK")
+    elite_n = (master["Dev Tier"] == "ELITE HORIZON").sum()
+    fading_n = (master["Dev Tier"] == "FADING HORIZON").sum()
+    print(f"  → {elite_n} ELITE HORIZON  |  {fading_n} FADING HORIZON")
 
     print(f"\nWriting workbook → {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
