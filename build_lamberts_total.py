@@ -273,7 +273,15 @@ def compute_mv_rank(df: pd.DataFrame) -> pd.DataFrame:
         mv = pd.Series(0.0, index=df.index)
 
     df["_mkt_val"] = mv
-    df["_mv_rank"] = mv.rank(pct=True) * 100
+    # Most lower-league players have no listed market value (0/blank in the
+    # Wyscout export). Ranking them alongside real values drags the whole
+    # percentile scale down and hands them a misleadingly high Lamberts
+    # Index ("great value") purely because of missing data. Rank only among
+    # players with a real (>0) market value; leave the rest unranked.
+    has_mv = mv > 0
+    df["_mv_rank"] = np.nan
+    if has_mv.any():
+        df.loc[has_mv, "_mv_rank"] = mv[has_mv].rank(pct=True) * 100
     return df
 
 
@@ -300,6 +308,8 @@ def compute_lamberts(df: pd.DataFrame) -> pd.DataFrame:
     df["_lamberts"] = (df["_sqs_rank"] - df["_mv_rank"]).round(2)
 
     def tier(li: float) -> str:
+        if pd.isna(li):
+            return "NO MARKET DATA"
         if li >= 30:
             return "ELITE VALUE"
         if li >= 20:
@@ -498,11 +508,12 @@ def write_data_sheet(ws, title: str, subtitle: str, df: pd.DataFrame) -> None:
 
     # Data rows
     tier_colors = {
-        "ELITE VALUE": C["elite"],
-        "HIGH VALUE":  C["high"],
-        "VALUE":       C["value"],
-        "FAIR VALUE":  C["fair"],
-        "OVERPRICED":  C["over"],
+        "ELITE VALUE":     C["elite"],
+        "HIGH VALUE":      C["high"],
+        "VALUE":           C["value"],
+        "FAIR VALUE":      C["fair"],
+        "OVERPRICED":      C["over"],
+        "NO MARKET DATA":  "7F8C8D",
     }
     status_colors = {
         "CLEAR UPGRADE":      C["upgrade"],

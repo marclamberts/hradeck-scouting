@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 
@@ -116,9 +117,47 @@ def compute_model_scores(pool: pd.DataFrame) -> pd.DataFrame:
     return pool
 
 
+def recompute_lamberts_value(pool: pd.DataFrame) -> pd.DataFrame:
+    """
+    The pre-built Lamberts_Index_Model_All_Leagues.xlsx ranks market value
+    with zero/blank values included, which — since most lower-league
+    players have no listed market value — hands them a misleadingly
+    high Lamberts Index ("great value") purely from missing data rather
+    than genuine underpricing. Recompute Lamberts Index / Tier here using
+    only players with a real (>0) market value; leave the rest unranked.
+    SQS Rank, Status and vs Hradec don't depend on market value and are
+    kept as-is from the source workbook.
+    """
+    mv = pd.to_numeric(pool["Mkt Val (€)"], errors="coerce").fillna(0)
+    sqs = pd.to_numeric(pool["SQS Rank"], errors="coerce")
+
+    has_mv = mv > 0
+    mv_rank = pd.Series(np.nan, index=pool.index)
+    mv_rank.loc[has_mv] = mv[has_mv].rank(pct=True) * 100
+
+    pool["Lamberts Index"] = (sqs - mv_rank).round(2)
+
+    def tier(li: float) -> str:
+        if pd.isna(li):
+            return "NO MARKET DATA"
+        if li >= 30:
+            return "ELITE VALUE"
+        if li >= 20:
+            return "HIGH VALUE"
+        if li >= 10:
+            return "VALUE"
+        if li >= 0:
+            return "FAIR VALUE"
+        return "OVERPRICED"
+
+    pool["Tier"] = pool["Lamberts Index"].apply(tier)
+    return pool
+
+
 def load_cm_pool() -> pd.DataFrame:
     pool = pd.read_excel(LAMBERTS_XLSX, sheet_name="All Targets", skiprows=2)
     pool = pool[pool["Pos"] == "CM"].copy()
+    pool = recompute_lamberts_value(pool)
     return compute_model_scores(pool)
 
 
@@ -141,22 +180,26 @@ def merge_shortlist(shortlist: pd.DataFrame, pool: pd.DataFrame) -> pd.DataFrame
     return merged
 
 
-def write_report(df: pd.DataFrame, output: Path) -> None:
+def write_report(df: pd.DataFrame, output: Path, top_n: int) -> dict[str, pd.DataFrame]:
     wb = Workbook()
     wb.remove(wb.active)
 
     # ── Lamberts Model ──────────────────────────────────────────────────
-    lamberts_df = df[[c for c in LAMBERTS_COLS if c in df.columns]].copy()
-    lamberts_df = lamberts_df.sort_values(
-        "Lamberts Index", ascending=False, na_position="last"
-    )
+    # Only rank players with a real Lamberts Index (i.e. a genuine, >0
+    # market value) — padding the top-N with NO MARKET DATA / NOT SCORED
+    # rows would defeat the point of fixing the market-value calculation.
     scored = int(df["Lamberts Index"].notna().sum())
+    lamberts_df = df[[c for c in LAMBERTS_COLS if c in df.columns]].copy()
+    lamberts_df = lamberts_df[lamberts_df["Lamberts Index"].notna()].sort_values(
+        "Lamberts Index", ascending=False
+    ).head(top_n)
     ws1 = wb.create_sheet("Lamberts Model")
     write_data_sheet(
         ws1,
         "CZ / SK CENTRAL MIDFIELDERS, AGE ≤ 23 — LAMBERTS MODEL",
-        f"Jamestown / Marc Lamberts methodology  ·  {len(lamberts_df)} candidates  ·  "
-        f"{scored} scored (400+ minutes)  ·  Ranked by Lamberts Index (SQS Rank − Market Value Rank)",
+        f"Jamestown / Marc Lamberts methodology  ·  Top {len(lamberts_df)} of {scored} scored "
+        f"(real market value only, {len(df)} candidates total)  ·  "
+        "Ranked by Lamberts Index (SQS Rank − Market Value Rank)",
         lamberts_df,
     )
 
@@ -167,12 +210,14 @@ def write_report(df: pd.DataFrame, output: Path) -> None:
     benham_df = df[[c for c in benham_cols if c in df.columns]].copy()
     benham_df.insert(benham_df.columns.get_loc("BenhamScore"), "Grade",
                       benham_df["BenhamScore"].apply(grade))
-    benham_df = benham_df.sort_values("BenhamScore", ascending=False, na_position="last")
+    benham_df = benham_df.sort_values(
+        "BenhamScore", ascending=False, na_position="last"
+    ).head(top_n)
     ws2 = wb.create_sheet("Benham Model")
     write_data_sheet(
         ws2,
         "CZ / SK CENTRAL MIDFIELDERS, AGE ≤ 23 — BENHAM MODEL",
-        "Modeled on Matthew Benham / Brentford's data-led approach  ·  "
+        f"Modeled on Matthew Benham / Brentford's data-led approach  ·  Top {len(benham_df)} of {len(df)}  ·  "
         "weights underlying chance creation (xA, key passes, xG, progressive passing)  ·  "
         "proxy score, not the club's proprietary formula",
         benham_df,
@@ -186,12 +231,14 @@ def write_report(df: pd.DataFrame, output: Path) -> None:
     redbull_df = df[[c for c in redbull_cols if c in df.columns]].copy()
     redbull_df.insert(redbull_df.columns.get_loc("RedBullScore"), "Grade",
                        redbull_df["RedBullScore"].apply(grade))
-    redbull_df = redbull_df.sort_values("RedBullScore", ascending=False, na_position="last")
+    redbull_df = redbull_df.sort_values(
+        "RedBullScore", ascending=False, na_position="last"
+    ).head(top_n)
     ws3 = wb.create_sheet("Red Bull Model")
     write_data_sheet(
         ws3,
         "CZ / SK CENTRAL MIDFIELDERS, AGE ≤ 23 — RED BULL MODEL",
-        "Modeled on the Red Bull Group pipeline archetype  ·  "
+        f"Modeled on the Red Bull Group pipeline archetype  ·  Top {len(redbull_df)} of {len(df)}  ·  "
         "weights youth, pressing/duel intensity and progressive ball-carrying  ·  "
         "proxy score, not the club's proprietary formula",
         redbull_df,
@@ -200,31 +247,31 @@ def write_report(df: pd.DataFrame, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output)
 
+    return {"Lamberts": lamberts_df, "Benham": benham_df, "RedBull": redbull_df}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output", type=Path, default=ROOT / "data" / "CZ_SK_Young_CMs_Lamberts.xlsx"
     )
+    parser.add_argument("--top-n", type=int, default=10)
     args = parser.parse_args()
 
     shortlist = pd.read_csv(SHORTLIST_CSV)
     pool = load_cm_pool()
     df = merge_shortlist(shortlist, pool)
 
-    csv_path = args.output.with_suffix(".csv")
-    export_cols = LAMBERTS_COLS + ["BenhamScore", "RedBullScore"]
-    df[[c for c in export_cols if c in df.columns]].drop_duplicates(
-        subset=["Player", "Team", "League"]
-    ).to_csv(csv_path, index=False)
+    tabs = write_report(df, args.output, args.top_n)
+    for name, tab_df in tabs.items():
+        csv_path = args.output.with_name(f"{args.output.stem}_{name}.csv")
+        tab_df.to_csv(csv_path, index=False)
+        print(f"  {name}: {len(tab_df)} rows → {csv_path}")
 
-    write_report(df, args.output)
-
-    print(f"{len(df)} players")
-    print(f"  Lamberts scored: {int(df['Lamberts Index'].notna().sum())}")
+    print(f"\n{len(df)} candidates total")
+    print(f"  Lamberts scored (real market value): {int(df['Lamberts Index'].notna().sum())}")
     print(f"  Benham scored:   {int(df['BenhamScore'].notna().sum())}")
     print(f"  Red Bull scored: {int(df['RedBullScore'].notna().sum())}")
-    print(f"CSV   → {csv_path}")
     print(f"Excel → {args.output}  (Lamberts Model / Benham Model / Red Bull Model tabs)")
 
 

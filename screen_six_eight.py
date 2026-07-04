@@ -225,7 +225,7 @@ def filter_region(df: pd.DataFrame, mode: str, values: tuple[str, ...],
 
 def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
                            region_label: str, max_age: int, max_value: float,
-                           output: Path) -> None:
+                           output: Path, top_n: int) -> None:
     wb = Workbook()
     wb.remove(wb.active)
 
@@ -241,14 +241,14 @@ def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
             sub = df[df["Academy"] == academy_flag] if "Academy" in df.columns else df
             out = sub[[c for c in display_cols if c in sub.columns]].rename(
                 columns={"_League": "League"}
-            ).sort_values(score_col, ascending=False)
+            ).sort_values(score_col, ascending=False).head(top_n)
             ws = wb.create_sheet(f"{base_name} - {tab_suffix}")
             scope = ("senior first-team players only" if tab_suffix == "Senior"
                      else "youth academy + reserve/B-team players only")
             write_data_sheet(
                 ws,
                 f"{title}, AGE ≤ {max_age}, MKT VAL < €{max_value:,.0f} — {tab_suffix.upper()}",
-                f"{region_label}  ·  {len(out)} candidates ({scope})  ·  "
+                f"{region_label}  ·  Top {len(out)} ({scope})  ·  "
                 f"{blurb}  ·  Ranked by {score_col}",
                 out,
             )
@@ -264,11 +264,19 @@ REGION_LABELS = {
 }
 
 
+def write_csv(df: pd.DataFrame, display_cols: list[str], score_col: str,
+              top_n: int, path: Path) -> None:
+    df[[c for c in display_cols if c in df.columns]].rename(
+        columns={"_League": "League"}
+    ).sort_values(score_col, ascending=False).head(top_n).to_csv(path, index=False)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--min-minutes", type=int, default=400)
     parser.add_argument("--max-age", type=int, default=23)
     parser.add_argument("--max-value", type=float, default=800_000)
+    parser.add_argument("--top-n", type=int, default=10)
     args = parser.parse_args()
 
     print("Loading Wyscout database (DM + CM positions, all leagues)…")
@@ -288,22 +296,22 @@ def main() -> None:
 
         output = OUTPUT_FILES[region]
         write_region_workbook(
-            six_out, eight_out, REGION_LABELS[region], args.max_age, args.max_value, output
+            six_out, eight_out, REGION_LABELS[region], args.max_age, args.max_value,
+            output, args.top_n,
         )
 
-        six_csv = output.with_name(output.stem + "_Number6.csv")
-        eight_csv = output.with_name(output.stem + "_Number8.csv")
-        six_out[[c for c in DISPLAY_COLS_SIX if c in six_out.columns]].rename(
-            columns={"_League": "League"}
-        ).sort_values("Six Score", ascending=False).to_csv(six_csv, index=False)
-        eight_out[[c for c in DISPLAY_COLS_EIGHT if c in eight_out.columns]].rename(
-            columns={"_League": "League"}
-        ).sort_values("Eight Score", ascending=False).to_csv(eight_csv, index=False)
+        for base_name, df, display_cols, score_col in (
+            ("Number6", six_out, DISPLAY_COLS_SIX, "Six Score"),
+            ("Number8", eight_out, DISPLAY_COLS_EIGHT, "Eight Score"),
+        ):
+            for tab_suffix, academy_flag in (("Senior", False), ("Academy", True)):
+                sub = df[df["Academy"] == academy_flag] if "Academy" in df.columns else df
+                csv_path = output.with_name(f"{output.stem}_{base_name}_{tab_suffix}.csv")
+                write_csv(sub, display_cols, score_col, args.top_n, csv_path)
 
-        print(f"\n{region}: {len(six_out)} No.6 / {len(eight_out)} No.8 candidates")
+        print(f"\n{region}: {len(six_out)} No.6 / {len(eight_out)} No.8 candidates "
+              f"(top {args.top_n} per tab written)")
         print(f"  Excel → {output}")
-        print(f"  CSV   → {six_csv}")
-        print(f"  CSV   → {eight_csv}")
 
 
 if __name__ == "__main__":
