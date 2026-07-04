@@ -47,8 +47,12 @@ Squad level
 
 Output
 ──────
-  One workbook per region, each with 4 tabs (Number 6/8 x Senior/Academy):
-    data/CZ_SK_U23_Six_Eight.xlsx
+  cz_sk is written as 4 separate single-sheet workbooks:
+    data/CZ_SK_Number6_Senior.xlsx
+    data/CZ_SK_Number6_Academy.xlsx
+    data/CZ_SK_Number8_Senior.xlsx
+    data/CZ_SK_Number8_Academy.xlsx
+  other stays one workbook with 4 tabs (Number 6/8 x Senior/Academy):
     data/Baltics_Scandi_Poland_Slovenia_U23_Six_Eight.xlsx
 
 Usage
@@ -127,7 +131,6 @@ REGIONS: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 
 OUTPUT_FILES = {
-    "cz_sk": ROOT / "data" / "CZ_SK_U23_Six_Eight.xlsx",
     "other": ROOT / "data" / "Baltics_Scandi_Poland_Slovenia_U23_Six_Eight.xlsx",
 }
 
@@ -259,6 +262,23 @@ def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
     wb.save(output)
 
 
+def write_single_sheet_workbook(df: pd.DataFrame, display_cols: list[str], score_col: str,
+                                 title: str, subtitle: str, output: Path, top_n: int) -> pd.DataFrame:
+    out = df[[c for c in display_cols if c in df.columns]].rename(
+        columns={"_League": "League"}
+    ).sort_values(score_col, ascending=False).head(top_n)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.sheet_view.showGridLines = False
+    write_data_sheet(ws, title, subtitle, out)
+    ws.title = "Shortlist"
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(output)
+    return out
+
+
 REGION_LABELS = {
     "cz_sk": "Czech + Slovak leagues (by league played in, any nationality)",
     "other": "Baltics + Scandinavia + Finland + Iceland + Poland + Slovenia leagues "
@@ -292,28 +312,52 @@ def main() -> None:
     six_pool = pool[pool["_arch"] == "SIX"]
     eight_pool = pool[pool["_arch"] == "EIGHT"]
 
+    specs = [
+        ("Number6", "Six Score", DISPLAY_COLS_SIX, "NUMBER 6 — DEFENSIVE MIDFIELDER",
+         "Progressive passing + defensive-actions volume"),
+        ("Number8", "Eight Score", DISPLAY_COLS_EIGHT, "NUMBER 8 — BOX-TO-BOX MIDFIELDER",
+         "Progressive passing, key passes, through passes, shot output"),
+    ]
+
     for region, (mode, values) in REGIONS.items():
         six_out = filter_region(six_pool, mode, values, args.max_age, args.max_value, "Six Score")
         eight_out = filter_region(eight_pool, mode, values, args.max_age, args.max_value, "Eight Score")
-
-        output = OUTPUT_FILES[region]
-        write_region_workbook(
-            six_out, eight_out, REGION_LABELS[region], args.max_age, args.max_value,
-            output, args.top_n,
-        )
-
-        for base_name, df, display_cols, score_col in (
-            ("Number6", six_out, DISPLAY_COLS_SIX, "Six Score"),
-            ("Number8", eight_out, DISPLAY_COLS_EIGHT, "Eight Score"),
-        ):
-            for tab_suffix, academy_flag in (("Senior", False), ("Academy", True)):
-                sub = df[df["Academy"] == academy_flag] if "Academy" in df.columns else df
-                csv_path = output.with_name(f"{output.stem}_{base_name}_{tab_suffix}.csv")
-                write_csv(sub, display_cols, score_col, args.top_n, csv_path)
+        pos_data = {"Number6": six_out, "Number8": eight_out}
 
         print(f"\n{region}: {len(six_out)} No.6 / {len(eight_out)} No.8 candidates "
               f"(top {args.top_n} per tab written)")
-        print(f"  Excel → {output}")
+
+        if region == "cz_sk":
+            # 4 separate single-sheet workbooks instead of tabs in one file.
+            for base_name, score_col, display_cols, title, blurb in specs:
+                df = pos_data[base_name]
+                for tab_suffix, academy_flag in (("Senior", False), ("Academy", True)):
+                    sub = df[df["Academy"] == academy_flag] if "Academy" in df.columns else df
+                    scope = ("senior first-team players only" if tab_suffix == "Senior"
+                             else "youth academy + reserve/B-team players only")
+                    output = ROOT / "data" / f"CZ_SK_{base_name}_{tab_suffix}.xlsx"
+                    out = write_single_sheet_workbook(
+                        sub, display_cols, score_col,
+                        f"{title}, AGE ≤ {args.max_age}, MKT VAL < €{args.max_value:,.0f} — {tab_suffix.upper()}",
+                        f"{REGION_LABELS[region]}  ·  Top {min(len(sub), args.top_n)} ({scope})  ·  "
+                        f"{blurb}  ·  Ranked by {score_col}",
+                        output, args.top_n,
+                    )
+                    out.to_csv(output.with_suffix(".csv"), index=False)
+                    print(f"  Excel → {output}")
+        else:
+            output = OUTPUT_FILES[region]
+            write_region_workbook(
+                six_out, eight_out, REGION_LABELS[region], args.max_age, args.max_value,
+                output, args.top_n,
+            )
+            for base_name, score_col, display_cols, _, _ in specs:
+                df = pos_data[base_name]
+                for tab_suffix, academy_flag in (("Senior", False), ("Academy", True)):
+                    sub = df[df["Academy"] == academy_flag] if "Academy" in df.columns else df
+                    csv_path = output.with_name(f"{output.stem}_{base_name}_{tab_suffix}.csv")
+                    write_csv(sub, display_cols, score_col, args.top_n, csv_path)
+            print(f"  Excel → {output}")
 
 
 if __name__ == "__main__":
