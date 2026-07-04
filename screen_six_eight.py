@@ -20,16 +20,15 @@ Filters applied to the final shortlists
   Market value   < max-value (0/blank market value passes — Wyscout leaves
                  it blank for most lower-league players; excluding those
                  would gut the pool)
-  Region         cz_sk is filtered by passport nationality (Czech Republic
-                 or Slovakia, wherever the player plays). other is filtered
-                 by which domestic league Excel file the player is IN
-                 (Estonia.xlsx, Sweden.xlsx, ... regardless of passport),
-                 i.e. it's a "who plays in these leagues" screen, not a
-                 "who holds these passports" screen.
+  Region         Both regions are filtered by which domestic league Excel
+                 file the player is IN (Czech.xlsx, Estonia.xlsx, ...)
+                 regardless of passport — a "who plays in these leagues"
+                 screen, not a "who holds these passports" screen.
 
 Regions
 ───────
-  cz_sk   — nationality: Czech Republic, Slovakia
+  cz_sk   — league files: Czech, Czech II, Czech U17, Czech U19, Slovakia,
+            Slovakia II
   other   — league files: Baltics (Estonia, Latvia, Lithuania) + Scandinavia
             (Sweden I-III, Norway I-III, Denmark I-IV) + Finland I-II,
             Iceland, Poland I-III, Slovenia I-II
@@ -112,7 +111,10 @@ EIGHT_BLUEPRINT: list[tuple[str, float]] = [
 # mode "nationality" filters on Passport country; mode "league" filters on
 # which Wyscout league file (_League, i.e. the file stem) the row came from.
 REGIONS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "cz_sk": ("nationality", ("Czech Republic", "Slovakia")),
+    "cz_sk": ("league", (
+        "Czech", "Czech II", "Czech U17", "Czech U19",
+        "Slovakia", "Slovakia II",
+    )),
     "other": ("league", (
         "Estonia", "Latvia", "Lithuania",                                  # Baltics
         "Sweden", "Sweden II", "Sweden III",                               # Scandinavia
@@ -258,7 +260,7 @@ def write_region_workbook(six_df: pd.DataFrame, eight_df: pd.DataFrame,
 
 
 REGION_LABELS = {
-    "cz_sk": "Czech Republic + Slovakia (by nationality)",
+    "cz_sk": "Czech + Slovak leagues (by league played in, any nationality)",
     "other": "Baltics + Scandinavia + Finland + Iceland + Poland + Slovenia leagues "
              "(by league played in, any nationality)",
 }
@@ -276,7 +278,7 @@ def main() -> None:
     parser.add_argument("--min-minutes", type=int, default=400)
     parser.add_argument("--max-age", type=int, default=23)
     parser.add_argument("--max-value", type=float, default=800_000)
-    parser.add_argument("--top-n", type=int, default=10)
+    parser.add_argument("--top-n", type=int, default=15)
     args = parser.parse_args()
 
     print("Loading Wyscout database (DM + CM positions, all leagues)…")

@@ -255,7 +255,7 @@ def main() -> None:
     parser.add_argument(
         "--output", type=Path, default=ROOT / "data" / "CZ_SK_Young_CMs_Lamberts.xlsx"
     )
-    parser.add_argument("--top-n", type=int, default=10)
+    parser.add_argument("--top-n", type=int, default=15)
     args = parser.parse_args()
 
     shortlist = pd.read_csv(SHORTLIST_CSV)

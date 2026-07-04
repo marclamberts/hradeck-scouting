@@ -1,11 +1,16 @@
 Player,Team,League,Squad Type,Age,Passport country,Foot,Minutes played,Market value,Eight Score,Progressive passes per 90,Key passes per 90,Through passes per 90,Shots per 90,Goals per 90,xG per 90,Progressive runs per 90
 A. Gajdoš,Slovan Bratislava,Slovakia,Senior First Team,22.0,Slovakia,right,1417,0,96.64,6.8,0.38,0.64,1.33,0.13,0.2,1.91
+D. Teah,Slavia Praha,Czech II,Senior First Team,20.0,Liberia,unknown,727,0,95.17,9.78,0.74,0.74,1.98,0.0,0.11,1.98
 P. Vydra,Sparta Praha,Czech,Senior First Team,22.0,Czech Republic,right,1536,0,94.75,7.15,0.47,0.76,1.05,0.18,0.14,1.0
 T. Jelínek,Pardubice,Czech II,Senior First Team,20.0,Czech Republic,,1249,0,94.29,8.07,0.36,1.15,1.66,0.07,0.08,2.67
 S. Varga,Šamorín,Slovakia II,Senior First Team,23.0,"Slovakia, Hungary",unknown,1715,0,94.02,6.66,0.47,0.68,2.1,0.21,0.11,1.26
-L. Ambros,Górnik Zabrze,Poland,Senior First Team,21.0,Czech Republic,left,1968,250000,89.69,4.85,0.46,0.59,1.97,0.05,0.15,1.83
 A. Sojka,Viktoria Plzeň,Czech,Senior First Team,23.0,Czech Republic,left,2154,0,86.72,6.14,0.25,0.46,1.63,0.13,0.14,2.13
+F. Bzdyl,Žilina,Slovakia,Senior First Team,18.0,Poland,right,1047,0,86.26,7.56,0.26,0.26,2.06,0.09,0.07,1.72
 M. Mateáš,Slovan Bratislava,Slovakia II,Senior First Team,18.0,Slovakia,unknown,2392,0,85.74,6.36,0.34,0.34,1.81,0.08,0.12,2.14
 J. Michlík,Pohronie,Slovakia II,Senior First Team,19.0,Slovakia,unknown,1523,0,85.69,4.08,0.47,0.59,1.65,0.24,0.15,3.01
+M. Breznik,Malženice,Slovakia II,Senior First Team,22.0,Slovenia,left,1828,150000,85.08,7.73,0.49,1.38,0.59,0.1,0.04,1.67
+R. Štorman,Karviná,Czech,Senior First Team,21.0,Slovenia,right,1707,0,83.51,5.54,0.42,0.37,1.63,0.26,0.11,1.21
+Andrei,Žilina,Slovakia II,Senior First Team,20.0,"Romania, Italy",right,768,0,83.29,5.04,0.12,1.76,1.99,0.12,0.08,3.16
 M. Kušnír,Inter Bratislava,Slovakia II,Senior First Team,22.0,Slovakia,unknown,2301,0,78.63,5.4,0.27,0.47,2.15,0.2,0.14,0.98
 H. Hruska,Vlašim,Czech II,Senior First Team,22.0,Czech Republic,,1417,0,78.37,6.16,0.32,0.38,1.84,0.0,0.2,1.91
+X. Adang,Žilina,Slovakia,Senior First Team,21.0,Cameroon,left,2079,0,77.29,5.41,0.26,0.91,1.34,0.13,0.12,0.87
