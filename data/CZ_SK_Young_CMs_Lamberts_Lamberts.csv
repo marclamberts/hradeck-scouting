@@ -1,8 +1,10 @@
 Player,Team,League,Age,Passport country,Foot,Minutes played,Tier,SQS Rank,Lamberts Index,Status,Mkt Val (€),Model Val (€),Val Ratio,vs Hradec,Goals/90,Assists/90,xA/90,Prog Pass/90,Key Pass/90
-L. Ambros,Górnik Zabrze,Poland,21.0,Czech Republic,left,1968,ELITE VALUE,85.46,50.59,CLEAR UPGRADE,250000.0,427300.0,1.7×,31.8,0.05,0.14,0.09,4.85,0.46
+M. Breznik,Malženice,Slovakia II,22.0,Slovenia,left,1828,ELITE VALUE,91.14,72.68,CLEAR UPGRADE,150000.0,273420.0,1.8×,37.4,0.1,0.1,0.15,7.73,0.49
+K. Palumets,Podbrezová,Slovakia,23.0,Estonia,left,2154,ELITE VALUE,87.64,61.06,CLEAR UPGRADE,200000.0,350560.0,1.8×,33.9,0.13,0.17,0.12,6.89,0.42
+E. Metu,FC Košice,Slovakia,23.0,Austria,left,598,VALUE,35.79,13.59,DEPTH,175000.0,125265.0,0.7×,-17.9,0.0,0.0,0.03,5.12,0.3
 P. Kulíšek,Hanácká,Czech II,23.0,Czech Republic,right,1622,FAIR VALUE,11.85,9.38,DEPTH,50000.0,11850.0,0.2×,-41.9,0.0,0.0,0.02,5.55,0.06
 S. Grygar,Ružomberok,Slovakia,21.0,Czech Republic,right,2065,FAIR VALUE,31.36,9.16,DEPTH,175000.0,109760.0,0.6×,-22.3,0.0,0.04,0.07,6.19,0.31
+A. Zeljković,Viktoria Plzeň,Czech,23.0,Slovenia,right,466,FAIR VALUE,92.04,6.42,CLEAR UPGRADE,2000000.0,3681600.0,1.8×,38.3,0.0,0.19,0.06,6.76,0.39
 M. Šviderský,Slovácko,Czech,23.0,Slovakia,left,1219,OVERPRICED,33.18,-9.67,DEPTH,300000.0,199080.0,0.7×,-20.5,0.0,0.0,0.06,5.32,0.3
-K. Daněk,LASK,Austria,23.0,Czech Republic,left,1485,OVERPRICED,65.75,-12.0,CLEAR UPGRADE,1000000.0,1315000.0,1.3×,12.0,0.12,0.12,0.16,3.58,0.67
+C. Zafeiris,Slavia Praha,Czech,22.0,"Greece, Norway",right,1230,OVERPRICED,73.07,-21.91,CLEAR UPGRADE,7000000.0,10229800.0,1.5×,19.4,0.22,0.07,0.08,6.37,0.44
 M. Náprstek,Teplice,Czech,22.0,Czech Republic,left,1292,OVERPRICED,4.11,-34.46,DEPTH,275000.0,27500.0,0.1×,-49.6,0.07,0.0,0.06,3.97,0.14
-M. Sauer,Toulouse,France,22.0,Slovakia,right,807,OVERPRICED,5.58,-75.15,DEPTH,1300000.0,145080.0,0.1×,-48.1,0.11,0.0,0.01,3.9,0.11

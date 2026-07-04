@@ -1,16 +1,18 @@
 """
 export_cz_sk_young_cms.py
 ──────────────────────────
-Screens the full Wyscout database for young central midfielders with a
-Czech or Slovak passport.
+Screens the full Wyscout database for young central midfielders playing
+in the Czech or Slovak leagues.
 
 Filters
 ───────
   Position        — central midfielder (Wyscout CMF/LCMF/RCMF, mapped to
                      the "CM" group used across this repo, see
                      WYSCOUT_POSITION_MAP in wyscout_model.py)
-  Nationality      — "Czech Republic" or "Slovakia" appears anywhere in the
-                     Passport country field (players can hold dual passports)
+  League           — the player's team appears in one of the Czech/Slovak
+                     Wyscout league files (--leagues), regardless of the
+                     player's own passport — a "who plays in these leagues"
+                     screen, not a "who holds these passports" screen.
   Age              — 2003-born or younger. Wyscout exports only carry a
                       point-in-time Age, not a birth date, so this is
                       approximated as Age <= 23 as of the export date.
@@ -30,7 +32,7 @@ import pandas as pd
 ROOT = Path(__file__).parent
 WYSCOUT_DIR = ROOT / "data" / "Wyscout DB"
 
-NATIONALITIES = ("Czech Republic", "Slovakia")
+DEFAULT_LEAGUES = ("Czech", "Czech II", "Czech U17", "Czech U19", "Slovakia", "Slovakia II")
 CM_POSITIONS = {"CMF", "LCMF", "RCMF"}
 
 COLUMNS = [
@@ -43,18 +45,17 @@ COLUMNS = [
 ]
 
 
-def load_players(max_age: int, leagues: list[str] | None = None) -> pd.DataFrame:
+def load_players(max_age: int, leagues: tuple[str, ...] = DEFAULT_LEAGUES) -> pd.DataFrame:
     frames = []
     files = sorted(WYSCOUT_DIR.glob("*.xlsx"))
-    if leagues:
-        files = [f for f in files if f.stem in leagues]
+    files = [f for f in files if f.stem in leagues]
     for path in files:
         try:
             df = pd.read_excel(path)
         except Exception:
             continue
         df.columns = [str(c).strip() for c in df.columns]
-        if "Position" not in df.columns or "Passport country" not in df.columns:
+        if "Position" not in df.columns:
             continue
 
         df = df.copy()
@@ -63,12 +64,10 @@ def load_players(max_age: int, leagues: list[str] | None = None) -> pd.DataFrame
         first_pos = df["Position"].astype(str).str.split(",").str[0].str.strip()
 
         is_cm = first_pos.isin(CM_POSITIONS)
-        passport = df["Passport country"].fillna("").astype(str)
-        is_nat = passport.apply(lambda s: any(n in s for n in NATIONALITIES))
         age = pd.to_numeric(df.get("Age"), errors="coerce")
         is_young = age <= max_age
 
-        frames.append(df.loc[is_cm & is_nat & is_young])
+        frames.append(df.loc[is_cm & is_young])
 
     if not frames:
         return pd.DataFrame(columns=COLUMNS)
@@ -84,7 +83,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--min-minutes", type=int, default=0)
     parser.add_argument("--max-age", type=int, default=23)
-    parser.add_argument("--leagues", nargs="+", default=None)
+    parser.add_argument("--leagues", nargs="+", default=list(DEFAULT_LEAGUES))
     parser.add_argument(
         "--output", type=Path, default=ROOT / "data" / "CZ_SK_Young_CMs.csv"
     )
