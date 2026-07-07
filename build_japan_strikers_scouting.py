@@ -19,14 +19,24 @@ Method
 4. Scouting Score = weighted blend of the four archetype z-scores (goal-
    scoring weighted highest, since finishing is a striker's core job),
    converted to 0-100 the same way.
-5. Uncertainty Score = 0-100, higher = less reliable. Driven by sample size
-   (minutes played vs. a 1800-minute "settled" reference) and by missing
-   data in the scoring metrics.
+5. Uncertainty Score = 0-100, higher = less reliable. Weighted blend of five
+   components (each 0-100, higher = more uncertain):
+     - Minutes gap     (35%): shortfall vs. a 1800-minute "settled" reference
+     - Missing data    (15%): fraction of the 24 scoring metrics that were NaN
+     - Shot-volume gap (20%): shortfall vs. a 30-shot reference — Goal
+       conversion % and Shots on target % are noisy at low shot counts
+     - Age volatility  (15%): distance outside a 24-29 "prime" age band —
+       younger/older players' underlying rates swing more season to season
+     - Metric spread   (15%): how outlier-driven the profile is — pool
+       percentile rank of the std-dev across the player's 24 metric z-scores;
+       a score propped up by one or two standout metrics is less trustworthy
+       than one built on a broadly consistent profile
 
 Output: reports/Japan_Strikers_Scouting.xlsx
-  Sheet 1 — Strikers      : full scouting table
-  Sheet 2 — Archetype Z   : raw per-metric z-scores used in each archetype
-  Sheet 3 — Methodology   : formulas and metric groupings
+  Sheet 1 — Strikers       : full scouting table
+  Sheet 2 — Uncertainty    : per-component uncertainty breakdown
+  Sheet 3 — Archetype Z    : raw per-metric z-scores used in each archetype
+  Sheet 4 — Methodology    : formulas and metric groupings
 """
 from __future__ import annotations
 import warnings; warnings.filterwarnings("ignore")
@@ -51,6 +61,17 @@ OUT_DIR.mkdir(exist_ok=True)
 OUT     = OUT_DIR / "Japan_Strikers_Scouting.xlsx"
 
 REFERENCE_MINUTES = 1800.0   # ~20 full matches -> "settled" sample
+REFERENCE_SHOTS   = 30.0     # shot volume above which conversion-type metrics start to stabilise
+PRIME_AGE_LO, PRIME_AGE_HI = 24, 29    # outside this band, underlying rates are treated as more volatile
+AGE_VOLATILITY_PER_YEAR    = 10.0      # uncertainty points added per year outside the prime band
+
+UNCERTAINTY_WEIGHTS = {
+    "Minutes gap":     0.35,
+    "Missing data":    0.15,
+    "Shot-volume gap": 0.20,
+    "Age volatility":  0.15,
+    "Metric spread":   0.15,
+}
 
 ARCHETYPES = {
     "Target Striker": [
@@ -150,7 +171,43 @@ def confidence_label(u: float) -> str:
     return "Low confidence"
 
 
-def build() -> tuple[pd.DataFrame, pd.DataFrame]:
+def compute_uncertainty(strikers: pd.DataFrame, z: pd.DataFrame, missing_frac: pd.Series) -> pd.DataFrame:
+    """Five 0-100 components (higher = more uncertain), blended by UNCERTAINTY_WEIGHTS."""
+    idx = strikers.index
+
+    minutes      = strikers["Minutes played"].fillna(0)
+    minutes_rel  = (minutes / REFERENCE_MINUTES).clip(upper=1.0)
+    minutes_gap  = 100 * (1 - minutes_rel)
+
+    missing_data = missing_frac * 100
+
+    shots       = strikers.get("Shots", pd.Series(0, index=idx)).fillna(0)
+    shots_rel   = (shots / REFERENCE_SHOTS).clip(upper=1.0)
+    shot_gap    = 100 * (1 - shots_rel)
+
+    age      = pd.to_numeric(strikers["Age"], errors="coerce")
+    age_gap  = np.where(age <= PRIME_AGE_LO, PRIME_AGE_LO - age,
+                 np.where(age >= PRIME_AGE_HI, age - PRIME_AGE_HI, 0.0))
+    age_gap  = pd.Series(age_gap, index=idx).fillna(PRIME_AGE_HI - PRIME_AGE_LO)  # unknown age -> mid-range penalty
+    age_vol  = (age_gap * AGE_VOLATILITY_PER_YEAR).clip(0, 100)
+
+    z_std         = z.std(axis=1)
+    metric_spread = (z_std.rank(pct=True) * 100)
+
+    comp = pd.DataFrame({
+        "Minutes gap":     minutes_gap.round(1),
+        "Missing data":    missing_data.round(1),
+        "Shot-volume gap": shot_gap.round(1),
+        "Age volatility":  age_vol.round(1),
+        "Metric spread":   metric_spread.round(1),
+    }, index=idx)
+
+    blended = sum(comp[name] * w for name, w in UNCERTAINTY_WEIGHTS.items())
+    comp["Uncertainty Score"] = blended.clip(0, 100).round(1)
+    return comp
+
+
+def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     strikers = load_strikers()
 
     all_metrics = sorted({m for grp in ARCHETYPES.values() for m in grp})
@@ -169,9 +226,10 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame]:
     scouting_z = sum(archetype_z[name] * w for name, w in SCOUTING_WEIGHTS.items())
     scouting_score = pd.Series(norm.cdf(scouting_z) * 100, index=scouting_z.index).round(1)
 
-    minutes    = strikers["Minutes played"].fillna(0)
-    reliability = (minutes / REFERENCE_MINUTES).clip(upper=1.0)
-    uncertainty = (100 * (0.7 * (1 - reliability) + 0.3 * missing_frac)).clip(0, 100).round(1)
+    uncert_df   = compute_uncertainty(strikers, z, missing_frac)
+    uncertainty = uncert_df["Uncertainty Score"]
+
+    minutes = strikers["Minutes played"].fillna(0)
 
     primary = pct_df.idxmax(axis=1)
     is_complete = (pct_df.min(axis=1) >= COMPLETE_FORWARD_THRESHOLD)
@@ -199,8 +257,9 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame]:
     ptteam = out[["Player", "Team"]].loc[order].reset_index(drop=True)
     out    = out.loc[order].reset_index(drop=True)
     zsheet = pd.concat([ptteam, z.loc[order].round(3).reset_index(drop=True)], axis=1)
+    usheet = pd.concat([ptteam, uncert_df.loc[order].reset_index(drop=True)], axis=1)
 
-    return out, zsheet
+    return out, zsheet, usheet
 
 
 METHOD_ROWS = [
@@ -218,7 +277,12 @@ METHOD_ROWS = [
     ("Scouting Score",      "norm.cdf(0.40*Goalscoring_z + 0.20*Target_z + 0.20*Dynamic_z + 0.20*Second_z) * 100"),
     ("Score tiers",         "Elite >=80, Very Good >=65, Solid >=50, Fringe >=35, else Development"),
     ("", ""),
-    ("Uncertainty Score",   "100 * (0.7*(1 - min(minutes/1800,1)) + 0.3*missing_metric_fraction), 0-100, higher = less reliable"),
+    ("Uncertainty Score",     "weighted blend of 5 components (0-100 each, higher = more uncertain) — see 'Uncertainty' sheet for the per-player breakdown"),
+    ("  Minutes gap (35%)",   f"100 * (1 - min(minutes/{REFERENCE_MINUTES:.0f}, 1)) — shortfall vs. a settled ~20-match sample"),
+    ("  Missing data (15%)",  "100 * fraction of the 24 scoring metrics that were NaN for this player"),
+    ("  Shot-volume gap (20%)", f"100 * (1 - min(total shots/{REFERENCE_SHOTS:.0f}, 1)) — Goal conversion %% / Shots on target %% are noisy on few shots"),
+    ("  Age volatility (15%)",  f"years outside the {PRIME_AGE_LO}-{PRIME_AGE_HI} prime band * {AGE_VOLATILITY_PER_YEAR:.0f}, capped at 100"),
+    ("  Metric spread (15%)",   "pool percentile rank of std-dev across the player's 24 metric z-scores — flags scores propped up by 1-2 standout metrics"),
     ("Confidence label",    "High <=25, Medium <=50, Low >50"),
     ("Label",               "'{Score tier} {Primary Archetype}', e.g. 'Elite Goalscoring Striker'"),
 ]
@@ -258,13 +322,38 @@ def style_workbook(path: Path, main: pd.DataFrame) -> None:
     for ci, col in enumerate(main.columns, 1):
         ws.column_dimensions[get_column_letter(ci)].width = widths.get(col, 13)
 
+    if "Uncertainty" in wb.sheetnames:
+        uws = wb["Uncertainty"]
+        for cell in uws[1]:
+            cell.fill = hfill
+            cell.font = hfont
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        uws.freeze_panes = "A2"
+        uws.auto_filter.ref = uws.dimensions
+        uncert_cols = list(UNCERTAINTY_WEIGHTS.keys()) + ["Uncertainty Score"]
+        for col_name in uncert_cols:
+            header_vals = [c.value for c in uws[1]]
+            if col_name not in header_vals:
+                continue
+            ci  = header_vals.index(col_name) + 1
+            ltr = get_column_letter(ci)
+            rng = f"{ltr}2:{ltr}{uws.max_row}"
+            uws.conditional_formatting.add(rng, ColorScaleRule(
+                start_type="min", start_color="4ADE80",
+                mid_type="percentile", mid_value=50, mid_color="FEF08A",
+                end_type="max", end_color="F87171",
+            ))
+        for ci, col in enumerate(header_vals, 1):
+            uws.column_dimensions[get_column_letter(ci)].width = widths.get(col, 15)
+
     wb.save(path)
 
 
-def save(main: pd.DataFrame, zsheet: pd.DataFrame) -> None:
+def save(main: pd.DataFrame, zsheet: pd.DataFrame, usheet: pd.DataFrame) -> None:
     method_df = pd.DataFrame(METHOD_ROWS, columns=["Item", "Detail"])
     with pd.ExcelWriter(OUT, engine="openpyxl") as w:
         main.to_excel(w, index=False, sheet_name="Strikers")
+        usheet.to_excel(w, index=False, sheet_name="Uncertainty")
         zsheet.to_excel(w, index=False, sheet_name="Archetype Z")
         method_df.to_excel(w, index=False, sheet_name="Methodology")
     style_workbook(OUT, main)
@@ -272,9 +361,9 @@ def save(main: pd.DataFrame, zsheet: pd.DataFrame) -> None:
 
 def main() -> None:
     print("  Loading Japan II/III strikers …")
-    main_df, z_df = build()
+    main_df, z_df, u_df = build()
     print(f"  {len(main_df)} CF-listed strikers scored")
-    save(main_df, z_df)
+    save(main_df, z_df, u_df)
     print(f"  Saved -> {OUT}")
     print(main_df[["Player", "Team", "Primary Archetype", "Scouting Score",
                     "Uncertainty Score", "Confidence", "Label"]].head(15).to_string(index=False))
