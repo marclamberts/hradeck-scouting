@@ -262,12 +262,17 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return out, zsheet, usheet
 
 
-def build_shortlist(main: pd.DataFrame, max_per_archetype: int = 10) -> pd.DataFrame:
+def build_shortlist(
+    main: pd.DataFrame,
+    max_per_archetype: int = 10,
+    exclude_archetypes: tuple[str, ...] = ("Complete Forward",),
+) -> pd.DataFrame:
     """Top-N players per Primary Archetype, ranked by Scouting Score."""
-    order = (main["Primary Archetype"].value_counts().index.tolist())
+    pool  = main.loc[~main["Primary Archetype"].isin(exclude_archetypes)]
+    order = pool["Primary Archetype"].value_counts().index.tolist()
     frames = []
     for arch in order:
-        grp = (main.loc[main["Primary Archetype"] == arch]
+        grp = (pool.loc[pool["Primary Archetype"] == arch]
                    .sort_values("Scouting Score", ascending=False)
                    .head(max_per_archetype)
                    .copy())
