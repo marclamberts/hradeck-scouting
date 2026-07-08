@@ -262,6 +262,23 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return out, zsheet, usheet
 
 
+def build_shortlist(main: pd.DataFrame, max_per_archetype: int = 10) -> pd.DataFrame:
+    """Top-N players per Primary Archetype, ranked by Scouting Score."""
+    order = (main["Primary Archetype"].value_counts().index.tolist())
+    frames = []
+    for arch in order:
+        grp = (main.loc[main["Primary Archetype"] == arch]
+                   .sort_values("Scouting Score", ascending=False)
+                   .head(max_per_archetype)
+                   .copy())
+        grp.insert(0, "Rank", range(1, len(grp) + 1))
+        frames.append(grp)
+    out = pd.concat(frames, ignore_index=True)
+    cols = ["Primary Archetype", "Rank", "Player", "Team", "Age", "Minutes",
+            "Scouting Score", "Uncertainty Score", "Confidence", "Label"]
+    return out[cols]
+
+
 METHOD_ROWS = [
     ("Source",              "data/Wyscout DB/Japan II III.xlsx (J.League 2 + J3 combined export)"),
     ("Filter",              "Position == 'CF', or first-listed position == 'CF' (e.g. 'CF, AMF')"),
@@ -346,13 +363,48 @@ def style_workbook(path: Path, main: pd.DataFrame) -> None:
         for ci, col in enumerate(header_vals, 1):
             uws.column_dimensions[get_column_letter(ci)].width = widths.get(col, 15)
 
+    if "Shortlist" in wb.sheetnames:
+        sws = wb["Shortlist"]
+        for cell in sws[1]:
+            cell.fill = hfill
+            cell.font = hfont
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        sws.freeze_panes = "A2"
+        sws.auto_filter.ref = sws.dimensions
+        header_vals = [c.value for c in sws[1]]
+        for col_name in ["Scouting Score", "Uncertainty Score"]:
+            ci  = header_vals.index(col_name) + 1
+            ltr = get_column_letter(ci)
+            rng = f"{ltr}2:{ltr}{sws.max_row}"
+            reverse = (col_name == "Uncertainty Score")
+            lo, mid, hi = ("F87171", "FEF08A", "4ADE80") if not reverse else ("4ADE80", "FEF08A", "F87171")
+            sws.conditional_formatting.add(rng, ColorScaleRule(
+                start_type="min", start_color=lo,
+                mid_type="percentile", mid_value=50, mid_color=mid,
+                end_type="max", end_color=hi,
+            ))
+        sl_widths = {"Primary Archetype": 20, "Player": 22, "Team": 22, "Confidence": 16, "Label": 30}
+        for ci, col in enumerate(header_vals, 1):
+            sws.column_dimensions[get_column_letter(ci)].width = sl_widths.get(col, 12)
+        # shade alternating archetype groups for readability
+        band = PatternFill("solid", fgColor="F1F5FF")
+        archetypes_seen: list[str] = []
+        for ri in range(2, sws.max_row + 1):
+            val = sws.cell(row=ri, column=1).value
+            if val not in archetypes_seen:
+                archetypes_seen.append(val)
+            if archetypes_seen.index(val) % 2 == 1:
+                for ci in range(1, sws.max_column + 1):
+                    sws.cell(row=ri, column=ci).fill = band
+
     wb.save(path)
 
 
-def save(main: pd.DataFrame, zsheet: pd.DataFrame, usheet: pd.DataFrame) -> None:
+def save(main: pd.DataFrame, zsheet: pd.DataFrame, usheet: pd.DataFrame, shortlist: pd.DataFrame) -> None:
     method_df = pd.DataFrame(METHOD_ROWS, columns=["Item", "Detail"])
     with pd.ExcelWriter(OUT, engine="openpyxl") as w:
         main.to_excel(w, index=False, sheet_name="Strikers")
+        shortlist.to_excel(w, index=False, sheet_name="Shortlist")
         usheet.to_excel(w, index=False, sheet_name="Uncertainty")
         zsheet.to_excel(w, index=False, sheet_name="Archetype Z")
         method_df.to_excel(w, index=False, sheet_name="Methodology")
@@ -362,11 +414,11 @@ def save(main: pd.DataFrame, zsheet: pd.DataFrame, usheet: pd.DataFrame) -> None
 def main() -> None:
     print("  Loading Japan II/III strikers …")
     main_df, z_df, u_df = build()
+    shortlist_df = build_shortlist(main_df)
     print(f"  {len(main_df)} CF-listed strikers scored")
-    save(main_df, z_df, u_df)
+    save(main_df, z_df, u_df, shortlist_df)
     print(f"  Saved -> {OUT}")
-    print(main_df[["Player", "Team", "Primary Archetype", "Scouting Score",
-                    "Uncertainty Score", "Confidence", "Label"]].head(15).to_string(index=False))
+    print(shortlist_df.to_string(index=False))
 
 
 if __name__ == "__main__":
