@@ -170,12 +170,18 @@
   .reg-diag b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
   /* ── Filters ────────────────────────────────────────────────────── */
+  .filters-intro {
+    font-size: 12.5px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px;
+  }
+  .filter-group-label { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 6px; }
+  .filter-group-label:first-child { margin-top: 0; }
   .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .filters input, .filters select {
     background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-primary);
     border-radius: 8px; padding: 7px 10px;
   }
-  .filters input[type=search] { min-width: 190px; }
+  .filters input[type=search] { min-width: 220px; }
   .minutes-slider { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
   .minutes-slider input[type=range] { width: 130px; accent-color: var(--bentham); }
   .chip-group { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -188,6 +194,26 @@
   .chip.star { color: var(--warning); }
   .chip.star.active { background: var(--warning); color: #1a1400; }
   .filters-meta { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+  .more-filters-toggle {
+    background: none; border: none; color: var(--text-secondary); font-size: 12px; font-weight: 600;
+    cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 4px;
+  }
+  .more-filters-toggle:hover { color: var(--text-primary); }
+  .more-filters-toggle .arrow { transition: transform .15s; font-size: 10px; }
+  .more-filters-toggle.open .arrow { transform: rotate(180deg); }
+  .more-filters { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .more-filters.open { display: block; }
+
+  /* ── Help / glossary ────────────────────────────────────────────── */
+  .help-btn {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--surface-1); border: 1px solid var(--border-strong);
+    color: var(--text-secondary); font-weight: 700; font-size: 13px; cursor: pointer; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .help-btn:hover { background: var(--surface-2); color: var(--text-primary); }
+  .glossary-item { margin-bottom: 12px; }
+  .glossary-item dt { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .glossary-item dd { margin: 0; font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; }
 
   /* ── Top targets ────────────────────────────────────────────────── */
   .target-pos-group { margin-bottom: 14px; }
@@ -318,6 +344,7 @@
       </div>
     </div>
     <div class="top-actions">
+      <button class="help-btn" id="helpBtn" title="What do these terms mean?">?</button>
       <button class="btn small" id="themeToggle">🌙 Dark</button>
       <button class="btn small" id="exportShortlist">★ Export shortlist</button>
       <button class="btn small" id="exportCsv">⇩ Export filtered CSV</button>
@@ -333,85 +360,44 @@
 
   <div class="tiles" id="tiles"></div>
 
-  <div class="panel" id="methodPanel">
-    <div class="panel-head" data-toggle="methodPanel">
-      <h2>Methodology — three recruitment philosophies, one blend</h2>
-      <span class="chev">▾</span>
-    </div>
-    <div class="panel-body">
-      <p class="desc">
-        Every player is scored 0–100 by three independent sub-models, each built on the per-90 metrics
-        Wyscout exposes, cross-league adjusted by a 6-tier league-strength coefficient (Elite → Youth), and
-        blended into <b>THE LAMBERTS MODEL</b> using the weights below. Drag a slider to re-blend the entire
-        45k-player pool live — the targets, table, charts and stat tiles below recompute instantly.
-      </p>
-      <div class="model-grid">
-        <div class="model-card" style="--c: var(--bentham)">
-          <h3>Bentham</h3>
-          <p><b>Brentford · FC Midtjylland</b> — statistical "Moneyball" recruitment. Rewards high-volume output,
-             set-piece threat (crosses, aerials, dead-ball delivery) and the 22–27 prime trade-value window.
-             Full league-strength penalty applied.</p>
-          <div class="weight-row">
-            <input type="range" id="wBentham" min="0" max="100" value="35">
-            <span class="weight-val" id="wBenthamVal">35%</span>
-          </div>
-        </div>
-        <div class="model-card" style="--c: var(--jamestown)">
-          <h3>Jamestown</h3>
-          <p><b>Brighton · Union SG · Hearts</b> — multi-club data network. Rewards technical/creative ceiling
-             (dribbling, progressive carrying, chance creation) found early in lower-profile leagues, age skewed
-             to 18–22. League-strength penalty heavily damped — hidden gems are the point.</p>
-          <div class="weight-row">
-            <input type="range" id="wJamestown" min="0" max="100" value="35">
-            <span class="weight-val" id="wJamestownVal">35%</span>
-          </div>
-        </div>
-        <div class="model-card" style="--c: var(--redbull)">
-          <h3>Red Bull</h3>
-          <p><b>RB Salzburg</b> — pressing/athleticism pipeline. Rewards duels, aerial power, acceleration and
-             transition speed, with the steepest youth curve of the three (peaks 17–20, falls off hard by mid-20s).</p>
-          <div class="weight-row">
-            <input type="range" id="wRedbull" min="0" max="100" value="30">
-            <span class="weight-val" id="wRedbullVal">30%</span>
-          </div>
-        </div>
-      </div>
-      <div class="weights-footer">
-        <span id="weightSum">Weights normalise to 100% automatically.</span>
-        <button class="btn small" id="resetWeights">Reset to default (35 / 35 / 30)</button>
-      </div>
-      <p class="desc" style="margin-top:14px;">
-        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Bentham + Jamestown + Red Bull
-        + Age + Age² + log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via
-        Wyscout) actually lists a value for, then used to <i>predict</i> a value for every player in the pool. It
-        runs on the three raw sub-scores directly, <b>not</b> the blended Lamberts Index, so it stays a fixed,
-        objective estimate — it will not shift just because you personally weight one philosophy higher on the
-        sliders above. It is a model-derived number, not a copy of Transfermarkt's figure, so it can diverge from
-        it in either direction — that gap is the recruitment signal (Value Gap = Expected − Market).
-      </p>
-      <div class="reg-diag" id="regDiag"></div>
-    </div>
-  </div>
+  <p class="filters-intro">
+    💡 <b>New here?</b> Jump straight to <a href="#targets">★ Top Targets</a> below for a ready-made shortlist,
+    or tap a quick filter to narrow the whole board in one click. Hover any score, tag or column header for a
+    plain-English explanation — or tap the <b>?</b> button above for the full glossary.
+  </p>
 
   <div class="panel">
+    <div class="filter-group-label">Search</div>
     <div class="filters" id="filters">
       <input type="search" id="searchBox" placeholder="Search player or team…">
-      <select id="tierFilter"><option value="">All league tiers</option></select>
-      <select id="leagueFilter"><option value="">All leagues</option></select>
-      <select id="valueTagFilter">
-        <option value="">Any value tag</option>
-        <option value="UNDERVALUED">Undervalued</option>
-        <option value="FAIR">Fair</option>
-        <option value="OVERVALUED">Overvalued</option>
-        <option value="UNLISTED">Unlisted (no TM value)</option>
-      </select>
-      <input type="text" id="ageMin" placeholder="Age min" style="width:70px">
-      <input type="text" id="ageMax" placeholder="Age max" style="width:70px">
-      <label class="minutes-slider">Min minutes <input type="range" id="minMinutes" min="500" max="3500" step="50" value="500"><span id="minMinutesVal">500</span></label>
-      <button class="btn small" id="clearFilters">Clear</button>
     </div>
-    <div class="chip-group" id="posChips" style="margin-top:10px;"></div>
-    <div class="chip-group" id="quickChips" style="margin-top:6px;"></div>
+
+    <div class="filter-group-label">Quick filters <span style="text-transform:none; letter-spacing:0; font-weight:400;">— click to apply, click again to remove</span></div>
+    <div class="chip-group" id="presetChips"></div>
+
+    <div class="filter-group-label">Position</div>
+    <div class="chip-group" id="posChips"></div>
+
+    <button class="more-filters-toggle" id="moreFiltersToggle" type="button">
+      <span class="arrow">▾</span> More filters (league, tier, age, minutes, value)
+    </button>
+    <div class="more-filters" id="moreFilters">
+      <div class="filters">
+        <select id="tierFilter" title="Restrict to a league strength tier"><option value="">All league tiers</option></select>
+        <select id="leagueFilter" title="Restrict to one specific league"><option value="">All leagues</option></select>
+        <select id="valueTagFilter" title="Filter by how the model rates their price vs. Transfermarkt">
+          <option value="">Any value tag</option>
+          <option value="UNDERVALUED">Undervalued</option>
+          <option value="FAIR">Fair</option>
+          <option value="OVERVALUED">Overvalued</option>
+          <option value="UNLISTED">Unlisted (no TM value)</option>
+        </select>
+        <input type="text" id="ageMin" placeholder="Age min" style="width:70px" title="Minimum age">
+        <input type="text" id="ageMax" placeholder="Age max" style="width:70px" title="Maximum age">
+        <label class="minutes-slider" title="Only show players who've played at least this many minutes">Min minutes <input type="range" id="minMinutes" min="500" max="3500" step="50" value="500"><span id="minMinutesVal">500</span></label>
+        <button class="btn small" id="clearFilters">Clear all filters</button>
+      </div>
+    </div>
     <div class="filters-meta" id="filtersMeta"></div>
   </div>
 
@@ -473,6 +459,66 @@
     </div>
   </section>
 
+  <div class="panel collapsed" id="methodPanel">
+    <div class="panel-head" data-toggle="methodPanel">
+      <h2>Methodology — three recruitment philosophies, one blend (click to expand)</h2>
+      <span class="chev">▾</span>
+    </div>
+    <div class="panel-body">
+      <p class="desc">
+        Every player is scored 0–100 by three independent sub-models, each built on the per-90 metrics
+        Wyscout exposes, cross-league adjusted by a 6-tier league-strength coefficient (Elite → Youth), and
+        blended into <b>THE LAMBERTS MODEL</b> using the weights below. Drag a slider to re-blend the entire
+        45k-player pool live — the targets, table, charts and stat tiles above recompute instantly.
+      </p>
+      <div class="model-grid">
+        <div class="model-card" style="--c: var(--bentham)">
+          <h3>Bentham</h3>
+          <p><b>Brentford · FC Midtjylland</b> — statistical "Moneyball" recruitment. Rewards high-volume output,
+             set-piece threat (crosses, aerials, dead-ball delivery) and the 22–27 prime trade-value window.
+             Full league-strength penalty applied.</p>
+          <div class="weight-row">
+            <input type="range" id="wBentham" min="0" max="100" value="35">
+            <span class="weight-val" id="wBenthamVal">35%</span>
+          </div>
+        </div>
+        <div class="model-card" style="--c: var(--jamestown)">
+          <h3>Jamestown</h3>
+          <p><b>Brighton · Union SG · Hearts</b> — multi-club data network. Rewards technical/creative ceiling
+             (dribbling, progressive carrying, chance creation) found early in lower-profile leagues, age skewed
+             to 18–22. League-strength penalty heavily damped — hidden gems are the point.</p>
+          <div class="weight-row">
+            <input type="range" id="wJamestown" min="0" max="100" value="35">
+            <span class="weight-val" id="wJamestownVal">35%</span>
+          </div>
+        </div>
+        <div class="model-card" style="--c: var(--redbull)">
+          <h3>Red Bull</h3>
+          <p><b>RB Salzburg</b> — pressing/athleticism pipeline. Rewards duels, aerial power, acceleration and
+             transition speed, with the steepest youth curve of the three (peaks 17–20, falls off hard by mid-20s).</p>
+          <div class="weight-row">
+            <input type="range" id="wRedbull" min="0" max="100" value="30">
+            <span class="weight-val" id="wRedbullVal">30%</span>
+          </div>
+        </div>
+      </div>
+      <div class="weights-footer">
+        <span id="weightSum">Weights normalise to 100% automatically.</span>
+        <button class="btn small" id="resetWeights">Reset to default (35 / 35 / 30)</button>
+      </div>
+      <p class="desc" style="margin-top:14px;">
+        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Bentham + Jamestown + Red Bull
+        + Age + Age² + log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via
+        Wyscout) actually lists a value for, then used to <i>predict</i> a value for every player in the pool. It
+        runs on the three raw sub-scores directly, <b>not</b> the blended Lamberts Index, so it stays a fixed,
+        objective estimate — it will not shift just because you personally weight one philosophy higher on the
+        sliders above. It is a model-derived number, not a copy of Transfermarkt's figure, so it can diverge from
+        it in either direction — that gap is the recruitment signal (Value Gap = Expected − Market).
+      </p>
+      <div class="reg-diag" id="regDiag"></div>
+    </div>
+  </div>
+
   <footer>
     Built from Wyscout exports across all 165 tracked leagues · Data generated <span id="genDate"></span> ·
     Expected Value is a statistical estimate for scouting triage, not a valuation opinion — always sanity-check
@@ -498,6 +544,28 @@
   const TIER_LABELS = D.tierLabels;
   const POS_LABELS = D.positionLabels;
   const POS_ORDER = ["GK", "CB", "FB", "DM", "CM", "W", "FW"];
+
+  const VALUE_TAG_DESC = {
+    UNDERVALUED: "The model's Expected Value is at least 1.3× the Transfermarkt-listed market value — it rates them well above what the market currently charges.",
+    FAIR: "Expected Value sits within 0.7×–1.3× of the market value — the price roughly matches the model's read on output.",
+    OVERVALUED: "Expected Value is 0.7× or less of the market value — the model rates them below what the market currently charges.",
+    UNLISTED: "No Transfermarkt market value on file for this player, so there's nothing to compare Expected Value against.",
+  };
+  const LAMBERTS_TIER_DESC = {
+    ELITE: "Top 10% within this position group — Lamberts Index ≥ 90.",
+    "HIGH POTENTIAL": "Top quartile within this position group — Lamberts Index 75–89.",
+    "SOLID TARGET": "Above the median within this position group — Lamberts Index 55–74.",
+    ROTATION: "Below-average output for this position group — Lamberts Index 35–54.",
+    LONGSHOT: "Bottom third within this position group — Lamberts Index under 35.",
+  };
+  const LEAGUE_TIER_DESC = {
+    1: "Elite — the 5 major European leagues (Premier League, La Liga, Bundesliga, Serie A, Ligue 1).",
+    2: "Top — strong first divisions outside the big 5 (e.g. Eredivisie, Primeira Liga, MLS, Liga MX).",
+    3: "Strong — solid top flights and the best second divisions (e.g. Championship, Serie B, Eliteserien).",
+    4: "Developing — most of the world's top flights plus stronger lower divisions.",
+    5: "Lower — weaker top flights and lower divisions (e.g. League Two, Regionalliga).",
+    6: "Youth — youth/grassroots competitions (e.g. U17/U19 leagues).",
+  };
 
   // ── Theme ────────────────────────────────────────────────────────────
   const themeBtn = document.getElementById("themeToggle");
@@ -644,6 +712,7 @@
   const filters = {
     search: "", tier: "", league: "", pos: new Set(), valueTag: "", ageMin: null, ageMax: null,
     minMinutes: D.minMinutes, expiringSoon: false, shortlistOnly: false,
+    minIndex: null, maxMarketValue: null,
   };
 
   const tierFilterEl = document.getElementById("tierFilter");
@@ -664,6 +733,7 @@
   POS_ORDER.forEach(p => {
     const chip = document.createElement("span");
     chip.className = "chip"; chip.textContent = POS_LABELS[p] || p; chip.dataset.pos = p;
+    chip.title = `Show only ${POS_LABELS[p] || p}s`;
     chip.addEventListener("click", () => {
       if (filters.pos.has(p)) { filters.pos.delete(p); chip.classList.remove("active"); }
       else { filters.pos.add(p); chip.classList.add("active"); }
@@ -672,23 +742,62 @@
     posChipsEl.appendChild(chip);
   });
 
-  const quickChipsEl = document.getElementById("quickChips");
-  const expiringChip = document.createElement("span");
-  expiringChip.className = "chip"; expiringChip.textContent = `Contract ≤ ${CONTRACT_CUTOFF.slice(0,4)}`;
-  expiringChip.addEventListener("click", () => {
-    filters.expiringSoon = !filters.expiringSoon;
-    expiringChip.classList.toggle("active", filters.expiringSoon);
-    state.page = 1; refreshAll();
+  // ── Quick filter presets — one click applies a ready-made combination ──
+  const PRESETS = [
+    {
+      id: "eliteUndervalued", label: "⭐ Elite & Undervalued",
+      title: "Lamberts Index ≥ 75 and the model rates them at least 1.3× their market value",
+      on: () => { filters.valueTag = "UNDERVALUED"; filters.minIndex = 75; document.getElementById("valueTagFilter").value = "UNDERVALUED"; },
+      off: () => { filters.valueTag = ""; filters.minIndex = null; document.getElementById("valueTagFilter").value = ""; },
+    },
+    {
+      id: "youngProspects", label: "🌱 U21 Prospects",
+      title: "Players aged 21 or younger",
+      on: () => { filters.ageMax = 21; document.getElementById("ageMax").value = "21"; },
+      off: () => { filters.ageMax = null; document.getElementById("ageMax").value = ""; },
+    },
+    {
+      id: "bargains", label: "💰 Bargains (<€2M)",
+      title: "Listed Transfermarkt value under €2,000,000",
+      on: () => { filters.maxMarketValue = 2_000_000; },
+      off: () => { filters.maxMarketValue = null; },
+    },
+    {
+      id: "expiring", label: `📅 Contract ≤ ${CONTRACT_CUTOFF.slice(0,4)}`,
+      title: "Contract expires by the end of next season — free or cut-price to sign",
+      on: () => { filters.expiringSoon = true; },
+      off: () => { filters.expiringSoon = false; },
+    },
+    {
+      id: "shortlist", label: "★ My Shortlist", star: true,
+      title: "Only players you've starred",
+      on: () => { filters.shortlistOnly = true; },
+      off: () => { filters.shortlistOnly = false; },
+    },
+  ];
+  const presetChipsEl = document.getElementById("presetChips");
+  const presetChipEls = {};
+  PRESETS.forEach(preset => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (preset.star ? " star" : "");
+    chip.textContent = preset.label;
+    chip.title = preset.title;
+    chip.addEventListener("click", () => {
+      const nowActive = !chip.classList.contains("active");
+      (nowActive ? preset.on : preset.off)();
+      chip.classList.toggle("active", nowActive);
+      state.page = 1; refreshAll();
+    });
+    presetChipEls[preset.id] = chip;
+    presetChipsEl.appendChild(chip);
   });
-  const shortlistChip = document.createElement("span");
-  shortlistChip.className = "chip star"; shortlistChip.textContent = "★ Shortlist only";
-  shortlistChip.addEventListener("click", () => {
-    filters.shortlistOnly = !filters.shortlistOnly;
-    shortlistChip.classList.toggle("active", filters.shortlistOnly);
-    state.page = 1; refreshAll();
+
+  const moreFiltersToggleBtn = document.getElementById("moreFiltersToggle");
+  const moreFiltersEl = document.getElementById("moreFilters");
+  moreFiltersToggleBtn.addEventListener("click", () => {
+    moreFiltersEl.classList.toggle("open");
+    moreFiltersToggleBtn.classList.toggle("open");
   });
-  quickChipsEl.appendChild(expiringChip);
-  quickChipsEl.appendChild(shortlistChip);
 
   document.getElementById("searchBox").addEventListener("input", e => { filters.search = e.target.value.trim().toLowerCase(); state.page=1; refreshAll(); });
   document.getElementById("tierFilter").addEventListener("change", e => { filters.tier = e.target.value; state.page=1; refreshAll(); });
@@ -704,6 +813,7 @@
   document.getElementById("clearFilters").addEventListener("click", () => {
     filters.search = ""; filters.tier = ""; filters.league = ""; filters.valueTag = ""; filters.ageMin = null; filters.ageMax = null;
     filters.pos.clear(); filters.expiringSoon = false; filters.shortlistOnly = false; filters.minMinutes = D.minMinutes;
+    filters.minIndex = null; filters.maxMarketValue = null;
     document.getElementById("searchBox").value = "";
     document.getElementById("tierFilter").value = "";
     document.getElementById("leagueFilter").value = "";
@@ -713,8 +823,7 @@
     document.getElementById("minMinutes").value = D.minMinutes;
     document.getElementById("minMinutesVal").textContent = D.minMinutes.toLocaleString();
     document.querySelectorAll("#posChips .chip").forEach(c => c.classList.remove("active"));
-    expiringChip.classList.remove("active");
-    shortlistChip.classList.remove("active");
+    Object.values(presetChipEls).forEach(c => c.classList.remove("active"));
     state.page = 1;
     refreshAll();
   });
@@ -723,24 +832,25 @@
   const state = { filtered: [], sortCol: "lambertsIndex", sortDir: "desc", page: 1, pageSize: 50 };
 
   const TABLE_COLS = [
-    { key: "_star", label: "★", nosort: true },
-    { key: "player", label: "Player" },
-    { key: "league", label: "League" },
-    { key: "pos", label: "Pos" },
+    { key: "_star", label: "★", nosort: true, title: "Shortlist this player" },
+    { key: "player", label: "Player", title: "Player name and current club" },
+    { key: "league", label: "League", title: "League and league strength tier" },
+    { key: "pos", label: "Pos", title: "Position group" },
     { key: "age", label: "Age" },
-    { key: "marketValue", label: "Market €" },
-    { key: "expectedValue", label: "Expected €" },
-    { key: "valueRatio", label: "EV/MV" },
-    { key: "valueTag", label: "Tag" },
-    { key: "benthamScore", label: "Bentham" },
-    { key: "jamestownScore", label: "Jamestown" },
-    { key: "redbullScore", label: "Red Bull" },
-    { key: "lambertsIndex", label: "Lamberts" },
+    { key: "marketValue", label: "Market €", title: "Transfermarkt-listed market value (via Wyscout)" },
+    { key: "expectedValue", label: "Expected €", title: "The model's own valuation, independent of Transfermarkt" },
+    { key: "valueRatio", label: "EV/MV", title: "Expected Value ÷ Market Value. Above 1× = model rates them higher than the market does" },
+    { key: "valueTag", label: "Tag", title: "Undervalued (≥1.3×) · Fair (0.7–1.3×) · Overvalued (≤0.7×) · Unlisted (no market value on file)" },
+    { key: "benthamScore", label: "Bentham", title: "Bentham sub-score, 0–100 (Brentford/Midtjylland philosophy)" },
+    { key: "jamestownScore", label: "Jamestown", title: "Jamestown sub-score, 0–100 (Brighton/USG/Hearts philosophy)" },
+    { key: "redbullScore", label: "Red Bull", title: "Red Bull sub-score, 0–100 (RB Salzburg philosophy)" },
+    { key: "lambertsIndex", label: "Lamberts", title: "The blended Lamberts Index — percentile rank (0–100) within this player's position" },
   ];
   const theadRow = document.getElementById("tableHead");
   TABLE_COLS.forEach(c => {
     const th = document.createElement("th");
     th.textContent = c.label; th.dataset.key = c.key;
+    if (c.title) th.title = c.title;
     if (c.nosort) th.classList.add("nosort");
     else th.addEventListener("click", () => {
       if (state.sortCol === c.key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
@@ -780,6 +890,8 @@
       if (filters.ageMin !== null && (r[COL.age] === null || r[COL.age] < filters.ageMin)) continue;
       if (filters.ageMax !== null && (r[COL.age] === null || r[COL.age] > filters.ageMax)) continue;
       if (filters.valueTag && r[COL.valueTag] !== filters.valueTag) continue;
+      if (filters.minIndex !== null && lambertsIndex[i] < filters.minIndex) continue;
+      if (filters.maxMarketValue !== null && !(r[COL.marketValue] > 0 && r[COL.marketValue] <= filters.maxMarketValue)) continue;
       if (r[COL.minutes] < filters.minMinutes) continue;
       if (filters.expiringSoon) {
         const c = r[COL.contract];
@@ -810,16 +922,16 @@
     const avgGap = gapN ? sumGap / gapN : 0;
     const totalW = weights.bentham + weights.jamestown + weights.redbull || 1;
     const tiles = [
-      { label: "Players in view", value: n.toLocaleString(), sub: `of ${N.toLocaleString()} total` },
-      { label: "Leagues in view", value: leaguesSeen.size, sub: `of ${D.leagueCount} tracked` },
-      { label: "Elite tier", value: elite.toLocaleString(), sub: "Lamberts Index ≥ 90" },
-      { label: "Undervalued", value: undervalued.toLocaleString(), sub: "EV ≥ 1.3× market value" },
-      { label: "Avg value gap", value: fmtEURSigned(avgGap), sub: "Expected − Market" },
-      { label: "Shortlisted", value: shortlist.size.toLocaleString(), sub: "saved in this browser" },
-      { label: "Model blend", value: `${Math.round(weights.bentham/totalW*100)}/${Math.round(weights.jamestown/totalW*100)}/${Math.round(weights.redbull/totalW*100)}`, sub: "Bentham / Jamestown / RB" },
+      { label: "Players in view", value: n.toLocaleString(), sub: `of ${N.toLocaleString()} total`, title: "How many players match your current filters" },
+      { label: "Leagues in view", value: leaguesSeen.size, sub: `of ${D.leagueCount} tracked`, title: "How many of the 165 tracked leagues have at least one player in view" },
+      { label: "Elite tier", value: elite.toLocaleString(), sub: "Lamberts Index ≥ 90", title: LAMBERTS_TIER_DESC.ELITE },
+      { label: "Undervalued", value: undervalued.toLocaleString(), sub: "EV ≥ 1.3× market value", title: VALUE_TAG_DESC.UNDERVALUED },
+      { label: "Avg value gap", value: fmtEURSigned(avgGap), sub: "Expected − Market", title: "Average of (Expected Value − Market Value) across players with a listed market value" },
+      { label: "Shortlisted", value: shortlist.size.toLocaleString(), sub: "saved in this browser", title: "Players you've starred — saved locally, export any time" },
+      { label: "Model blend", value: `${Math.round(weights.bentham/totalW*100)}/${Math.round(weights.jamestown/totalW*100)}/${Math.round(weights.redbull/totalW*100)}`, sub: "Bentham / Jamestown / RB", title: "Current slider weighting — adjust it in the Methodology panel at the bottom of the page" },
     ];
     document.getElementById("tiles").innerHTML = tiles.map(t =>
-      `<div class="tile"><div class="label">${t.label}</div><div class="value">${t.value}</div><div class="sub">${t.sub}</div></div>`
+      `<div class="tile" title="${t.title || ""}"><div class="label">${t.label}</div><div class="value">${t.value}</div><div class="sub">${t.sub}</div></div>`
     ).join("");
   }
 
@@ -849,8 +961,8 @@
             <button class="tc-star ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button>
           </div>
           <div class="tc-bottom">
-            <span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span>
-            <span class="tag tag-${r[COL.valueTag]}">${r[COL.valueTag]}</span>
+            <span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}" title="${lambertsTierOf(i)} — ${LAMBERTS_TIER_DESC[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span>
+            <span class="tag tag-${r[COL.valueTag]}" title="${VALUE_TAG_DESC[r[COL.valueTag]]}">${r[COL.valueTag]}</span>
             <span>${fmtEUR(r[COL.expectedValue])}</span>
           </div>
         </div>`;
@@ -1062,17 +1174,17 @@
       return `<tr data-idx="${i}">
         <td class="star-cell"><button class="star-btn ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button></td>
         <td class="player-cell">${r[COL.player]}<span class="team">${r[COL.team]}</span></td>
-        <td>${r[COL.league]}<br><span style="color:var(--text-muted); font-size:11px;">T${r[COL.tier]} ${r[COL.tierLabel]}</span></td>
+        <td>${r[COL.league]}<br><span style="color:var(--text-muted); font-size:11px;" title="${LEAGUE_TIER_DESC[r[COL.tier]] || ""}">T${r[COL.tier]} ${r[COL.tierLabel]}</span></td>
         <td>${r[COL.pos]}</td>
         <td>${r[COL.age] ?? "—"}</td>
         <td>${fmtEUR(r[COL.marketValue])}</td>
         <td>${fmtEUR(r[COL.expectedValue])}</td>
         <td>${ratio}</td>
-        <td><span class="tag tag-${r[COL.valueTag]}">${r[COL.valueTag]}</span></td>
+        <td><span class="tag tag-${r[COL.valueTag]}" title="${VALUE_TAG_DESC[r[COL.valueTag]]}">${r[COL.valueTag]}</span></td>
         <td>${(r[COL.benthamScore] ?? 0).toFixed(0)}</td>
         <td>${(r[COL.jamestownScore] ?? 0).toFixed(0)}</td>
         <td>${(r[COL.redbullScore] ?? 0).toFixed(0)}</td>
-        <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span></td>
+        <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}" title="${lambertsTierOf(i)} — ${LAMBERTS_TIER_DESC[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span></td>
       </tr>`;
     }).join("");
 
@@ -1142,7 +1254,7 @@
         ${vsAvgRow("Red Bull", "var(--redbull)", r[COL.redbullScore]??0, avg.redbull)}
       </div>
       <div class="modal-value-row">
-        <div class="vitem"><div class="l">Lamberts Index</div><div class="v"><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(idx)]}">${lambertsIndex[idx].toFixed(1)} — ${lambertsTierOf(idx)}</span></div></div>
+        <div class="vitem"><div class="l">Lamberts Index</div><div class="v"><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(idx)]}" title="${LAMBERTS_TIER_DESC[lambertsTierOf(idx)]}">${lambertsIndex[idx].toFixed(1)} — ${lambertsTierOf(idx)}</span></div></div>
         <div class="vitem"><div class="l">Market value</div><div class="v">${fmtEUR(r[COL.marketValue])}</div></div>
         <div class="vitem"><div class="l">Expected value</div><div class="v">${fmtEUR(r[COL.expectedValue])}</div></div>
         <div class="vitem"><div class="l">Value gap</div><div class="v" style="color:${r[COL.valueGap] > 0 ? 'var(--success-text)' : r[COL.valueGap] < 0 ? 'var(--critical)' : 'inherit'}">${fmtEURSigned(r[COL.valueGap])}${ratio ? ` (${ratio.toFixed(2)}×)` : ""}</div></div>
@@ -1175,6 +1287,32 @@
   function closeModal() { backdrop.classList.remove("open"); }
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+  // ── Glossary ─────────────────────────────────────────────────────────
+  const GLOSSARY = [
+    ["Lamberts Index", "A player's percentile rank (0–100) within their own position, after blending the three sub-model scores. 100 means the top player at that position in the whole pool; 50 means dead-average for that position."],
+    ["Bentham / Jamestown / Red Bull scores", "The three underlying philosophies the Lamberts Index blends together — each scored 0–100 on its own terms. See the Methodology panel at the bottom of the page for what each one rewards, and drag its sliders to change how much weight each one gets."],
+    ["Expected Value", "The model's own valuation, learned from performance data — age, output, position and league strength — not copied from Transfermarkt. It stays fixed regardless of how you set the sub-model weight sliders."],
+    ["Value Gap / EV÷MV", "Expected Value minus (or divided by) the Transfermarkt-listed Market Value. A positive gap / ratio above 1× means the model thinks the player is worth more than the market currently charges."],
+    ["Undervalued / Fair / Overvalued / Unlisted", "Undervalued: Expected Value ≥ 1.3× market value. Fair: within 0.7×–1.3×. Overvalued: ≤ 0.7×. Unlisted: no Transfermarkt value on file to compare against."],
+    ["League tiers (T1 Elite → T6 Youth)", "A 6-tier strength rating for all 165 leagues, from the 5 major European leagues (T1) down to youth/grassroots competitions (T6). Every player's stats are adjusted for this before comparing them across leagues."],
+    ["Top Targets", "The single best player at each position within your current filters, refreshed live as you filter or move the weight sliders — a fast starting shortlist."],
+    ["Shortlist (★)", "Click any star to save a player — saved in this browser only. Use the ★ My Shortlist quick filter to see just your list, or export it as its own CSV."],
+  ];
+  function openGlossary() {
+    modalContent.innerHTML = `
+      <div class="modal-head">
+        <div><h3>Glossary</h3><div class="team-line">Plain-English definitions for every term used on this page.</div></div>
+        <button class="modal-close" id="modalCloseBtn">✕</button>
+      </div>
+      <dl style="margin-top:16px;">
+        ${GLOSSARY.map(([term, def]) => `<div class="glossary-item"><dt>${term}</dt><dd>${def}</dd></div>`).join("")}
+      </dl>
+    `;
+    document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+    backdrop.classList.add("open");
+  }
+  document.getElementById("helpBtn").addEventListener("click", openGlossary);
 
   // ── CSV export ───────────────────────────────────────────────────────
   function exportRowsCsv(indices, filename) {
