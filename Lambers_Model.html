@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Lambers Model — Global Recruitment Intelligence</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232a78d6'/%3E%3Ctext x='32' y='42' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='white' text-anchor='middle'%3ELM%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --page:            #f9f9f7;
+    --surface-1:       #fcfcfb;
+    --surface-2:       #f3f2ef;
+    --text-primary:    #0b0b0b;
+    --text-secondary:  #52514e;
+    --text-muted:      #898781;
+    --gridline:        #e1e0d9;
+    --baseline:        #c3c2b7;
+    --border:          rgba(11,11,11,0.10);
+    --border-strong:   rgba(11,11,11,0.18);
+
+    --bentham:         #2a78d6;
+    --jamestown:       #4a3aa7;
+    --redbull:         #e34948;
+
+    --good:            #0ca30c;
+    --warning:         #fab219;
+    --serious:         #ec835a;
+    --critical:        #d03b3b;
+
+    --seq-700: #0d366b; --seq-550: #1c5cab; --seq-450: #2a78d6;
+    --seq-300: #6da7ec; --seq-150: #b7d3f6;
+
+    --success-text:    #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:            #0d0d0d;
+      --surface-1:       #1a1a19;
+      --surface-2:       #232322;
+      --text-primary:    #ffffff;
+      --text-secondary:  #c3c2b7;
+      --text-muted:      #898781;
+      --gridline:        #2c2c2a;
+      --baseline:        #383835;
+      --border:          rgba(255,255,255,0.10);
+      --border-strong:   rgba(255,255,255,0.18);
+
+      --bentham:         #3987e5;
+      --jamestown:       #9085e9;
+      --redbull:         #e66767;
+
+      --good:            #0ca30c;
+      --warning:         #fab219;
+      --serious:         #ec835a;
+      --critical:        #d03b3b;
+
+      --seq-700: #184f95; --seq-550: #1c5cab; --seq-450: #2a78d6;
+      --seq-300: #5598e7; --seq-150: #3987e5;
+
+      --success-text:    #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:            #0d0d0d;
+    --surface-1:       #1a1a19;
+    --surface-2:       #232322;
+    --text-primary:    #ffffff;
+    --text-secondary:  #c3c2b7;
+    --text-muted:      #898781;
+    --gridline:        #2c2c2a;
+    --baseline:        #383835;
+    --border:          rgba(255,255,255,0.10);
+    --border-strong:   rgba(255,255,255,0.18);
+    --bentham:         #3987e5;
+    --jamestown:       #9085e9;
+    --redbull:         #e66767;
+    --seq-700: #184f95; --seq-550: #1c5cab; --seq-450: #2a78d6;
+    --seq-300: #5598e7; --seq-150: #3987e5;
+    --success-text:    #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 24px 80px; }
+  a { color: inherit; }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  header.top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .brand-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--bentham), var(--jamestown) 55%, var(--redbull));
+    color: #fff; font-weight: 800; font-size: 17px; flex: none;
+  }
+  .title-block { display: flex; gap: 14px; align-items: center; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-secondary); font-size: 13px; margin-top: 3px; }
+  .top-actions { display: flex; gap: 8px; align-items: center; }
+  button, select, input[type=text], input[type=search] {
+    font-family: inherit; font-size: 13px;
+  }
+  .btn {
+    background: var(--surface-1); border: 1px solid var(--border-strong); color: var(--text-primary);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--text-primary); color: var(--page); border-color: transparent; }
+  .btn.small { padding: 5px 9px; font-size: 12px; font-weight: 500; }
+
+  /* ── Stat tiles ─────────────────────────────────────────────────── */
+  .tiles {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px;
+  }
+  @media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 620px)  { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .tile .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .tile .value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+  /* ── Panels ─────────────────────────────────────────────────────── */
+  .panel {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 4px; }
+  .panel .desc { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .panel-head .chev { color: var(--text-muted); transition: transform .15s; font-size: 12px; }
+  .panel.collapsed .chev { transform: rotate(-90deg); }
+  .panel.collapsed .panel-body { display: none; }
+
+  /* ── Methodology ────────────────────────────────────────────────── */
+  .model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 900px) { .model-grid { grid-template-columns: 1fr; } }
+  .model-card {
+    border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+    border-top: 3px solid var(--c);
+  }
+  .model-card h3 { font-size: 13.5px; margin: 0 0 4px; color: var(--c); }
+  .model-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 8px; }
+  .model-card .weight-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .model-card .weight-row input[type=range] { flex: 1; accent-color: var(--c); }
+  .model-card .weight-val { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; width: 42px; text-align: right; }
+  .weights-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+
+  .reg-diag { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+  .reg-diag b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+  /* ── Filters ────────────────────────────────────────────────────── */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filters input, .filters select {
+    background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-primary);
+    border-radius: 8px; padding: 7px 10px;
+  }
+  .filters input[type=search] { min-width: 190px; }
+  .chip-group { display: flex; gap: 4px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text-secondary);
+    border-radius: 999px; padding: 5px 11px; font-size: 12px; cursor: pointer; font-weight: 600;
+    user-select: none;
+  }
+  .chip.active { background: var(--text-primary); color: var(--page); border-color: transparent; }
+  .filters-meta { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+  /* ── Charts ─────────────────────────────────────────────────────── */
+  .chart-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+  @media (max-width: 1000px) { .chart-row { grid-template-columns: 1fr; } }
+  canvas { display: block; width: 100%; }
+  .scatter-wrap { position: relative; }
+  #scatterCanvas { height: 420px; cursor: crosshair; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--text-primary); color: var(--page);
+    padding: 7px 10px; border-radius: 8px; font-size: 12px; line-height: 1.45; opacity: 0; transition: opacity .08s;
+    max-width: 220px; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  .legend-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11.5px; color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  .mini-bars { display: flex; flex-direction: column; gap: 10px; }
+  .mini-bar-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .bar-row { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
+  .bar-row .name { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { background: var(--surface-2); border-radius: 5px; height: 10px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 5px; }
+  .bar-row .count { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+
+  /* ── Table ──────────────────────────────────────────────────────── */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; background: var(--surface-1); }
+  thead th {
+    position: sticky; top: 0; background: var(--surface-2); text-align: left; padding: 9px 10px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted);
+    cursor: pointer; white-space: nowrap; border-bottom: 1px solid var(--border-strong);
+  }
+  thead th:hover { color: var(--text-primary); }
+  thead th.sorted { color: var(--text-primary); }
+  tbody td { padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--surface-2); }
+  td.player-cell { font-variant-numeric: normal; font-weight: 600; }
+  td.player-cell .team { display: block; font-weight: 400; color: var(--text-muted); font-size: 11px; }
+  .tag {
+    display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  }
+  .tag-UNDERVALUED { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--success-text); }
+  .tag-OVERVALUED  { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
+  .tag-FAIR        { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border-strong); }
+  .tag-UNLISTED    { background: transparent; color: var(--text-muted); border: 1px dashed var(--border-strong); }
+
+  .lt-chip { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #fff; }
+
+  .pager { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; font-size: 12px; color: var(--text-secondary); }
+  .pager .btns { display: flex; gap: 6px; }
+
+  /* ── Modal ──────────────────────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-start; justify-content: center;
+    padding: 40px 16px; overflow-y: auto; z-index: 20;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface-1); border-radius: 16px; width: 100%; max-width: 640px; padding: 22px 24px;
+    border: 1px solid var(--border-strong);
+  }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+  .modal-head h3 { margin: 0; font-size: 19px; }
+  .modal-head .team-line { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+  .modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; line-height: 1; }
+  .modal-sub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+  .modal-sub-tile { text-align: center; border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; border-top: 3px solid var(--c); }
+  .modal-sub-tile .n { font-size: 20px; font-weight: 800; color: var(--c); font-variant-numeric: tabular-nums; }
+  .modal-sub-tile .l { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+  .modal-value-row { display: flex; gap: 16px; margin: 14px 0; flex-wrap: wrap; }
+  .modal-value-row .vitem { flex: 1; min-width: 130px; }
+  .modal-value-row .vitem .l { font-size: 11px; color: var(--text-muted); }
+  .modal-value-row .vitem .v { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .modal-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; margin-top: 14px; }
+  .modal-stats .s { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
+  .modal-stats .s .l { color: var(--text-muted); font-size: 10.5px; }
+  .modal-stats .s .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  footer { text-align: center; color: var(--text-muted); font-size: 11.5px; margin-top: 26px; line-height: 1.6; }
+  .table-view-toggle { font-size: 12px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <div class="brand-mark">LM</div>
+      <div>
+        <h1>The Lambers Model</h1>
+        <div class="subtitle" id="subtitleLine">Global recruitment intelligence · 165 leagues · Bentham × Jamestown × Red Bull</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn small" id="themeToggle">🌙 Dark</button>
+      <button class="btn small" id="exportCsv">⇩ Export filtered CSV</button>
+    </div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="panel" id="methodPanel">
+    <div class="panel-head" data-toggle="methodPanel">
+      <h2>Methodology — three recruitment philosophies, one blend</h2>
+      <span class="chev">▾</span>
+    </div>
+    <div class="panel-body">
+      <p class="desc">
+        Every player is scored 0–100 by three independent sub-models, each built on the per-90 metrics
+        Wyscout exposes, cross-league adjusted by a 6-tier league-strength coefficient (Elite → Youth), and
+        blended into <b>THE LAMBERS MODEL</b> using the weights below. Drag a slider to re-blend the entire
+        45k-player pool live — the table, charts and stat tiles below recompute instantly.
+      </p>
+      <div class="model-grid">
+        <div class="model-card" style="--c: var(--bentham)">
+          <h3>Bentham</h3>
+          <p><b>Brentford · FC Midtjylland</b> — statistical "Moneyball" recruitment. Rewards high-volume output,
+             set-piece threat (crosses, aerials, dead-ball delivery) and the 22–27 prime trade-value window.
+             Full league-strength penalty applied.</p>
+          <div class="weight-row">
+            <input type="range" id="wBentham" min="0" max="100" value="35">
+            <span class="weight-val" id="wBenthamVal">35%</span>
+          </div>
+        </div>
+        <div class="model-card" style="--c: var(--jamestown)">
+          <h3>Jamestown</h3>
+          <p><b>Brighton · Union SG · Hearts</b> — multi-club data network. Rewards technical/creative ceiling
+             (dribbling, progressive carrying, chance creation) found early in lower-profile leagues, age skewed
+             to 18–22. League-strength penalty heavily damped — hidden gems are the point.</p>
+          <div class="weight-row">
+            <input type="range" id="wJamestown" min="0" max="100" value="35">
+            <span class="weight-val" id="wJamestownVal">35%</span>
+          </div>
+        </div>
+        <div class="model-card" style="--c: var(--redbull)">
+          <h3>Red Bull</h3>
+          <p><b>RB Salzburg</b> — pressing/athleticism pipeline. Rewards duels, aerial power, acceleration and
+             transition speed, with the steepest youth curve of the three (peaks 17–20, falls off hard by mid-20s).</p>
+          <div class="weight-row">
+            <input type="range" id="wRedbull" min="0" max="100" value="30">
+            <span class="weight-val" id="wRedbullVal">30%</span>
+          </div>
+        </div>
+      </div>
+      <div class="weights-footer">
+        <span id="weightSum">Weights normalise to 100% automatically.</span>
+        <button class="btn small" id="resetWeights">Reset to default (35 / 35 / 30)</button>
+      </div>
+      <p class="desc" style="margin-top:14px;">
+        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Lambers Index + Age + Age² +
+        log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via Wyscout) actually
+        lists a value for, then used to <i>predict</i> a value for every player in the pool. It is a model-derived
+        number, not a copy of Transfermarkt's figure, so it can diverge from it in either direction — that gap is
+        the recruitment signal (Value Gap = Expected − Market).
+      </p>
+      <div class="reg-diag" id="regDiag"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="filters" id="filters">
+      <input type="search" id="searchBox" placeholder="Search player or team…">
+      <select id="tierFilter"><option value="">All league tiers</option></select>
+      <select id="leagueFilter"><option value="">All leagues</option></select>
+      <select id="valueTagFilter">
+        <option value="">Any value tag</option>
+        <option value="UNDERVALUED">Undervalued</option>
+        <option value="FAIR">Fair</option>
+        <option value="OVERVALUED">Overvalued</option>
+        <option value="UNLISTED">Unlisted (no TM value)</option>
+      </select>
+      <input type="text" id="ageMin" placeholder="Age min" style="width:70px">
+      <input type="text" id="ageMax" placeholder="Age max" style="width:70px">
+      <button class="btn small" id="clearFilters">Clear</button>
+    </div>
+    <div class="chip-group" id="posChips" style="margin-top:10px;"></div>
+    <div class="filters-meta" id="filtersMeta"></div>
+  </div>
+
+  <div class="chart-row">
+    <div class="panel scatter-wrap">
+      <h2>Value Map — ability vs. price</h2>
+      <p class="desc">Lambers Index (x) against Expected-Value ÷ Market-Value (y). Top-right = high-ability players the
+        model prices well above what Transfermarkt lists. Only players with a listed market value are plotted
+        (<span id="unlistedCount">0</span> unlisted excluded). Hover for detail, click to open a player card.</p>
+      <canvas id="scatterCanvas"></canvas>
+      <div class="tooltip" id="scatterTooltip"></div>
+      <div class="legend-row">
+        <span class="legend-item"><span class="swatch" style="background:var(--good)"></span>Undervalued (≥1.3×)</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--text-muted)"></span>Fair (0.7–1.3×)</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--critical)"></span>Overvalued (≤0.7×)</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Pool breakdown</h2>
+      <p class="desc">League tier and position mix of the current filtered set.</p>
+      <div class="mini-bars">
+        <div>
+          <div class="mini-bar-title">By league tier</div>
+          <div id="tierBars"></div>
+        </div>
+        <div>
+          <div class="mini-bar-title">By position</div>
+          <div id="posBars"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <h2 style="margin:0;">Recruitment board</h2>
+      <span class="table-view-toggle" id="tableCount"></span>
+    </div>
+    <div class="table-scroll" style="margin-top:10px;">
+      <table id="dataTable">
+        <thead><tr id="tableHead"></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <span id="pagerInfo"></span>
+      <div class="btns">
+        <button class="btn small" id="prevPage">‹ Prev</button>
+        <button class="btn small" id="nextPage">Next ›</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Built from Wyscout exports across all 165 tracked leagues · Data generated <span id="genDate"></span> ·
+    Expected Value is a statistical estimate for scouting triage, not a valuation opinion — always sanity-check
+    against contract status, injury history and video before acting.
+  </footer>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="data/Lambers_Model_Data.js"></script>
+<script>
+(function () {
+  "use strict";
+  const D = LAMBERS_DATA;
+  const COL = {};
+  D.columns.forEach((c, i) => COL[c] = i);
+  const ROWS = D.rows;
+  const N = ROWS.length;
+
+  const TIER_LABELS = D.tierLabels;
+  const POS_LABELS = D.positionLabels;
+  const POS_ORDER = ["GK", "CB", "FB", "DM", "CM", "W", "FW"];
+
+  const SUB_COLOR = { bentham: "var(--bentham)", jamestown: "var(--jamestown)", redbull: "var(--redbull)" };
+  const TAG_COLOR = { UNDERVALUED: "var(--good)", OVERVALUED: "var(--critical)", FAIR: "var(--text-muted)", UNLISTED: "var(--text-muted)" };
+
+  // ── Theme ────────────────────────────────────────────────────────────
+  const themeBtn = document.getElementById("themeToggle");
+  function applyTheme(mode) {
+    if (mode) document.documentElement.setAttribute("data-theme", mode);
+    else document.documentElement.removeAttribute("data-theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const isDark = mode ? mode === "dark" : prefersDark;
+    themeBtn.textContent = isDark ? "☀️ Light" : "🌙 Dark";
+  }
+  let manualTheme = null;
+  themeBtn.addEventListener("click", () => {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const currentlyDark = manualTheme ? manualTheme === "dark" : prefersDark;
+    manualTheme = currentlyDark ? "light" : "dark";
+    applyTheme(manualTheme);
+    drawScatter();
+  });
+  applyTheme(null);
+
+  // ── Header / meta ──────────────────────────────────────────────────
+  document.getElementById("genDate").textContent = D.generatedAt;
+  document.getElementById("subtitleLine").textContent =
+    `Global recruitment intelligence · ${D.leagueCount} leagues · ${N.toLocaleString()} players · min ${D.minMinutes} minutes · Bentham × Jamestown × Red Bull`;
+
+  const rd = D.regression;
+  document.getElementById("regDiag").innerHTML =
+    `<span>R² <b>${rd.r_squared}</b></span>` +
+    `<span>Trained on <b>${rd.n_train.toLocaleString()}</b> of ${rd.n_total.toLocaleString()} players with a listed Transfermarkt value</span>`;
+
+  // ── Weights & live Lambers Index recompute ─────────────────────────
+  const weights = { bentham: 35, jamestown: 35, redbull: 30 };
+  const lambersScore = new Float64Array(N);
+  const lambersIndex = new Float64Array(N);
+
+  function recomputeLambers() {
+    const total = weights.bentham + weights.jamestown + weights.redbull || 1;
+    const wb = weights.bentham / total, wj = weights.jamestown / total, wr = weights.redbull / total;
+    for (let i = 0; i < N; i++) {
+      const r = ROWS[i];
+      lambersScore[i] = wb * (r[COL.benthamScore] || 0) + wj * (r[COL.jamestownScore] || 0) + wr * (r[COL.redbullScore] || 0);
+    }
+    const byPos = {};
+    for (let i = 0; i < N; i++) {
+      const p = ROWS[i][COL.pos];
+      (byPos[p] || (byPos[p] = [])).push(i);
+    }
+    for (const p in byPos) {
+      const idxs = byPos[p];
+      idxs.sort((a, b) => lambersScore[a] - lambersScore[b]);
+      const n = idxs.length;
+      idxs.forEach((rowIdx, rank) => {
+        lambersIndex[rowIdx] = n > 1 ? ((rank + 1) / n) * 100 : 100;
+      });
+    }
+  }
+  function lambersTierOf(idx) {
+    const li = lambersIndex[idx];
+    if (li >= 90) return "ELITE";
+    if (li >= 75) return "HIGH POTENTIAL";
+    if (li >= 55) return "SOLID TARGET";
+    if (li >= 35) return "ROTATION";
+    return "LONGSHOT";
+  }
+  const TIER_CHIP_COLOR = {
+    "ELITE": "var(--seq-700)", "HIGH POTENTIAL": "var(--seq-550)", "SOLID TARGET": "var(--seq-450)",
+    "ROTATION": "var(--seq-300)", "LONGSHOT": "var(--seq-150)",
+  };
+
+  recomputeLambers();
+
+  ["bentham", "jamestown", "redbull"].forEach(key => {
+    const cap = key[0].toUpperCase() + key.slice(1);
+    const slider = document.getElementById("w" + cap);
+    const val = document.getElementById("w" + cap + "Val");
+    slider.addEventListener("input", () => {
+      weights[key] = +slider.value;
+      const total = weights.bentham + weights.jamestown + weights.redbull || 1;
+      val.textContent = Math.round((weights[key] / total) * 100) + "%";
+      document.getElementById("wBenthamVal").textContent = Math.round((weights.bentham/total)*100)+"%";
+      document.getElementById("wJamestownVal").textContent = Math.round((weights.jamestown/total)*100)+"%";
+      document.getElementById("wRedbullVal").textContent = Math.round((weights.redbull/total)*100)+"%";
+      recomputeLambers();
+      refreshAll();
+    });
+  });
+  document.getElementById("resetWeights").addEventListener("click", () => {
+    weights.bentham = 35; weights.jamestown = 35; weights.redbull = 30;
+    document.getElementById("wBentham").value = 35;
+    document.getElementById("wJamestown").value = 35;
+    document.getElementById("wRedbull").value = 30;
+    document.getElementById("wBenthamVal").textContent = "35%";
+    document.getElementById("wJamestownVal").textContent = "35%";
+    document.getElementById("wRedbullVal").textContent = "30%";
+    recomputeLambers();
+    refreshAll();
+  });
+
+  document.querySelectorAll(".panel-head[data-toggle]").forEach(h => {
+    h.addEventListener("click", () => {
+      document.getElementById(h.dataset.toggle).classList.toggle("collapsed");
+    });
+  });
+
+  // ── Filters state ──────────────────────────────────────────────────
+  const filters = { search: "", tier: "", league: "", pos: new Set(), valueTag: "", ageMin: null, ageMax: null };
+
+  const tierFilterEl = document.getElementById("tierFilter");
+  Object.keys(TIER_LABELS).sort((a,b)=>a-b).forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t; opt.textContent = `Tier ${t} — ${TIER_LABELS[t]}`;
+    tierFilterEl.appendChild(opt);
+  });
+
+  const leagueFilterEl = document.getElementById("leagueFilter");
+  D.leagues.forEach(l => {
+    const opt = document.createElement("option");
+    opt.value = l.league; opt.textContent = `${l.leagueName} (${l.league})`;
+    leagueFilterEl.appendChild(opt);
+  });
+
+  const posChipsEl = document.getElementById("posChips");
+  POS_ORDER.forEach(p => {
+    const chip = document.createElement("span");
+    chip.className = "chip"; chip.textContent = POS_LABELS[p] || p; chip.dataset.pos = p;
+    chip.addEventListener("click", () => {
+      if (filters.pos.has(p)) { filters.pos.delete(p); chip.classList.remove("active"); }
+      else { filters.pos.add(p); chip.classList.add("active"); }
+      state.page = 1; refreshAll();
+    });
+    posChipsEl.appendChild(chip);
+  });
+
+  document.getElementById("searchBox").addEventListener("input", e => { filters.search = e.target.value.trim().toLowerCase(); state.page=1; refreshAll(); });
+  document.getElementById("tierFilter").addEventListener("change", e => { filters.tier = e.target.value; state.page=1; refreshAll(); });
+  document.getElementById("leagueFilter").addEventListener("change", e => { filters.league = e.target.value; state.page=1; refreshAll(); });
+  document.getElementById("valueTagFilter").addEventListener("change", e => { filters.valueTag = e.target.value; state.page=1; refreshAll(); });
+  document.getElementById("ageMin").addEventListener("input", e => { filters.ageMin = e.target.value ? +e.target.value : null; state.page=1; refreshAll(); });
+  document.getElementById("ageMax").addEventListener("input", e => { filters.ageMax = e.target.value ? +e.target.value : null; state.page=1; refreshAll(); });
+  document.getElementById("clearFilters").addEventListener("click", () => {
+    filters.search = ""; filters.tier = ""; filters.league = ""; filters.valueTag = ""; filters.ageMin = null; filters.ageMax = null;
+    filters.pos.clear();
+    document.getElementById("searchBox").value = "";
+    document.getElementById("tierFilter").value = "";
+    document.getElementById("leagueFilter").value = "";
+    document.getElementById("valueTagFilter").value = "";
+    document.getElementById("ageMin").value = "";
+    document.getElementById("ageMax").value = "";
+    document.querySelectorAll("#posChips .chip").forEach(c => c.classList.remove("active"));
+    state.page = 1;
+    refreshAll();
+  });
+
+  // ── Table state ─────────────────────────────────────────────────────
+  const state = { filtered: [], sortCol: "lambersIndex", sortDir: "desc", page: 1, pageSize: 50 };
+
+  const TABLE_COLS = [
+    { key: "player", label: "Player" },
+    { key: "league", label: "League" },
+    { key: "pos", label: "Pos" },
+    { key: "age", label: "Age" },
+    { key: "marketValue", label: "Market €" },
+    { key: "expectedValue", label: "Expected €" },
+    { key: "valueRatio", label: "EV/MV" },
+    { key: "valueTag", label: "Tag" },
+    { key: "benthamScore", label: "Bentham" },
+    { key: "jamestownScore", label: "Jamestown" },
+    { key: "redbullScore", label: "Red Bull" },
+    { key: "lambersIndex", label: "Lambers" },
+  ];
+  const theadRow = document.getElementById("tableHead");
+  TABLE_COLS.forEach(c => {
+    const th = document.createElement("th");
+    th.textContent = c.label; th.dataset.key = c.key;
+    th.addEventListener("click", () => {
+      if (state.sortCol === c.key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      else { state.sortCol = c.key; state.sortDir = "desc"; }
+      renderTable();
+    });
+    theadRow.appendChild(th);
+  });
+
+  function fmtEUR(v) {
+    if (v === null || v === undefined) return "—";
+    if (v === 0) return "—";
+    const abs = Math.abs(v);
+    if (abs >= 1e6) return "€" + (v/1e6).toFixed(1).replace(/\.0$/,"") + "M";
+    if (abs >= 1e3) return "€" + Math.round(v/1e3) + "k";
+    return "€" + Math.round(v);
+  }
+  function fmtEURSigned(v) {
+    if (v === null || v === undefined || Number.isNaN(v)) return "—";
+    const s = v >= 0 ? "+" : "−";
+    return s + fmtEUR(Math.abs(v)).slice(1);
+  }
+  function rowVal(idx, key) {
+    if (key === "lambersIndex") return lambersIndex[idx];
+    if (key === "lambersScore") return lambersScore[idx];
+    return ROWS[idx][COL[key]];
+  }
+
+  function applyFilters() {
+    const out = [];
+    const s = filters.search;
+    for (let i = 0; i < N; i++) {
+      const r = ROWS[i];
+      if (filters.tier && String(r[COL.tier]) !== filters.tier) continue;
+      if (filters.league && r[COL.league] !== filters.league) continue;
+      if (filters.pos.size && !filters.pos.has(r[COL.pos])) continue;
+      if (filters.ageMin !== null && (r[COL.age] === null || r[COL.age] < filters.ageMin)) continue;
+      if (filters.ageMax !== null && (r[COL.age] === null || r[COL.age] > filters.ageMax)) continue;
+      if (filters.valueTag && r[COL.valueTag] !== filters.valueTag) continue;
+      if (s) {
+        const hay = (r[COL.player] + " " + r[COL.team]).toLowerCase();
+        if (!hay.includes(s)) continue;
+      }
+      out.push(i);
+    }
+    state.filtered = out;
+  }
+
+  // ── Stat tiles ──────────────────────────────────────────────────────
+  function renderTiles() {
+    const f = state.filtered;
+    const n = f.length;
+    let elite = 0, undervalued = 0, sumGap = 0, gapN = 0, leaguesSeen = new Set();
+    for (const i of f) {
+      if (lambersTierOf(i) === "ELITE") elite++;
+      if (ROWS[i][COL.valueTag] === "UNDERVALUED") undervalued++;
+      const gap = ROWS[i][COL.valueGap];
+      if (gap !== null && gap !== undefined) { sumGap += gap; gapN++; }
+      leaguesSeen.add(ROWS[i][COL.league]);
+    }
+    const avgGap = gapN ? sumGap / gapN : 0;
+    const tiles = [
+      { label: "Players in view", value: n.toLocaleString(), sub: `of ${N.toLocaleString()} total` },
+      { label: "Leagues in view", value: leaguesSeen.size, sub: `of ${D.leagueCount} tracked` },
+      { label: "Elite tier", value: elite.toLocaleString(), sub: "Lambers Index ≥ 90" },
+      { label: "Undervalued", value: undervalued.toLocaleString(), sub: "EV ≥ 1.3× market value" },
+      { label: "Avg value gap", value: fmtEURSigned(avgGap), sub: "Expected − Market" },
+      { label: "Model blend", value: `${Math.round(weights.bentham/(weights.bentham+weights.jamestown+weights.redbull)*100)}/${Math.round(weights.jamestown/(weights.bentham+weights.jamestown+weights.redbull)*100)}/${Math.round(weights.redbull/(weights.bentham+weights.jamestown+weights.redbull)*100)}`, sub: "Bentham / Jamestown / RB" },
+    ];
+    document.getElementById("tiles").innerHTML = tiles.map(t =>
+      `<div class="tile"><div class="label">${t.label}</div><div class="value">${t.value}</div><div class="sub">${t.sub}</div></div>`
+    ).join("");
+  }
+
+  // ── Mini breakdown bars ─────────────────────────────────────────────
+  function renderBreakdownBars() {
+    const f = state.filtered;
+    const tierCounts = {}; const posCounts = {};
+    for (const i of f) {
+      const t = ROWS[i][COL.tier]; tierCounts[t] = (tierCounts[t]||0)+1;
+      const p = ROWS[i][COL.pos]; posCounts[p] = (posCounts[p]||0)+1;
+    }
+    const maxTier = Math.max(1, ...Object.values(tierCounts));
+    const tierHtml = Object.keys(TIER_LABELS).sort((a,b)=>a-b).map(t => {
+      const c = tierCounts[t] || 0;
+      const pct = (c / maxTier) * 100;
+      return `<div class="bar-row"><span class="name">T${t} ${TIER_LABELS[t]}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:var(--seq-450)"></div></div>
+        <span class="count">${c.toLocaleString()}</span></div>`;
+    }).join("");
+    document.getElementById("tierBars").innerHTML = tierHtml;
+
+    const maxPos = Math.max(1, ...Object.values(posCounts));
+    const posHtml = POS_ORDER.map(p => {
+      const c = posCounts[p] || 0;
+      const pct = (c / maxPos) * 100;
+      return `<div class="bar-row"><span class="name">${POS_LABELS[p]}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:var(--seq-450)"></div></div>
+        <span class="count">${c.toLocaleString()}</span></div>`;
+    }).join("");
+    document.getElementById("posBars").innerHTML = posHtml;
+  }
+
+  // ── Scatter chart (canvas) ──────────────────────────────────────────
+  const canvas = document.getElementById("scatterCanvas");
+  const ctx = canvas.getContext("2d");
+  const tooltip = document.getElementById("scatterTooltip");
+  let plotPoints = []; // {x, y, idx, px, py}
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function layoutCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(300, rect.width) * dpr;
+    canvas.height = 420 * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: Math.max(300, rect.width), h: 420 };
+  }
+
+  function drawScatter() {
+    const { w, h } = layoutCanvas();
+    ctx.clearRect(0, 0, w, h);
+    const pad = { l: 44, r: 16, t: 14, b: 34 };
+    const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+    const gridline = cssVar("--gridline"), baseline = cssVar("--baseline"), muted = cssVar("--text-muted");
+    const good = cssVar("--good"), critical = cssVar("--critical");
+
+    const yMax = 3.2, yMin = 0;
+    const xMax = 100, xMin = 0;
+    function xPix(v) { return pad.l + (v - xMin) / (xMax - xMin) * plotW; }
+    function yPix(v) { return pad.t + (1 - (v - yMin) / (yMax - yMin)) * plotH; }
+
+    // gridlines
+    ctx.strokeStyle = gridline; ctx.lineWidth = 1; ctx.font = "11px system-ui";
+    ctx.fillStyle = muted;
+    [0, 25, 50, 75, 100].forEach(v => {
+      const x = xPix(v);
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + plotH); ctx.stroke();
+      ctx.fillText(v, x - 8, h - pad.b + 16);
+    });
+    [0, 1, 2, 3].forEach(v => {
+      const y = yPix(v);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + plotW, y); ctx.stroke();
+      ctx.fillText(v.toFixed(1) + "×", 4, y + 4);
+    });
+    // fair-value baseline at y=1
+    ctx.strokeStyle = baseline; ctx.setLineDash([4, 3]);
+    const y1 = yPix(1);
+    ctx.beginPath(); ctx.moveTo(pad.l, y1); ctx.lineTo(pad.l + plotW, y1); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = muted;
+    ctx.fillText("Lambers Index →", pad.l + plotW/2 - 40, h - 4);
+
+    // points
+    plotPoints = [];
+    const f = state.filtered;
+    for (const i of f) {
+      const mv = ROWS[i][COL.marketValue];
+      if (!mv || mv <= 0) continue;
+      const ratio = ROWS[i][COL.expectedValue] / mv;
+      const li = lambersIndex[i];
+      const x = xPix(li), y = yPix(Math.min(ratio, yMax));
+      const tag = ROWS[i][COL.valueTag];
+      const color = tag === "UNDERVALUED" ? good : tag === "OVERVALUED" ? critical : muted;
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.55;
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      plotPoints.push({ x, y, idx: i });
+    }
+    ctx.globalAlpha = 1;
+
+    const unlisted = f.length - plotPoints.length;
+    document.getElementById("unlistedCount").textContent = unlisted.toLocaleString();
+  }
+
+  let hoverRaf = null;
+  canvas.addEventListener("mousemove", (e) => {
+    if (hoverRaf) return;
+    hoverRaf = requestAnimationFrame(() => {
+      hoverRaf = null;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      let best = null, bestD = 12 * 12;
+      for (const p of plotPoints) {
+        const dx = p.x - mx, dy = p.y - my, d = dx*dx + dy*dy;
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      if (best) {
+        const r = ROWS[best.idx];
+        tooltip.style.opacity = 1;
+        tooltip.style.left = (best.x + 12) + "px";
+        tooltip.style.top = (best.y + 8) + "px";
+        tooltip.innerHTML = `<b>${r[COL.player]}</b><br>${r[COL.team]} · ${r[COL.league]}<br>` +
+          `Lambers ${lambersIndex[best.idx].toFixed(0)} · EV/MV ${(r[COL.expectedValue]/r[COL.marketValue]).toFixed(2)}×<br>` +
+          `Mkt ${fmtEUR(r[COL.marketValue])} → Exp ${fmtEUR(r[COL.expectedValue])}`;
+        canvas.style.cursor = "pointer";
+        canvas.dataset.hoverIdx = best.idx;
+      } else {
+        tooltip.style.opacity = 0;
+        canvas.style.cursor = "crosshair";
+        delete canvas.dataset.hoverIdx;
+      }
+    });
+  });
+  canvas.addEventListener("mouseleave", () => { tooltip.style.opacity = 0; });
+  canvas.addEventListener("click", () => {
+    if (canvas.dataset.hoverIdx !== undefined) openModal(+canvas.dataset.hoverIdx);
+  });
+  window.addEventListener("resize", () => drawScatter());
+
+  // ── Table render ─────────────────────────────────────────────────────
+  function getSortedFiltered() {
+    const dir = state.sortDir === "asc" ? 1 : -1;
+    return state.filtered.slice().sort((a, b) => {
+      let va = rowVal(a, state.sortCol), vb = rowVal(b, state.sortCol);
+      if (va === null || va === undefined) va = -Infinity;
+      if (vb === null || vb === undefined) vb = -Infinity;
+      if (typeof va === "string") { va = va.toLowerCase(); vb = String(vb).toLowerCase(); }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      // tie-break: raw Lambers composite, then Expected Value, keeps ranking stable/meaningful
+      if (lambersScore[b] !== lambersScore[a]) return lambersScore[b] - lambersScore[a];
+      return (ROWS[b][COL.expectedValue] || 0) - (ROWS[a][COL.expectedValue] || 0);
+    });
+  }
+
+  function renderTable() {
+    theadRow.querySelectorAll("th").forEach(th => {
+      th.classList.toggle("sorted", th.dataset.key === state.sortCol);
+      th.textContent = (TABLE_COLS.find(c => c.key === th.dataset.key).label) + (th.dataset.key === state.sortCol ? (state.sortDir === "asc" ? " ↑" : " ↓") : "");
+    });
+
+    const sorted = getSortedFiltered();
+    const totalPages = Math.max(1, Math.ceil(sorted.length / state.pageSize));
+    if (state.page > totalPages) state.page = totalPages;
+    const startI = (state.page - 1) * state.pageSize;
+    const pageRows = sorted.slice(startI, startI + state.pageSize);
+
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = pageRows.map(i => {
+      const r = ROWS[i];
+      const ratio = (r[COL.marketValue] > 0) ? (r[COL.expectedValue] / r[COL.marketValue]).toFixed(2) + "×" : "—";
+      return `<tr data-idx="${i}">
+        <td class="player-cell">${r[COL.player]}<span class="team">${r[COL.team]}</span></td>
+        <td>${r[COL.league]}<br><span style="color:var(--text-muted); font-size:11px;">T${r[COL.tier]} ${r[COL.tierLabel]}</span></td>
+        <td>${r[COL.pos]}</td>
+        <td>${r[COL.age] ?? "—"}</td>
+        <td>${fmtEUR(r[COL.marketValue])}</td>
+        <td>${fmtEUR(r[COL.expectedValue])}</td>
+        <td>${ratio}</td>
+        <td><span class="tag tag-${r[COL.valueTag]}">${r[COL.valueTag]}</span></td>
+        <td>${(r[COL.benthamScore] ?? 0).toFixed(0)}</td>
+        <td>${(r[COL.jamestownScore] ?? 0).toFixed(0)}</td>
+        <td>${(r[COL.redbullScore] ?? 0).toFixed(0)}</td>
+        <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambersTierOf(i)]}">${lambersIndex[i].toFixed(0)}</span></td>
+      </tr>`;
+    }).join("");
+
+    tbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", () => openModal(+tr.dataset.idx));
+    });
+
+    document.getElementById("pagerInfo").textContent =
+      `Page ${state.page} of ${totalPages} · ${sorted.length.toLocaleString()} players`;
+    document.getElementById("tableCount").textContent = `${sorted.length.toLocaleString()} shown`;
+  }
+  document.getElementById("prevPage").addEventListener("click", () => { if (state.page > 1) { state.page--; renderTable(); } });
+  document.getElementById("nextPage").addEventListener("click", () => { state.page++; renderTable(); });
+
+  // ── Modal ────────────────────────────────────────────────────────────
+  const backdrop = document.getElementById("modalBackdrop");
+  const modalContent = document.getElementById("modalContent");
+  function openModal(idx) {
+    const r = ROWS[idx];
+    const ratio = r[COL.marketValue] > 0 ? (r[COL.expectedValue] / r[COL.marketValue]) : null;
+    modalContent.innerHTML = `
+      <div class="modal-head">
+        <div>
+          <h3>${r[COL.player]}</h3>
+          <div class="team-line">${r[COL.team]} · ${r[COL.league]} (T${r[COL.tier]} ${r[COL.tierLabel]}) · ${r[COL.pos]} · Age ${r[COL.age] ?? "—"}</div>
+        </div>
+        <button class="modal-close" id="modalCloseBtn">✕</button>
+      </div>
+      <div class="modal-sub-grid">
+        <div class="modal-sub-tile" style="--c:var(--bentham)"><div class="n">${(r[COL.benthamScore]??0).toFixed(0)}</div><div class="l">Bentham</div></div>
+        <div class="modal-sub-tile" style="--c:var(--jamestown)"><div class="n">${(r[COL.jamestownScore]??0).toFixed(0)}</div><div class="l">Jamestown</div></div>
+        <div class="modal-sub-tile" style="--c:var(--redbull)"><div class="n">${(r[COL.redbullScore]??0).toFixed(0)}</div><div class="l">Red Bull</div></div>
+      </div>
+      <div class="modal-value-row">
+        <div class="vitem"><div class="l">Lambers Index</div><div class="v"><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambersTierOf(idx)]}">${lambersIndex[idx].toFixed(0)} — ${lambersTierOf(idx)}</span></div></div>
+        <div class="vitem"><div class="l">Market value</div><div class="v">${fmtEUR(r[COL.marketValue])}</div></div>
+        <div class="vitem"><div class="l">Expected value</div><div class="v">${fmtEUR(r[COL.expectedValue])}</div></div>
+        <div class="vitem"><div class="l">Value gap</div><div class="v" style="color:${r[COL.valueGap] > 0 ? 'var(--success-text)' : r[COL.valueGap] < 0 ? 'var(--critical)' : 'inherit'}">${fmtEURSigned(r[COL.valueGap])}${ratio ? ` (${ratio.toFixed(2)}×)` : ""}</div></div>
+      </div>
+      <div class="modal-stats">
+        ${statTile("Goals/90", r[COL.goals90])}
+        ${statTile("xG/90", r[COL.xg90])}
+        ${statTile("Assists/90", r[COL.assists90])}
+        ${statTile("xA/90", r[COL.xa90])}
+        ${statTile("Prog. passes/90", r[COL.progPasses90])}
+        ${statTile("Prog. runs/90", r[COL.progRuns90])}
+        ${statTile("Dribbles/90", r[COL.dribbles90])}
+        ${statTile("Duels won %", r[COL.duelsWon])}
+        ${statTile("Aerial won %", r[COL.aerialWon])}
+        ${statTile("Def. duels won %", r[COL.defDuelsWon])}
+        ${statTile("Key passes/90", r[COL.keyPasses90])}
+        ${statTile("Save rate %", r[COL.saveRate])}
+      </div>
+      <p style="font-size:11.5px; color:var(--text-muted); margin-top:14px; margin-bottom:0;">
+        Contract: ${r[COL.contract] ?? "—"} · Foot: ${r[COL.foot] || "—"} · Height: ${r[COL.height] ? r[COL.height]+"cm" : "—"} · Minutes: ${r[COL.minutes].toLocaleString()}
+      </p>
+    `;
+    document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+    backdrop.classList.add("open");
+  }
+  function statTile(label, v) {
+    return `<div class="s"><div class="l">${label}</div><div class="v">${v === null || v === undefined ? "—" : v}</div></div>`;
+  }
+  function closeModal() { backdrop.classList.remove("open"); }
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+  // ── CSV export ───────────────────────────────────────────────────────
+  document.getElementById("exportCsv").addEventListener("click", () => {
+    const cols = ["player","team","league","tierLabel","pos","age","marketValue","expectedValue","valueGap","valueRatio","valueTag","benthamScore","jamestownScore","redbullScore"];
+    const header = ["Player","Team","League","League Tier","Pos","Age","Market Value","Expected Value","Value Gap","Value Ratio","Value Tag","Bentham","Jamestown","Red Bull","Lambers Index"];
+    const lines = [header.join(",")];
+    for (const i of getSortedFiltered()) {
+      const r = ROWS[i];
+      const vals = cols.map(c => {
+        let v = c in COL ? r[COL[c]] : "";
+        if (typeof v === "string" && v.includes(",")) v = `"${v}"`;
+        return v ?? "";
+      });
+      vals.push(lambersIndex[i].toFixed(1));
+      lines.push(vals.join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "lambers_model_filtered.csv";
+    a.click();
+  });
+
+  // ── Refresh orchestration ───────────────────────────────────────────
+  function refreshAll() {
+    applyFilters();
+    renderTiles();
+    renderBreakdownBars();
+    drawScatter();
+    renderTable();
+    document.getElementById("filtersMeta").textContent =
+      `Showing ${state.filtered.length.toLocaleString()} of ${N.toLocaleString()} players across ${D.leagueCount} leagues.`;
+  }
+
+  refreshAll();
+})();
+</script>
+</body>
+</html>
