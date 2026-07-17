@@ -89,7 +89,8 @@ P_LEGEND_LABEL    = "D. Barát"
 
 # ── Data-source / label config (monkey-patchable) ───────────────────────────────
 P_DATA_FILE      = "Czech.xlsx"           # home Wyscout league file (data/Wyscout DB/)
-P_TEAM_DEFAULT   = "Slovácko"             # fallback team keyword
+P_TEAM_DEFAULT   = "Slovácko"             # fallback team keyword (used only if team column missing)
+P_TEAM_KEYWORD   = None                   # explicit club-filter override; None = auto-derive from team name
 P_LEAGUE_LONG    = "Czech Fortuna Liga"   # footer / peer comparison
 P_LEAGUE_SHORT   = "Czech First League"   # distributions legend / WAR captions
 P_SEASON         = "2025/26"
@@ -190,7 +191,7 @@ def load_data():
     df_c1["_pos1"] = df_c1["Position"].astype(str).str.split(",").str[0].str.strip()
 
     player  = df_c1[df_c1["Player"].astype(str).str.startswith(P_WYSCOUT_FILTER)].iloc[0].copy()
-    team_kw = str(player.get("Team within selected timeframe", P_TEAM_DEFAULT)).split()[0]
+    team_kw = P_TEAM_KEYWORD or str(player.get("Team within selected timeframe", P_TEAM_DEFAULT)).split()[0]
 
     pool_lg = df_c1[df_c1["_pos1"].isin(WIDE_ATK_POS) &
                     (df_c1["Minutes played"].fillna(0) >= MIN_MINS)].copy()
@@ -1696,7 +1697,7 @@ def main():
 
     # Footer
     fig.text(0.04, 0.007,
-             "Data: Wyscout  ·  Czech Fortuna Liga 2025/26  ·  FCHK Scouting",
+             f"Data: Wyscout  ·  {P_LEAGUE_LONG} {P_SEASON}  ·  FCHK Scouting",
              ha="left", va="bottom", color=TEXT_DIM, fontsize=6.5)
     fig.text(0.97, 0.007, "hradeck-scouting",
              ha="right", va="bottom", color=TEXT_DIM, fontsize=6.5)
