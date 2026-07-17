@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Lambers Model — Global Recruitment Intelligence</title>
+<title>The Lamberts Model — Global Recruitment Intelligence</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232a78d6'/%3E%3Ctext x='32' y='42' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='white' text-anchor='middle'%3ELM%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -83,6 +83,7 @@
   }
 
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--page);
@@ -92,11 +93,12 @@
   }
   .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 24px 80px; }
   a { color: inherit; }
+  section[id] { scroll-margin-top: 14px; }
 
   /* ── Header ─────────────────────────────────────────────────────── */
   header.top {
     display: flex; justify-content: space-between; align-items: flex-start;
-    gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 10px;
   }
   .brand-mark {
     display: inline-flex; align-items: center; justify-content: center;
@@ -107,8 +109,8 @@
   .title-block { display: flex; gap: 14px; align-items: center; }
   h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
   .subtitle { color: var(--text-secondary); font-size: 13px; margin-top: 3px; }
-  .top-actions { display: flex; gap: 8px; align-items: center; }
-  button, select, input[type=text], input[type=search] {
+  .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button, select, input[type=text], input[type=search], input[type=range] {
     font-family: inherit; font-size: 13px;
   }
   .btn {
@@ -118,12 +120,17 @@
   .btn:hover { background: var(--surface-2); }
   .btn.primary { background: var(--text-primary); color: var(--page); border-color: transparent; }
   .btn.small { padding: 5px 9px; font-size: 12px; font-weight: 500; }
+  .btn.star-on { color: var(--warning); border-color: var(--warning); }
+
+  .quicknav { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 18px; font-size: 12.5px; }
+  .quicknav a { color: var(--text-secondary); text-decoration: none; font-weight: 600; border-bottom: 1px solid transparent; }
+  .quicknav a:hover { color: var(--text-primary); border-color: var(--border-strong); }
 
   /* ── Stat tiles ─────────────────────────────────────────────────── */
   .tiles {
-    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px;
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 16px;
   }
-  @media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 1200px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
   @media (max-width: 620px)  { .tiles { grid-template-columns: repeat(2, 1fr); } }
   .tile {
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
@@ -157,7 +164,7 @@
   .model-card .weight-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .model-card .weight-row input[type=range] { flex: 1; accent-color: var(--c); }
   .model-card .weight-val { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; width: 42px; text-align: right; }
-  .weights-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  .weights-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; gap: 8px; }
 
   .reg-diag { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
   .reg-diag b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
@@ -169,6 +176,8 @@
     border-radius: 8px; padding: 7px 10px;
   }
   .filters input[type=search] { min-width: 190px; }
+  .minutes-slider { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+  .minutes-slider input[type=range] { width: 130px; accent-color: var(--bentham); }
   .chip-group { display: flex; gap: 4px; flex-wrap: wrap; }
   .chip {
     border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text-secondary);
@@ -176,7 +185,27 @@
     user-select: none;
   }
   .chip.active { background: var(--text-primary); color: var(--page); border-color: transparent; }
+  .chip.star { color: var(--warning); }
+  .chip.star.active { background: var(--warning); color: #1a1400; }
   .filters-meta { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+  /* ── Top targets ────────────────────────────────────────────────── */
+  .target-pos-group { margin-bottom: 14px; }
+  .target-pos-group:last-child { margin-bottom: 0; }
+  .target-pos-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .target-cards { display: flex; gap: 8px; flex-wrap: wrap; }
+  .target-card {
+    flex: 1 1 220px; min-width: 210px; border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 11px; cursor: pointer; position: relative;
+  }
+  .target-card:hover { background: var(--surface-2); border-color: var(--border-strong); }
+  .target-card .tc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+  .target-card .tc-name { font-weight: 700; font-size: 13px; }
+  .target-card .tc-team { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .target-card .tc-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--text-secondary); }
+  .target-card .tc-star { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text-muted); padding: 0; line-height: 1; }
+  .target-card .tc-star.on { color: var(--warning); }
+  .empty-note { font-size: 12px; color: var(--text-muted); font-style: italic; }
 
   /* ── Charts ─────────────────────────────────────────────────────── */
   .chart-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
@@ -209,13 +238,17 @@
     font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted);
     cursor: pointer; white-space: nowrap; border-bottom: 1px solid var(--border-strong);
   }
-  thead th:hover { color: var(--text-primary); }
+  thead th.nosort { cursor: default; }
+  thead th:hover:not(.nosort) { color: var(--text-primary); }
   thead th.sorted { color: var(--text-primary); }
   tbody td { padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums; }
   tbody tr { cursor: pointer; }
   tbody tr:hover { background: var(--surface-2); }
   td.player-cell { font-variant-numeric: normal; font-weight: 600; }
   td.player-cell .team { display: block; font-weight: 400; color: var(--text-muted); font-size: 11px; }
+  td.star-cell { text-align: center; }
+  .star-btn { background: none; border: none; cursor: pointer; font-size: 15px; color: var(--text-muted); padding: 0; line-height: 1; }
+  .star-btn.on { color: var(--warning); }
   .tag {
     display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
   }
@@ -224,7 +257,7 @@
   .tag-FAIR        { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border-strong); }
   .tag-UNLISTED    { background: transparent; color: var(--text-muted); border: 1px dashed var(--border-strong); }
 
-  .lt-chip { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #fff; }
+  .lt-chip { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
 
   .pager { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; font-size: 12px; color: var(--text-secondary); }
   .pager .btns { display: flex; gap: 6px; }
@@ -242,11 +275,24 @@
   .modal-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
   .modal-head h3 { margin: 0; font-size: 19px; }
   .modal-head .team-line { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+  .modal-head-actions { display: flex; align-items: center; gap: 10px; }
   .modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; line-height: 1; }
-  .modal-sub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+  .modal-star { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+  .modal-star.on { color: var(--warning); }
+  .modal-sub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 10px; }
   .modal-sub-tile { text-align: center; border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; border-top: 3px solid var(--c); }
   .modal-sub-tile .n { font-size: 20px; font-weight: 800; color: var(--c); font-variant-numeric: tabular-nums; }
   .modal-sub-tile .l { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+
+  .vs-avg { margin: 10px 0 14px; }
+  .vs-avg-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .vs-avg-row { display: grid; grid-template-columns: 84px 1fr 48px; align-items: center; gap: 8px; font-size: 11.5px; margin: 5px 0; }
+  .vs-avg-row .l { color: var(--text-secondary); }
+  .vs-avg-track { position: relative; height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+  .vs-avg-fill { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
+  .vs-avg-mid { position: absolute; left: 50%; top: -1px; bottom: -1px; width: 1px; background: var(--baseline); }
+  .vs-avg-row .d { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
   .modal-value-row { display: flex; gap: 16px; margin: 14px 0; flex-wrap: wrap; }
   .modal-value-row .vitem { flex: 1; min-width: 130px; }
   .modal-value-row .vitem .l { font-size: 11px; color: var(--text-muted); }
@@ -267,15 +313,23 @@
     <div class="title-block">
       <div class="brand-mark">LM</div>
       <div>
-        <h1>The Lambers Model</h1>
+        <h1>The Lamberts Model</h1>
         <div class="subtitle" id="subtitleLine">Global recruitment intelligence · 165 leagues · Bentham × Jamestown × Red Bull</div>
       </div>
     </div>
     <div class="top-actions">
       <button class="btn small" id="themeToggle">🌙 Dark</button>
+      <button class="btn small" id="exportShortlist">★ Export shortlist</button>
       <button class="btn small" id="exportCsv">⇩ Export filtered CSV</button>
     </div>
   </header>
+
+  <nav class="quicknav">
+    <a href="#targets">★ Top Targets</a>
+    <a href="#valuemap">Value Map</a>
+    <a href="#board">Recruitment Board</a>
+    <a href="#methodPanel">Methodology</a>
+  </nav>
 
   <div class="tiles" id="tiles"></div>
 
@@ -288,8 +342,8 @@
       <p class="desc">
         Every player is scored 0–100 by three independent sub-models, each built on the per-90 metrics
         Wyscout exposes, cross-league adjusted by a 6-tier league-strength coefficient (Elite → Youth), and
-        blended into <b>THE LAMBERS MODEL</b> using the weights below. Drag a slider to re-blend the entire
-        45k-player pool live — the table, charts and stat tiles below recompute instantly.
+        blended into <b>THE LAMBERTS MODEL</b> using the weights below. Drag a slider to re-blend the entire
+        45k-player pool live — the targets, table, charts and stat tiles below recompute instantly.
       </p>
       <div class="model-grid">
         <div class="model-card" style="--c: var(--bentham)">
@@ -327,11 +381,13 @@
         <button class="btn small" id="resetWeights">Reset to default (35 / 35 / 30)</button>
       </div>
       <p class="desc" style="margin-top:14px;">
-        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Lambers Index + Age + Age² +
-        log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via Wyscout) actually
-        lists a value for, then used to <i>predict</i> a value for every player in the pool. It is a model-derived
-        number, not a copy of Transfermarkt's figure, so it can diverge from it in either direction — that gap is
-        the recruitment signal (Value Gap = Expected − Market).
+        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Bentham + Jamestown + Red Bull
+        + Age + Age² + log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via
+        Wyscout) actually lists a value for, then used to <i>predict</i> a value for every player in the pool. It
+        runs on the three raw sub-scores directly, <b>not</b> the blended Lamberts Index, so it stays a fixed,
+        objective estimate — it will not shift just because you personally weight one philosophy higher on the
+        sliders above. It is a model-derived number, not a copy of Transfermarkt's figure, so it can diverge from
+        it in either direction — that gap is the recruitment signal (Value Gap = Expected − Market).
       </p>
       <div class="reg-diag" id="regDiag"></div>
     </div>
@@ -351,24 +407,34 @@
       </select>
       <input type="text" id="ageMin" placeholder="Age min" style="width:70px">
       <input type="text" id="ageMax" placeholder="Age max" style="width:70px">
+      <label class="minutes-slider">Min minutes <input type="range" id="minMinutes" min="500" max="3500" step="50" value="500"><span id="minMinutesVal">500</span></label>
       <button class="btn small" id="clearFilters">Clear</button>
     </div>
     <div class="chip-group" id="posChips" style="margin-top:10px;"></div>
+    <div class="chip-group" id="quickChips" style="margin-top:6px;"></div>
     <div class="filters-meta" id="filtersMeta"></div>
   </div>
 
-  <div class="chart-row">
+  <section id="targets" class="panel">
+    <h2>★ Top Targets</h2>
+    <p class="desc">Highest Lamberts Index player at each position within your current filters — recompute live as you move the sliders or narrow the pool. Click the star to shortlist, click the card to open the full profile.</p>
+    <div id="targetsGrid"></div>
+  </section>
+
+  <section id="valuemap" class="chart-row">
     <div class="panel scatter-wrap">
       <h2>Value Map — ability vs. price</h2>
-      <p class="desc">Lambers Index (x) against Expected-Value ÷ Market-Value (y). Top-right = high-ability players the
-        model prices well above what Transfermarkt lists. Only players with a listed market value are plotted
-        (<span id="unlistedCount">0</span> unlisted excluded). Hover for detail, click to open a player card.</p>
+      <p class="desc">Lamberts Index (x) against Expected-Value ÷ Market-Value (y). Dot size scales with market value.
+        Top-right = high-ability players the model prices well above what Transfermarkt lists. Only players with a
+        listed market value are plotted (<span id="unlistedCount">0</span> unlisted excluded). Hover for detail,
+        click to open a player card.</p>
       <canvas id="scatterCanvas"></canvas>
       <div class="tooltip" id="scatterTooltip"></div>
       <div class="legend-row">
         <span class="legend-item"><span class="swatch" style="background:var(--good)"></span>Undervalued (≥1.3×)</span>
         <span class="legend-item"><span class="swatch" style="background:var(--text-muted)"></span>Fair (0.7–1.3×)</span>
         <span class="legend-item"><span class="swatch" style="background:var(--critical)"></span>Overvalued (≤0.7×)</span>
+        <span class="legend-item">Dot size ∝ market value</span>
       </div>
     </div>
     <div class="panel">
@@ -385,9 +451,9 @@
         </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="panel">
+  <section id="board" class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <h2 style="margin:0;">Recruitment board</h2>
       <span class="table-view-toggle" id="tableCount"></span>
@@ -405,12 +471,13 @@
         <button class="btn small" id="nextPage">Next ›</button>
       </div>
     </div>
-  </div>
+  </section>
 
   <footer>
     Built from Wyscout exports across all 165 tracked leagues · Data generated <span id="genDate"></span> ·
     Expected Value is a statistical estimate for scouting triage, not a valuation opinion — always sanity-check
-    against contract status, injury history and video before acting.
+    against contract status, injury history and video before acting. Shortlist is saved in this browser only
+    (localStorage) — export it to keep a copy.
   </footer>
 </div>
 
@@ -418,11 +485,11 @@
   <div class="modal" id="modalContent"></div>
 </div>
 
-<script src="data/Lambers_Model_Data.js"></script>
+<script src="data/Lamberts_Model_Data.js"></script>
 <script>
 (function () {
   "use strict";
-  const D = LAMBERS_DATA;
+  const D = LAMBERTS_DATA;
   const COL = {};
   D.columns.forEach((c, i) => COL[c] = i);
   const ROWS = D.rows;
@@ -431,9 +498,6 @@
   const TIER_LABELS = D.tierLabels;
   const POS_LABELS = D.positionLabels;
   const POS_ORDER = ["GK", "CB", "FB", "DM", "CM", "W", "FW"];
-
-  const SUB_COLOR = { bentham: "var(--bentham)", jamestown: "var(--jamestown)", redbull: "var(--redbull)" };
-  const TAG_COLOR = { UNDERVALUED: "var(--good)", OVERVALUED: "var(--critical)", FAIR: "var(--text-muted)", UNLISTED: "var(--text-muted)" };
 
   // ── Theme ────────────────────────────────────────────────────────────
   const themeBtn = document.getElementById("themeToggle");
@@ -457,24 +521,43 @@
   // ── Header / meta ──────────────────────────────────────────────────
   document.getElementById("genDate").textContent = D.generatedAt;
   document.getElementById("subtitleLine").textContent =
-    `Global recruitment intelligence · ${D.leagueCount} leagues · ${N.toLocaleString()} players · min ${D.minMinutes} minutes · Bentham × Jamestown × Red Bull`;
+    `Global recruitment intelligence · ${D.leagueCount} leagues · ${N.toLocaleString()} players · min ${D.minMinutes} minutes at build time · Bentham × Jamestown × Red Bull`;
 
   const rd = D.regression;
   document.getElementById("regDiag").innerHTML =
     `<span>R² <b>${rd.r_squared}</b></span>` +
-    `<span>Trained on <b>${rd.n_train.toLocaleString()}</b> of ${rd.n_total.toLocaleString()} players with a listed Transfermarkt value</span>`;
+    `<span>Trained on <b>${rd.n_train.toLocaleString()}</b> of ${rd.n_total.toLocaleString()} players with a listed Transfermarkt value</span>` +
+    `<span>Features: <b>${rd.features.filter(f => f !== "intercept").length}</b></span>`;
 
-  // ── Weights & live Lambers Index recompute ─────────────────────────
+  // ── Position averages (fixed, for "vs position average" in modal) ──
+  const posAvg = {};
+  (function computePosAvg() {
+    const sums = {};
+    for (let i = 0; i < N; i++) {
+      const p = ROWS[i][COL.pos];
+      const s = sums[p] || (sums[p] = { bentham: 0, jamestown: 0, redbull: 0, n: 0 });
+      s.bentham += ROWS[i][COL.benthamScore] || 0;
+      s.jamestown += ROWS[i][COL.jamestownScore] || 0;
+      s.redbull += ROWS[i][COL.redbullScore] || 0;
+      s.n++;
+    }
+    for (const p in sums) {
+      const s = sums[p];
+      posAvg[p] = { bentham: s.bentham / s.n, jamestown: s.jamestown / s.n, redbull: s.redbull / s.n };
+    }
+  })();
+
+  // ── Weights & live Lamberts Index recompute ─────────────────────────
   const weights = { bentham: 35, jamestown: 35, redbull: 30 };
-  const lambersScore = new Float64Array(N);
-  const lambersIndex = new Float64Array(N);
+  const lambertsScore = new Float64Array(N);
+  const lambertsIndex = new Float64Array(N);
 
-  function recomputeLambers() {
+  function recomputeLamberts() {
     const total = weights.bentham + weights.jamestown + weights.redbull || 1;
     const wb = weights.bentham / total, wj = weights.jamestown / total, wr = weights.redbull / total;
     for (let i = 0; i < N; i++) {
       const r = ROWS[i];
-      lambersScore[i] = wb * (r[COL.benthamScore] || 0) + wj * (r[COL.jamestownScore] || 0) + wr * (r[COL.redbullScore] || 0);
+      lambertsScore[i] = wb * (r[COL.benthamScore] || 0) + wj * (r[COL.jamestownScore] || 0) + wr * (r[COL.redbullScore] || 0);
     }
     const byPos = {};
     for (let i = 0; i < N; i++) {
@@ -483,15 +566,15 @@
     }
     for (const p in byPos) {
       const idxs = byPos[p];
-      idxs.sort((a, b) => lambersScore[a] - lambersScore[b]);
+      idxs.sort((a, b) => lambertsScore[a] - lambertsScore[b]);
       const n = idxs.length;
       idxs.forEach((rowIdx, rank) => {
-        lambersIndex[rowIdx] = n > 1 ? ((rank + 1) / n) * 100 : 100;
+        lambertsIndex[rowIdx] = n > 1 ? ((rank + 1) / n) * 100 : 100;
       });
     }
   }
-  function lambersTierOf(idx) {
-    const li = lambersIndex[idx];
+  function lambertsTierOf(idx) {
+    const li = lambertsIndex[idx];
     if (li >= 90) return "ELITE";
     if (li >= 75) return "HIGH POTENTIAL";
     if (li >= 55) return "SOLID TARGET";
@@ -503,7 +586,7 @@
     "ROTATION": "var(--seq-300)", "LONGSHOT": "var(--seq-150)",
   };
 
-  recomputeLambers();
+  recomputeLamberts();
 
   ["bentham", "jamestown", "redbull"].forEach(key => {
     const cap = key[0].toUpperCase() + key.slice(1);
@@ -512,11 +595,10 @@
     slider.addEventListener("input", () => {
       weights[key] = +slider.value;
       const total = weights.bentham + weights.jamestown + weights.redbull || 1;
-      val.textContent = Math.round((weights[key] / total) * 100) + "%";
       document.getElementById("wBenthamVal").textContent = Math.round((weights.bentham/total)*100)+"%";
       document.getElementById("wJamestownVal").textContent = Math.round((weights.jamestown/total)*100)+"%";
       document.getElementById("wRedbullVal").textContent = Math.round((weights.redbull/total)*100)+"%";
-      recomputeLambers();
+      recomputeLamberts();
       refreshAll();
     });
   });
@@ -528,7 +610,7 @@
     document.getElementById("wBenthamVal").textContent = "35%";
     document.getElementById("wJamestownVal").textContent = "35%";
     document.getElementById("wRedbullVal").textContent = "30%";
-    recomputeLambers();
+    recomputeLamberts();
     refreshAll();
   });
 
@@ -538,8 +620,31 @@
     });
   });
 
+  // ── Shortlist (localStorage-backed) ──────────────────────────────────
+  const SHORTLIST_KEY = "lambertsModel_shortlist_v1";
+  let shortlist = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(SHORTLIST_KEY) || "[]");
+    shortlist = new Set(saved);
+  } catch (e) { /* localStorage unavailable (e.g. sandboxed file://) — in-memory only */ }
+  function saveShortlist() {
+    try { localStorage.setItem(SHORTLIST_KEY, JSON.stringify([...shortlist])); } catch (e) {}
+  }
+  function toggleShortlist(idx) {
+    if (shortlist.has(idx)) shortlist.delete(idx); else shortlist.add(idx);
+    saveShortlist();
+    refreshAll();
+  }
+
   // ── Filters state ──────────────────────────────────────────────────
-  const filters = { search: "", tier: "", league: "", pos: new Set(), valueTag: "", ageMin: null, ageMax: null };
+  const maxMinutes = ROWS.reduce((m, r) => Math.max(m, r[COL.minutes]), D.minMinutes);
+  document.getElementById("minMinutes").max = maxMinutes;
+
+  const CONTRACT_CUTOFF = "2027-06-30"; // "expiring soon" = by the end of next season
+  const filters = {
+    search: "", tier: "", league: "", pos: new Set(), valueTag: "", ageMin: null, ageMax: null,
+    minMinutes: D.minMinutes, expiringSoon: false, shortlistOnly: false,
+  };
 
   const tierFilterEl = document.getElementById("tierFilter");
   Object.keys(TIER_LABELS).sort((a,b)=>a-b).forEach(t => {
@@ -567,30 +672,58 @@
     posChipsEl.appendChild(chip);
   });
 
+  const quickChipsEl = document.getElementById("quickChips");
+  const expiringChip = document.createElement("span");
+  expiringChip.className = "chip"; expiringChip.textContent = `Contract ≤ ${CONTRACT_CUTOFF.slice(0,4)}`;
+  expiringChip.addEventListener("click", () => {
+    filters.expiringSoon = !filters.expiringSoon;
+    expiringChip.classList.toggle("active", filters.expiringSoon);
+    state.page = 1; refreshAll();
+  });
+  const shortlistChip = document.createElement("span");
+  shortlistChip.className = "chip star"; shortlistChip.textContent = "★ Shortlist only";
+  shortlistChip.addEventListener("click", () => {
+    filters.shortlistOnly = !filters.shortlistOnly;
+    shortlistChip.classList.toggle("active", filters.shortlistOnly);
+    state.page = 1; refreshAll();
+  });
+  quickChipsEl.appendChild(expiringChip);
+  quickChipsEl.appendChild(shortlistChip);
+
   document.getElementById("searchBox").addEventListener("input", e => { filters.search = e.target.value.trim().toLowerCase(); state.page=1; refreshAll(); });
   document.getElementById("tierFilter").addEventListener("change", e => { filters.tier = e.target.value; state.page=1; refreshAll(); });
   document.getElementById("leagueFilter").addEventListener("change", e => { filters.league = e.target.value; state.page=1; refreshAll(); });
   document.getElementById("valueTagFilter").addEventListener("change", e => { filters.valueTag = e.target.value; state.page=1; refreshAll(); });
   document.getElementById("ageMin").addEventListener("input", e => { filters.ageMin = e.target.value ? +e.target.value : null; state.page=1; refreshAll(); });
   document.getElementById("ageMax").addEventListener("input", e => { filters.ageMax = e.target.value ? +e.target.value : null; state.page=1; refreshAll(); });
+  document.getElementById("minMinutes").addEventListener("input", e => {
+    filters.minMinutes = +e.target.value;
+    document.getElementById("minMinutesVal").textContent = filters.minMinutes.toLocaleString();
+    state.page = 1; refreshAll();
+  });
   document.getElementById("clearFilters").addEventListener("click", () => {
     filters.search = ""; filters.tier = ""; filters.league = ""; filters.valueTag = ""; filters.ageMin = null; filters.ageMax = null;
-    filters.pos.clear();
+    filters.pos.clear(); filters.expiringSoon = false; filters.shortlistOnly = false; filters.minMinutes = D.minMinutes;
     document.getElementById("searchBox").value = "";
     document.getElementById("tierFilter").value = "";
     document.getElementById("leagueFilter").value = "";
     document.getElementById("valueTagFilter").value = "";
     document.getElementById("ageMin").value = "";
     document.getElementById("ageMax").value = "";
+    document.getElementById("minMinutes").value = D.minMinutes;
+    document.getElementById("minMinutesVal").textContent = D.minMinutes.toLocaleString();
     document.querySelectorAll("#posChips .chip").forEach(c => c.classList.remove("active"));
+    expiringChip.classList.remove("active");
+    shortlistChip.classList.remove("active");
     state.page = 1;
     refreshAll();
   });
 
   // ── Table state ─────────────────────────────────────────────────────
-  const state = { filtered: [], sortCol: "lambersIndex", sortDir: "desc", page: 1, pageSize: 50 };
+  const state = { filtered: [], sortCol: "lambertsIndex", sortDir: "desc", page: 1, pageSize: 50 };
 
   const TABLE_COLS = [
+    { key: "_star", label: "★", nosort: true },
     { key: "player", label: "Player" },
     { key: "league", label: "League" },
     { key: "pos", label: "Pos" },
@@ -602,13 +735,14 @@
     { key: "benthamScore", label: "Bentham" },
     { key: "jamestownScore", label: "Jamestown" },
     { key: "redbullScore", label: "Red Bull" },
-    { key: "lambersIndex", label: "Lambers" },
+    { key: "lambertsIndex", label: "Lamberts" },
   ];
   const theadRow = document.getElementById("tableHead");
   TABLE_COLS.forEach(c => {
     const th = document.createElement("th");
     th.textContent = c.label; th.dataset.key = c.key;
-    th.addEventListener("click", () => {
+    if (c.nosort) th.classList.add("nosort");
+    else th.addEventListener("click", () => {
       if (state.sortCol === c.key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
       else { state.sortCol = c.key; state.sortDir = "desc"; }
       renderTable();
@@ -630,8 +764,8 @@
     return s + fmtEUR(Math.abs(v)).slice(1);
   }
   function rowVal(idx, key) {
-    if (key === "lambersIndex") return lambersIndex[idx];
-    if (key === "lambersScore") return lambersScore[idx];
+    if (key === "lambertsIndex") return lambertsIndex[idx];
+    if (key === "lambertsScore") return lambertsScore[idx];
     return ROWS[idx][COL[key]];
   }
 
@@ -646,6 +780,12 @@
       if (filters.ageMin !== null && (r[COL.age] === null || r[COL.age] < filters.ageMin)) continue;
       if (filters.ageMax !== null && (r[COL.age] === null || r[COL.age] > filters.ageMax)) continue;
       if (filters.valueTag && r[COL.valueTag] !== filters.valueTag) continue;
+      if (r[COL.minutes] < filters.minMinutes) continue;
+      if (filters.expiringSoon) {
+        const c = r[COL.contract];
+        if (!c || c > CONTRACT_CUTOFF) continue;
+      }
+      if (filters.shortlistOnly && !shortlist.has(i)) continue;
       if (s) {
         const hay = (r[COL.player] + " " + r[COL.team]).toLowerCase();
         if (!hay.includes(s)) continue;
@@ -661,24 +801,76 @@
     const n = f.length;
     let elite = 0, undervalued = 0, sumGap = 0, gapN = 0, leaguesSeen = new Set();
     for (const i of f) {
-      if (lambersTierOf(i) === "ELITE") elite++;
+      if (lambertsTierOf(i) === "ELITE") elite++;
       if (ROWS[i][COL.valueTag] === "UNDERVALUED") undervalued++;
       const gap = ROWS[i][COL.valueGap];
       if (gap !== null && gap !== undefined) { sumGap += gap; gapN++; }
       leaguesSeen.add(ROWS[i][COL.league]);
     }
     const avgGap = gapN ? sumGap / gapN : 0;
+    const totalW = weights.bentham + weights.jamestown + weights.redbull || 1;
     const tiles = [
       { label: "Players in view", value: n.toLocaleString(), sub: `of ${N.toLocaleString()} total` },
       { label: "Leagues in view", value: leaguesSeen.size, sub: `of ${D.leagueCount} tracked` },
-      { label: "Elite tier", value: elite.toLocaleString(), sub: "Lambers Index ≥ 90" },
+      { label: "Elite tier", value: elite.toLocaleString(), sub: "Lamberts Index ≥ 90" },
       { label: "Undervalued", value: undervalued.toLocaleString(), sub: "EV ≥ 1.3× market value" },
       { label: "Avg value gap", value: fmtEURSigned(avgGap), sub: "Expected − Market" },
-      { label: "Model blend", value: `${Math.round(weights.bentham/(weights.bentham+weights.jamestown+weights.redbull)*100)}/${Math.round(weights.jamestown/(weights.bentham+weights.jamestown+weights.redbull)*100)}/${Math.round(weights.redbull/(weights.bentham+weights.jamestown+weights.redbull)*100)}`, sub: "Bentham / Jamestown / RB" },
+      { label: "Shortlisted", value: shortlist.size.toLocaleString(), sub: "saved in this browser" },
+      { label: "Model blend", value: `${Math.round(weights.bentham/totalW*100)}/${Math.round(weights.jamestown/totalW*100)}/${Math.round(weights.redbull/totalW*100)}`, sub: "Bentham / Jamestown / RB" },
     ];
     document.getElementById("tiles").innerHTML = tiles.map(t =>
       `<div class="tile"><div class="label">${t.label}</div><div class="value">${t.value}</div><div class="sub">${t.sub}</div></div>`
     ).join("");
+  }
+
+  // ── Top Targets ──────────────────────────────────────────────────────
+  function renderTargets() {
+    const f = state.filtered;
+    const byPos = {};
+    for (const i of f) {
+      const p = ROWS[i][COL.pos];
+      (byPos[p] || (byPos[p] = [])).push(i);
+    }
+    const html = POS_ORDER.map(p => {
+      const idxs = (byPos[p] || []).slice().sort((a, b) => {
+        if (lambertsIndex[b] !== lambertsIndex[a]) return lambertsIndex[b] - lambertsIndex[a];
+        return lambertsScore[b] - lambertsScore[a];
+      }).slice(0, 3);
+      if (!idxs.length) return "";
+      const cards = idxs.map(i => {
+        const r = ROWS[i];
+        const starred = shortlist.has(i);
+        return `<div class="target-card" data-idx="${i}">
+          <div class="tc-top">
+            <div>
+              <div class="tc-name">${r[COL.player]}</div>
+              <div class="tc-team">${r[COL.team]} · ${r[COL.league]} · Age ${r[COL.age] ?? "—"}</div>
+            </div>
+            <button class="tc-star ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button>
+          </div>
+          <div class="tc-bottom">
+            <span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span>
+            <span class="tag tag-${r[COL.valueTag]}">${r[COL.valueTag]}</span>
+            <span>${fmtEUR(r[COL.expectedValue])}</span>
+          </div>
+        </div>`;
+      }).join("");
+      return `<div class="target-pos-group">
+        <div class="target-pos-title">${POS_LABELS[p]}</div>
+        <div class="target-cards">${cards}</div>
+      </div>`;
+    }).join("");
+    const grid = document.getElementById("targetsGrid");
+    grid.innerHTML = html || `<p class="empty-note">No players match the current filters.</p>`;
+    grid.querySelectorAll(".target-card").forEach(card => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".tc-star")) return;
+        openModal(+card.dataset.idx);
+      });
+    });
+    grid.querySelectorAll(".tc-star").forEach(btn => {
+      btn.addEventListener("click", (e) => { e.stopPropagation(); toggleShortlist(+btn.dataset.starIdx); });
+    });
   }
 
   // ── Mini breakdown bars ─────────────────────────────────────────────
@@ -714,7 +906,7 @@
   const canvas = document.getElementById("scatterCanvas");
   const ctx = canvas.getContext("2d");
   const tooltip = document.getElementById("scatterTooltip");
-  let plotPoints = []; // {x, y, idx, px, py}
+  let plotPoints = []; // {x, y, idx}
 
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -727,6 +919,10 @@
     canvas.height = 420 * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { w: Math.max(300, rect.width), h: 420 };
+  }
+
+  function dotRadius(mv) {
+    return Math.min(7, Math.max(2, 2 + Math.sqrt(mv) / 1500));
   }
 
   function drawScatter() {
@@ -743,7 +939,6 @@
     function xPix(v) { return pad.l + (v - xMin) / (xMax - xMin) * plotW; }
     function yPix(v) { return pad.t + (1 - (v - yMin) / (yMax - yMin)) * plotH; }
 
-    // gridlines
     ctx.strokeStyle = gridline; ctx.lineWidth = 1; ctx.font = "11px system-ui";
     ctx.fillStyle = muted;
     [0, 25, 50, 75, 100].forEach(v => {
@@ -756,31 +951,38 @@
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + plotW, y); ctx.stroke();
       ctx.fillText(v.toFixed(1) + "×", 4, y + 4);
     });
-    // fair-value baseline at y=1
     ctx.strokeStyle = baseline; ctx.setLineDash([4, 3]);
     const y1 = yPix(1);
     ctx.beginPath(); ctx.moveTo(pad.l, y1); ctx.lineTo(pad.l + plotW, y1); ctx.stroke();
     ctx.setLineDash([]);
 
     ctx.fillStyle = muted;
-    ctx.fillText("Lambers Index →", pad.l + plotW/2 - 40, h - 4);
+    ctx.fillText("Lamberts Index →", pad.l + plotW/2 - 42, h - 4);
 
-    // points
     plotPoints = [];
     const f = state.filtered;
-    for (const i of f) {
+    // draw shortlisted players last so they sit on top
+    const drawOrder = f.slice().sort((a, b) => (shortlist.has(a) ? 1 : 0) - (shortlist.has(b) ? 1 : 0));
+    for (const i of drawOrder) {
       const mv = ROWS[i][COL.marketValue];
       if (!mv || mv <= 0) continue;
       const ratio = ROWS[i][COL.expectedValue] / mv;
-      const li = lambersIndex[i];
+      const li = lambertsIndex[i];
       const x = xPix(li), y = yPix(Math.min(ratio, yMax));
       const tag = ROWS[i][COL.valueTag];
       const color = tag === "UNDERVALUED" ? good : tag === "OVERVALUED" ? critical : muted;
+      const r = dotRadius(mv);
+      const starred = shortlist.has(i);
       ctx.beginPath();
       ctx.fillStyle = color;
-      ctx.globalAlpha = 0.55;
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.globalAlpha = starred ? 0.95 : 0.5;
+      ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
+      if (starred) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = cssVar("--warning");
+        ctx.stroke();
+      }
       plotPoints.push({ x, y, idx: i });
     }
     ctx.globalAlpha = 1;
@@ -807,7 +1009,7 @@
         tooltip.style.left = (best.x + 12) + "px";
         tooltip.style.top = (best.y + 8) + "px";
         tooltip.innerHTML = `<b>${r[COL.player]}</b><br>${r[COL.team]} · ${r[COL.league]}<br>` +
-          `Lambers ${lambersIndex[best.idx].toFixed(0)} · EV/MV ${(r[COL.expectedValue]/r[COL.marketValue]).toFixed(2)}×<br>` +
+          `Lamberts ${lambertsIndex[best.idx].toFixed(1)} · EV/MV ${(r[COL.expectedValue]/r[COL.marketValue]).toFixed(2)}×<br>` +
           `Mkt ${fmtEUR(r[COL.marketValue])} → Exp ${fmtEUR(r[COL.expectedValue])}`;
         canvas.style.cursor = "pointer";
         canvas.dataset.hoverIdx = best.idx;
@@ -834,16 +1036,16 @@
       if (typeof va === "string") { va = va.toLowerCase(); vb = String(vb).toLowerCase(); }
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
-      // tie-break: raw Lambers composite, then Expected Value, keeps ranking stable/meaningful
-      if (lambersScore[b] !== lambersScore[a]) return lambersScore[b] - lambersScore[a];
+      if (lambertsScore[b] !== lambertsScore[a]) return lambertsScore[b] - lambertsScore[a];
       return (ROWS[b][COL.expectedValue] || 0) - (ROWS[a][COL.expectedValue] || 0);
     });
   }
 
   function renderTable() {
     theadRow.querySelectorAll("th").forEach(th => {
+      const col = TABLE_COLS.find(c => c.key === th.dataset.key);
       th.classList.toggle("sorted", th.dataset.key === state.sortCol);
-      th.textContent = (TABLE_COLS.find(c => c.key === th.dataset.key).label) + (th.dataset.key === state.sortCol ? (state.sortDir === "asc" ? " ↑" : " ↓") : "");
+      th.textContent = col.label + (!col.nosort && th.dataset.key === state.sortCol ? (state.sortDir === "asc" ? " ↑" : " ↓") : "");
     });
 
     const sorted = getSortedFiltered();
@@ -856,7 +1058,9 @@
     tbody.innerHTML = pageRows.map(i => {
       const r = ROWS[i];
       const ratio = (r[COL.marketValue] > 0) ? (r[COL.expectedValue] / r[COL.marketValue]).toFixed(2) + "×" : "—";
+      const starred = shortlist.has(i);
       return `<tr data-idx="${i}">
+        <td class="star-cell"><button class="star-btn ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button></td>
         <td class="player-cell">${r[COL.player]}<span class="team">${r[COL.team]}</span></td>
         <td>${r[COL.league]}<br><span style="color:var(--text-muted); font-size:11px;">T${r[COL.tier]} ${r[COL.tierLabel]}</span></td>
         <td>${r[COL.pos]}</td>
@@ -868,12 +1072,18 @@
         <td>${(r[COL.benthamScore] ?? 0).toFixed(0)}</td>
         <td>${(r[COL.jamestownScore] ?? 0).toFixed(0)}</td>
         <td>${(r[COL.redbullScore] ?? 0).toFixed(0)}</td>
-        <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambersTierOf(i)]}">${lambersIndex[i].toFixed(0)}</span></td>
+        <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span></td>
       </tr>`;
     }).join("");
 
     tbody.querySelectorAll("tr").forEach(tr => {
-      tr.addEventListener("click", () => openModal(+tr.dataset.idx));
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest(".star-btn")) return;
+        openModal(+tr.dataset.idx);
+      });
+    });
+    tbody.querySelectorAll(".star-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => { e.stopPropagation(); toggleShortlist(+btn.dataset.starIdx); });
     });
 
     document.getElementById("pagerInfo").textContent =
@@ -886,24 +1096,53 @@
   // ── Modal ────────────────────────────────────────────────────────────
   const backdrop = document.getElementById("modalBackdrop");
   const modalContent = document.getElementById("modalContent");
+
+  function vsAvgRow(label, color, value, avg) {
+    const delta = value - avg;
+    const scale = 40; // +/- 40pt display range
+    const pct = Math.max(-1, Math.min(1, delta / scale)) * 50; // -50..+50
+    const fillLeft = delta >= 0 ? 50 : 50 + pct;
+    const fillWidth = Math.abs(pct);
+    const fillColor = delta >= 0 ? "var(--good)" : "var(--critical)";
+    return `<div class="vs-avg-row">
+      <span class="l" style="color:${color}">${label}</span>
+      <div class="vs-avg-track">
+        <div class="vs-avg-mid"></div>
+        <div class="vs-avg-fill" style="left:${fillLeft}%; width:${fillWidth}%; background:${fillColor}"></div>
+      </div>
+      <span class="d" style="color:${fillColor}">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}</span>
+    </div>`;
+  }
+
   function openModal(idx) {
     const r = ROWS[idx];
     const ratio = r[COL.marketValue] > 0 ? (r[COL.expectedValue] / r[COL.marketValue]) : null;
+    const avg = posAvg[r[COL.pos]] || { bentham: 50, jamestown: 50, redbull: 50 };
+    const starred = shortlist.has(idx);
     modalContent.innerHTML = `
       <div class="modal-head">
         <div>
           <h3>${r[COL.player]}</h3>
           <div class="team-line">${r[COL.team]} · ${r[COL.league]} (T${r[COL.tier]} ${r[COL.tierLabel]}) · ${r[COL.pos]} · Age ${r[COL.age] ?? "—"}</div>
         </div>
-        <button class="modal-close" id="modalCloseBtn">✕</button>
+        <div class="modal-head-actions">
+          <button class="modal-star ${starred ? "on" : ""}" id="modalStarBtn" title="Shortlist">${starred ? "★" : "☆"}</button>
+          <button class="modal-close" id="modalCloseBtn">✕</button>
+        </div>
       </div>
       <div class="modal-sub-grid">
         <div class="modal-sub-tile" style="--c:var(--bentham)"><div class="n">${(r[COL.benthamScore]??0).toFixed(0)}</div><div class="l">Bentham</div></div>
         <div class="modal-sub-tile" style="--c:var(--jamestown)"><div class="n">${(r[COL.jamestownScore]??0).toFixed(0)}</div><div class="l">Jamestown</div></div>
         <div class="modal-sub-tile" style="--c:var(--redbull)"><div class="n">${(r[COL.redbullScore]??0).toFixed(0)}</div><div class="l">Red Bull</div></div>
       </div>
+      <div class="vs-avg">
+        <div class="vs-avg-title">vs. average ${POS_LABELS[r[COL.pos]] || r[COL.pos]} in the pool</div>
+        ${vsAvgRow("Bentham", "var(--bentham)", r[COL.benthamScore]??0, avg.bentham)}
+        ${vsAvgRow("Jamestown", "var(--jamestown)", r[COL.jamestownScore]??0, avg.jamestown)}
+        ${vsAvgRow("Red Bull", "var(--redbull)", r[COL.redbullScore]??0, avg.redbull)}
+      </div>
       <div class="modal-value-row">
-        <div class="vitem"><div class="l">Lambers Index</div><div class="v"><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambersTierOf(idx)]}">${lambersIndex[idx].toFixed(0)} — ${lambersTierOf(idx)}</span></div></div>
+        <div class="vitem"><div class="l">Lamberts Index</div><div class="v"><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(idx)]}">${lambertsIndex[idx].toFixed(1)} — ${lambertsTierOf(idx)}</span></div></div>
         <div class="vitem"><div class="l">Market value</div><div class="v">${fmtEUR(r[COL.marketValue])}</div></div>
         <div class="vitem"><div class="l">Expected value</div><div class="v">${fmtEUR(r[COL.expectedValue])}</div></div>
         <div class="vitem"><div class="l">Value gap</div><div class="v" style="color:${r[COL.valueGap] > 0 ? 'var(--success-text)' : r[COL.valueGap] < 0 ? 'var(--critical)' : 'inherit'}">${fmtEURSigned(r[COL.valueGap])}${ratio ? ` (${ratio.toFixed(2)}×)` : ""}</div></div>
@@ -927,6 +1166,7 @@
       </p>
     `;
     document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+    document.getElementById("modalStarBtn").addEventListener("click", () => { toggleShortlist(idx); openModal(idx); });
     backdrop.classList.add("open");
   }
   function statTile(label, v) {
@@ -937,31 +1177,40 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
   // ── CSV export ───────────────────────────────────────────────────────
-  document.getElementById("exportCsv").addEventListener("click", () => {
+  function exportRowsCsv(indices, filename) {
     const cols = ["player","team","league","tierLabel","pos","age","marketValue","expectedValue","valueGap","valueRatio","valueTag","benthamScore","jamestownScore","redbullScore"];
-    const header = ["Player","Team","League","League Tier","Pos","Age","Market Value","Expected Value","Value Gap","Value Ratio","Value Tag","Bentham","Jamestown","Red Bull","Lambers Index"];
+    const header = ["Player","Team","League","League Tier","Pos","Age","Market Value","Expected Value","Value Gap","Value Ratio","Value Tag","Bentham","Jamestown","Red Bull","Lamberts Index"];
     const lines = [header.join(",")];
-    for (const i of getSortedFiltered()) {
+    for (const i of indices) {
       const r = ROWS[i];
       const vals = cols.map(c => {
         let v = c in COL ? r[COL[c]] : "";
         if (typeof v === "string" && v.includes(",")) v = `"${v}"`;
         return v ?? "";
       });
-      vals.push(lambersIndex[i].toFixed(1));
+      vals.push(lambertsIndex[i].toFixed(1));
       lines.push(vals.join(","));
     }
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "lambers_model_filtered.csv";
+    a.download = filename;
     a.click();
+  }
+  document.getElementById("exportCsv").addEventListener("click", () => {
+    exportRowsCsv(getSortedFiltered(), "lamberts_model_filtered.csv");
+  });
+  document.getElementById("exportShortlist").addEventListener("click", () => {
+    if (!shortlist.size) { alert("Your shortlist is empty — click a ★ in the table or Top Targets to add players."); return; }
+    const idxs = [...shortlist].sort((a, b) => lambertsIndex[b] - lambertsIndex[a]);
+    exportRowsCsv(idxs, "lamberts_model_shortlist.csv");
   });
 
   // ── Refresh orchestration ───────────────────────────────────────────
   function refreshAll() {
     applyFilters();
     renderTiles();
+    renderTargets();
     renderBreakdownBars();
     drawScatter();
     renderTable();

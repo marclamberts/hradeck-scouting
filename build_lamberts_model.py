@@ -1,7 +1,7 @@
 """
-build_lambers_model.py
+build_lamberts_model.py
 ───────────────────────
-Build THE LAMBERS MODEL — a full-universe (165 league) recruitment dataset
+Build THE LAMBERTS MODEL — a full-universe (165 league) recruitment dataset
 combining three real-world recruitment philosophies into one blended score,
 plus an Expected Value regression that is independent of (and directly
 compared against) the Transfermarkt-sourced "Market value" column Wyscout
@@ -22,19 +22,19 @@ Sub-models
                  duels, aerial power, transition speed and pressing actions,
                  the steepest youth curve of the three (peaks 17-20).
 
-LAMBERS SCORE = weighted blend of the three (default 35/35/30), re-ranked to
-a 0-100 percentile ("Lambers Index") within each position group.
+LAMBERTS SCORE = weighted blend of the three (default 35/35/30), re-ranked to
+a 0-100 percentile ("Lamberts Index") within each position group.
 
-EXPECTED VALUE — an OLS regression of log(Market value) on Lambers Index,
+EXPECTED VALUE — an OLS regression of log(Market value) on Lamberts Index,
 age, age^2, log(minutes), position and league tier, fit across every player
 with a listed Transfermarkt value. The fitted model then PREDICTS a value for
 every player — an estimate that is independent of, and directly benchmarked
 against, the actual Transfermarkt figure (Value Gap = Expected − Market).
 
 Usage:
-  python3 build_lambers_model.py
-  python3 build_lambers_model.py --min-minutes 500
-  python3 build_lambers_model.py --output data/Lambers_Model_Data.js
+  python3 build_lamberts_model.py
+  python3 build_lamberts_model.py --min-minutes 500
+  python3 build_lamberts_model.py --output data/Lamberts_Model_Data.js
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ WYSCOUT_DIR = ROOT / "Wyscout Files"
 LEAGUE_TIERS_XLSX = ROOT / "League Analysis" / "League Tiers.xlsx"
 
 DEFAULT_MIN_MINUTES = 500
-DEFAULT_OUTPUT = ROOT / "data" / "Lambers_Model_Data.js"
+DEFAULT_OUTPUT = ROOT / "data" / "Lamberts_Model_Data.js"
 
 # ── League strength tiers ───────────────────────────────────────────────────
 
@@ -220,7 +220,7 @@ SUB_MODELS = {
     "redbull":   dict(blueprint=REDBULL_BLUEPRINTS,   tier_damping=0.80, perf_weight=0.70),
 }
 
-LAMBERS_WEIGHTS = {"bentham": 0.35, "jamestown": 0.35, "redbull": 0.30}
+LAMBERTS_WEIGHTS = {"bentham": 0.35, "jamestown": 0.35, "redbull": 0.30}
 
 
 # ── Age curves (0-100), one philosophy each ─────────────────────────────────
@@ -344,18 +344,18 @@ def compute_submodels(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def compute_lambers(df: pd.DataFrame, weights: dict[str, float]) -> pd.DataFrame:
+def compute_lamberts(df: pd.DataFrame, weights: dict[str, float]) -> pd.DataFrame:
     total_w = sum(weights.values())
-    lambers_raw = sum(df[f"_{k}_score"] * (w / total_w) for k, w in weights.items())
-    df["_lambers_score"] = lambers_raw.round(2)
+    lamberts_raw = sum(df[f"_{k}_score"] * (w / total_w) for k, w in weights.items())
+    df["_lamberts_score"] = lamberts_raw.round(2)
 
     idx_rank = pd.Series(np.nan, index=df.index)
     for pos in POS_MAP.values():
         mask = df["_pos_group"] == pos
         if mask.sum() == 0:
             continue
-        idx_rank.loc[mask] = df.loc[mask, "_lambers_score"].rank(pct=True) * 100
-    df["_lambers_index"] = idx_rank.round(2)
+        idx_rank.loc[mask] = df.loc[mask, "_lamberts_score"].rank(pct=True) * 100
+    df["_lamberts_index"] = idx_rank.round(2)
 
     def tier(li: float) -> str:
         if pd.isna(li):
@@ -370,7 +370,7 @@ def compute_lambers(df: pd.DataFrame, weights: dict[str, float]) -> pd.DataFrame
             return "ROTATION"
         return "LONGSHOT"
 
-    df["_lambers_tier"] = df["_lambers_index"].apply(tier)
+    df["_lamberts_tier"] = df["_lamberts_index"].apply(tier)
     return df
 
 
@@ -380,18 +380,25 @@ POSITION_ORDER = ["GK", "CB", "FB", "DM", "CM", "W", "FW"]
 
 
 def fit_expected_value(df: pd.DataFrame) -> tuple[pd.Series, dict]:
-    """OLS: log1p(MarketValue) ~ LambersIndex + Age + Age^2 + log1p(Minutes)
+    """OLS: log1p(MarketValue) ~ Bentham + Jamestown + RedBull + Age + Age^2 + log1p(Minutes)
     + position dummies + league tier. Fit on players with a listed market
-    value; predict for everyone. This produces a valuation that is DERIVED
-    from performance/age/context data rather than copied from Transfermarkt,
-    so it can (and does) diverge from the actual listed figure."""
+    value; predict for everyone. Deliberately uses the three RAW sub-model
+    scores rather than the blended Lamberts Index, so Expected Value stays
+    an objective, blend-independent estimate — it does not move when a
+    user drags the Bentham/Jamestown/Red Bull weight sliders in the
+    dashboard, only the Lamberts Index and ranking do. This produces a
+    valuation that is DERIVED from performance/age/context data rather
+    than copied from Transfermarkt, so it can (and does) diverge from the
+    actual listed figure."""
     work = df.copy()
     work["_log_minutes"] = np.log1p(work["_minutes"])
     work["_age_f"] = work["_age"].fillna(work["_age"].median())
     work["_age_sq"] = work["_age_f"] ** 2
-    work["_li_f"] = work["_lambers_index"].fillna(50.0)
+    work["_bentham_f"] = work["_bentham_score"].fillna(50.0)
+    work["_jamestown_f"] = work["_jamestown_score"].fillna(50.0)
+    work["_redbull_f"] = work["_redbull_score"].fillna(50.0)
 
-    feature_cols = ["_li_f", "_age_f", "_age_sq", "_log_minutes", "_Tier"]
+    feature_cols = ["_bentham_f", "_jamestown_f", "_redbull_f", "_age_f", "_age_sq", "_log_minutes", "_Tier"]
     pos_dummy_cols = [f"_pos_{p}" for p in POSITION_ORDER[1:]]  # GK = baseline
     for p in POSITION_ORDER[1:]:
         work[f"_pos_{p}"] = (work["_pos_group"] == p).astype(float)
@@ -450,7 +457,7 @@ OUTPUT_COLUMNS = [
     "player", "team", "league", "leagueName", "country", "tier", "tierLabel",
     "pos", "fullPos", "age", "foot", "height", "contract", "minutes",
     "marketValue", "expectedValue", "valueGap", "valueRatio", "valueTag",
-    "benthamScore", "jamestownScore", "redbullScore", "lambersScore", "lambersIndex", "lambersTier",
+    "benthamScore", "jamestownScore", "redbullScore", "lambertsScore", "lambertsIndex", "lambertsTier",
     "goals90", "xg90", "assists90", "xa90", "progPasses90", "progRuns90",
     "dribbles90", "duelsWon", "aerialWon", "defDuelsWon", "keyPasses90", "saveRate",
 ]
@@ -495,7 +502,7 @@ def build_rows(df: pd.DataFrame) -> list[list]:
             int(r["_expected_value"]) if pd.notna(r["_expected_value"]) else 0,
             num(r["_value_gap"], 0), num(r["_value_ratio"], 2), r["_value_tag"],
             num(r["_bentham_score"]), num(r["_jamestown_score"]), num(r["_redbull_score"]),
-            num(r["_lambers_score"]), num(r["_lambers_index"]), r["_lambers_tier"],
+            num(r["_lamberts_score"]), num(r["_lamberts_index"]), r["_lamberts_tier"],
             num(r.get("Goals per 90")), num(r.get("xG per 90")), num(r.get("Assists per 90")),
             num(r.get("xA per 90")), num(r.get("Progressive passes per 90")),
             num(r.get("Progressive runs per 90")), num(r.get("Dribbles per 90")),
@@ -507,7 +514,7 @@ def build_rows(df: pd.DataFrame) -> list[list]:
 
 
 def run(min_minutes: int, output: Path) -> None:
-    print(f"\n{'='*70}\n  THE LAMBERS MODEL — building recruitment dataset\n"
+    print(f"\n{'='*70}\n  THE LAMBERTS MODEL — building recruitment dataset\n"
           f"  {WYSCOUT_DIR}  ·  min minutes = {min_minutes}\n{'='*70}\n")
 
     df = load_all_leagues(min_minutes)
@@ -515,8 +522,8 @@ def run(min_minutes: int, output: Path) -> None:
     print("Computing Bentham / Jamestown / Red Bull sub-model scores…")
     df = compute_submodels(df)
 
-    print("Blending THE LAMBERS MODEL composite…")
-    df = compute_lambers(df, LAMBERS_WEIGHTS)
+    print("Blending THE LAMBERTS MODEL composite…")
+    df = compute_lamberts(df, LAMBERTS_WEIGHTS)
 
     print("Fitting Expected Value regression (independent of Transfermarkt)…")
     ev, diagnostics = fit_expected_value(df)
@@ -549,7 +556,7 @@ def run(min_minutes: int, output: Path) -> None:
         "tierLabels": TIER_LABELS,
         "tierMultiplier": TIER_MULTIPLIER,
         "tierCounts": {str(k): int(v) for k, v in tier_counts.items()},
-        "lambersWeights": LAMBERS_WEIGHTS,
+        "lambertsWeights": LAMBERTS_WEIGHTS,
         "regression": diagnostics,
         "leagues": leagues_out,
         "columns": OUTPUT_COLUMNS,
@@ -558,7 +565,7 @@ def run(min_minutes: int, output: Path) -> None:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", encoding="utf-8") as f:
-        f.write("const LAMBERS_DATA = ")
+        f.write("const LAMBERTS_DATA = ")
         json.dump(payload, f, separators=(",", ":"), ensure_ascii=False)
         f.write(";\n")
 
@@ -568,7 +575,7 @@ def run(min_minutes: int, output: Path) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build The Lambers Model recruitment dataset")
+    parser = argparse.ArgumentParser(description="Build The Lamberts Model recruitment dataset")
     parser.add_argument("--min-minutes", type=int, default=DEFAULT_MIN_MINUTES)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
