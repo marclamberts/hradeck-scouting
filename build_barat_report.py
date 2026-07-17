@@ -87,6 +87,22 @@ P_PILLS           = [("MIN","593"),("MATCHES","19"),("xG","0.93"),("xA","0.38"),
 P_WYSCOUT_FILTER  = "D. Bar"
 P_LEGEND_LABEL    = "D. Barát"
 
+# ── Data-source / label config (monkey-patchable) ───────────────────────────────
+P_DATA_FILE      = "Czech.xlsx"           # home Wyscout league file (data/Wyscout DB/)
+P_TEAM_DEFAULT   = "Slovácko"             # fallback team keyword
+P_LEAGUE_LONG    = "Czech Fortuna Liga"   # footer / peer comparison
+P_LEAGUE_SHORT   = "Czech First League"   # distributions legend / WAR captions
+P_SEASON         = "2025/26"
+P_POS_PLURAL     = "wide attackers"       # peer comparison subtitle
+P_POS_SINGULAR   = "wide attacker"        # WAR banner subtitle
+P_ARCHETYPE_NOTE = "Attacker Role Archetypes"
+P_OUT_PREFIX     = "D_Barat_Scouting_Report"
+
+# ── Cover page config (monkey-patchable; only used when P_COVER_ENABLE=True) ───
+P_COVER_ENABLE   = False
+P_COVER_SUBTITLE = P_HEADER_SUBTITLE
+P_COVER_MONTH    = "June 2026"
+
 CAT_COLOURS = {
     "Threat":    "#DC2626",
     "Carrying":  "#D97706",
@@ -168,13 +184,13 @@ def _numeric(df):
 
 
 def load_data():
-    print("  Czech files …")
-    df_c1 = _numeric(pd.read_excel("data/Wyscout DB/Czech.xlsx"))
-    df_c1["_file"] = "Czech"
+    print(f"  {P_DATA_FILE} …")
+    df_c1 = _numeric(pd.read_excel(f"data/Wyscout DB/{P_DATA_FILE}"))
+    df_c1["_file"] = Path(P_DATA_FILE).stem
     df_c1["_pos1"] = df_c1["Position"].astype(str).str.split(",").str[0].str.strip()
 
     player  = df_c1[df_c1["Player"].astype(str).str.startswith(P_WYSCOUT_FILTER)].iloc[0].copy()
-    team_kw = str(player.get("Team within selected timeframe", "Slovácko")).split()[0]
+    team_kw = str(player.get("Team within selected timeframe", P_TEAM_DEFAULT)).split()[0]
 
     pool_lg = df_c1[df_c1["_pos1"].isin(WIDE_ATK_POS) &
                     (df_c1["Minutes played"].fillna(0) >= MIN_MINS)].copy()
@@ -268,22 +284,26 @@ def draw_header(ax, n_lg, n_db):
     ))
     ax.text(0.0, 0.97, P_HEADER_NAME, ha="left", va="top",
             transform=ax.transAxes, color=TEXT, fontsize=26, fontweight="bold")
+    sub_fs = 8.5 if len(P_HEADER_SUBTITLE) <= 70 else 7.3
     ax.text(0.0, 0.33, P_HEADER_SUBTITLE,
-            ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=8.5)
+            ha="left", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=sub_fs)
     ax.plot([0, 1], [0.04, 0.04], transform=ax.transAxes, color=BORDER, lw=0.8)
 
     pills = P_PILLS
-    px = 0.50
+    n_pills = len(pills)
+    px0 = 0.615
+    step = (0.955 - px0) / max(n_pills - 1, 1)
+    px = px0
     for j, (lbl, val) in enumerate(pills):
         if j > 0:
-            ax.plot([px - 0.040, px - 0.040], [0.24, 0.90],
+            ax.plot([px - step * 0.44, px - step * 0.44], [0.24, 0.90],
                     transform=ax.transAxes, color=BORDER, lw=0.7)
         ax.text(px, 0.93, val, ha="center", va="top",
                 color="#B45309", fontsize=12, fontweight="bold",
                 transform=ax.transAxes)
         ax.text(px, 0.27, lbl, ha="center", va="top",
                 color=TEXT_DIM, fontsize=6, transform=ax.transAxes, fontweight="bold")
-        px += 0.090
+        px += step
 
     ax.text(1.0, 0.97, f"League: {n_lg}  ·  Database: {n_db:,}",
             ha="right", va="top", transform=ax.transAxes, color=TEXT_DIM, fontsize=7)
@@ -296,7 +316,7 @@ def draw_profile_fit(ax, scores):
     for sp in ax.spines.values(): sp.set_visible(False)
     ax.axis("off")
 
-    _inner_title(ax, "PROFILE FIT", "Attacker Role Archetypes  ·  The Athletic framework")
+    _inner_title(ax, "PROFILE FIT", f"{P_ARCHETYPE_NOTE}  ·  The Athletic framework")
 
     sorted_roles = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     n    = len(sorted_roles)
@@ -357,7 +377,7 @@ def draw_profile_fit(ax, scores):
 def draw_distributions(axes, pool_db, pool_lg, player):
     # Title only on the first (top) axes
     _inner_title(axes[0], "DISTRIBUTIONS",
-                 "Database (grey)  vs  Czech First League (blue dashed)")
+                 f"Database (grey)  vs  {P_LEAGUE_SHORT} (blue dashed)")
 
     for idx, (ax, (col, label)) in enumerate(zip(axes, DIST_METRICS)):
         ax.set_facecolor(PANEL)
@@ -686,7 +706,7 @@ def draw_peers(ax, player, pool_lg, pc_lg):
     ax.axis("off")
 
     _inner_title(ax, "PEER COMPARISON",
-                 "Top 8 most similar wide attackers · Czech Fortuna Liga · z-score distance")
+                 f"Top 8 most similar {P_POS_PLURAL} · {P_LEAGUE_LONG} · z-score distance")
 
     peers = find_peers(player, pool_lg, n=8)
 
@@ -894,7 +914,7 @@ def make_page2(player, pool_cl, pool_lg, pool_tier, pool_db,
 
     # Footer
     fig2.text(0.04, 0.007,
-              "Data: Wyscout  ·  Czech Fortuna Liga 2025/26  ·  FCHK Scouting",
+              f"Data: Wyscout  ·  {P_LEAGUE_LONG} {P_SEASON}  ·  FCHK Scouting",
               ha="left", va="bottom", color=TEXT_DIM, fontsize=6.5)
     fig2.text(0.97, 0.007, "hradeck-scouting",
               ha="right", va="bottom", color=TEXT_DIM, fontsize=6.5)
@@ -1334,7 +1354,7 @@ def draw_war_banner(ax, wd):
     for sp in ax.spines.values(): sp.set_visible(False)
     ax.axis("off")
     _inner_title(ax, "WAR — WINS ABOVE REPLACEMENT",
-                 "vs 15th-percentile Czech First League wide attacker  ·  3 goals ≈ 1 win")
+                 f"vs 15th-percentile {P_LEAGUE_SHORT} {P_POS_SINGULAR}  ·  3 goals ≈ 1 win")
 
     war   = wd["war"]
     c_war = pct_colour(wd["pct_db"])
@@ -1441,7 +1461,7 @@ def draw_war_banner(ax, wd):
 
             # Axis label
             ax.text((kde_ax_x0 + kde_ax_x1) / 2, base_y - 0.06,
-                    "WAR distribution · Czech First League",
+                    f"WAR distribution · {P_LEAGUE_SHORT}",
                     ha="center", va="top", transform=ax.transAxes,
                     color=TEXT_DIM, fontsize=5.2)
         except Exception:
@@ -1498,7 +1518,7 @@ def make_page3(player, pool_db, pool_lg, player_vals, db_pcts, lg_ranks, war_dat
 
     # Footer
     fig3.text(0.04, 0.007,
-              "Data: Wyscout  ·  Czech Fortuna Liga 2025/26  ·  FCHK Scouting",
+              f"Data: Wyscout  ·  {P_LEAGUE_LONG} {P_SEASON}  ·  FCHK Scouting",
               ha="left", va="bottom", color=TEXT_DIM, fontsize=6.5)
     fig3.text(0.97, 0.007, "hradeck-scouting",
               ha="right", va="bottom", color=TEXT_DIM, fontsize=6.5)
@@ -1508,6 +1528,84 @@ def make_page3(player, pool_db, pool_lg, player_vals, db_pcts, lg_ranks, war_dat
     ))
 
     return fig3
+
+
+# ── Cover / contents page ────────────────────────────────────────────────────
+
+def make_cover():
+    fig0 = plt.figure(figsize=(8.27, 11.69), facecolor=BG)
+    ax = fig0.add_axes([0, 0, 1, 1])
+    _off(ax)
+
+    # Left accent bar (full height)
+    ax.add_patch(mpatches.Rectangle(
+        (0.0, 0.0), 0.012, 1.0,
+        facecolor=ACCENT, edgecolor="none",
+        transform=ax.transAxes, clip_on=False))
+
+    ax.plot([0.055, 0.965], [0.925, 0.925], transform=ax.transAxes, color=BORDER, lw=0.8)
+
+    ax.text(0.055, 0.885, P_HEADER_NAME, ha="left", va="top",
+            transform=ax.transAxes, color=TEXT, fontsize=40, fontweight="bold")
+    ax.text(0.055, 0.815, P_COVER_SUBTITLE, ha="left", va="top",
+            transform=ax.transAxes, color=TEXT_DIM, fontsize=11)
+
+    ax.plot([0.055, 0.965], [0.775, 0.775], transform=ax.transAxes, color=BORDER, lw=0.8)
+
+    # Pill cards
+    n_pills = len(P_PILLS)
+    pad = 0.014
+    card_w = (0.965 - 0.055 - pad * (n_pills - 1)) / n_pills
+    card_y0, card_h = 0.665, 0.088
+    for i, (lbl, val) in enumerate(P_PILLS):
+        x0 = 0.055 + i * (card_w + pad)
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (x0, card_y0), card_w, card_h, boxstyle="round,pad=0.003",
+            facecolor=PANEL, edgecolor=BORDER, linewidth=0.7,
+            transform=ax.transAxes, clip_on=True))
+        ax.text(x0 + card_w / 2, card_y0 + card_h * 0.62, val,
+                ha="center", va="center", transform=ax.transAxes,
+                color="#B45309", fontsize=17, fontweight="bold")
+        ax.text(x0 + card_w / 2, card_y0 + card_h * 0.20, lbl,
+                ha="center", va="center", transform=ax.transAxes,
+                color=TEXT_DIM, fontsize=6.5, fontweight="bold")
+
+    ax.plot([0.055, 0.965], [0.615, 0.615], transform=ax.transAxes, color=BORDER, lw=0.8)
+
+    ax.text(0.055, 0.578, "CONTENTS", ha="left", va="top",
+            transform=ax.transAxes, color=TEXT, fontsize=10, fontweight="bold")
+    ax.plot([0.055, 0.965], [0.560, 0.560], transform=ax.transAxes, color=BORDER, lw=0.8)
+
+    toc = [
+        ("1", "Profile Overview",   "Page 1 of 3"),
+        ("2", "Statistical Analysis", "Page 2 of 3"),
+        ("3", "Advanced Analytics", "Page 3 of 3"),
+    ]
+    toc_ys = np.linspace(0.500, 0.400, len(toc))
+    for (num, label, pageref), ty in zip(toc, toc_ys):
+        ax.text(0.070, ty, f"{num}  ·  {label}", ha="left", va="center",
+                transform=ax.transAxes, color=TEXT_MED, fontsize=9.5)
+        ax.text(0.965, ty, pageref, ha="right", va="center",
+                transform=ax.transAxes, color=TEXT_DIM, fontsize=8.5)
+        lbl_w = 0.010 + 0.0087 * len(f"{num}  ·  {label}")
+        ref_w = 0.010 + 0.0075 * len(pageref)
+        dots_x0 = 0.070 + lbl_w + 0.01
+        dots_x1 = 0.965 - ref_w - 0.01
+        if dots_x1 > dots_x0:
+            ax.plot([dots_x0, dots_x1], [ty, ty], transform=ax.transAxes,
+                     color=BORDER, lw=0.8, linestyle=(0, (1, 1.4)))
+
+    fig0.text(0.055, 0.025,
+              f"Data: Wyscout  ·  {P_LEAGUE_LONG} {P_SEASON}  ·  FCHK Scouting",
+              ha="left", va="bottom", color=TEXT_DIM, fontsize=7.5)
+    fig0.text(0.965, 0.025, P_COVER_MONTH,
+              ha="right", va="bottom", color=TEXT_DIM, fontsize=7.5)
+    fig0.add_artist(plt.Line2D(
+        [0.055, 0.965], [0.040, 0.040],
+        transform=fig0.transFigure, color=BORDER, lw=0.7))
+
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    return fig0
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -1556,7 +1654,7 @@ def main():
         handles=[
             Line2D([0],[0], color="#94A3B8", lw=1.3, label="Full database"),
             Line2D([0],[0], color=LEAGUE_C,  lw=1.3, ls="--",
-                   label="Czech First League"),
+                   label=P_LEAGUE_SHORT),
             Line2D([0],[0], color=PLAYER_C,  lw=1.8, label=P_LEGEND_LABEL),
         ],
         loc="lower center", bbox_to_anchor=(0.5, -0.94),
@@ -1631,25 +1729,37 @@ def main():
           f"DB {war_data['pct_db']:.0f}th pctile)")
     fig3 = make_page3(player, pool_db, pool_lg, player_vals, db_pcts3, lg_ranks3, war_data)
 
-    png  = OUT_DIR / "D_Barat_Scouting_Report.png"
-    png2 = OUT_DIR / "D_Barat_Scouting_Report_P2.png"
-    png3 = OUT_DIR / "D_Barat_Scouting_Report_P3.png"
-    pdf  = OUT_DIR / "D_Barat_Scouting_Report.pdf"
+    fig0 = make_cover() if P_COVER_ENABLE else None
+
+    suffix = "_Full" if P_COVER_ENABLE else ""
+    png  = OUT_DIR / f"{P_OUT_PREFIX}.png"
+    png2 = OUT_DIR / f"{P_OUT_PREFIX}_P2.png"
+    png3 = OUT_DIR / f"{P_OUT_PREFIX}_P3.png"
+    pdf  = OUT_DIR / f"{P_OUT_PREFIX}{suffix}.pdf"
 
     fig.savefig(png,   dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
     fig2.savefig(png2, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
     fig3.savefig(png3, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    if fig0 is not None:
+        png0 = OUT_DIR / f"{P_OUT_PREFIX}_Title.png"
+        fig0.savefig(png0, dpi=200, bbox_inches="tight", facecolor=BG, edgecolor="none")
+        print(f"  Saved → {png0}")
 
     with PdfPages(pdf) as pp:
+        if fig0 is not None:
+            pp.savefig(fig0, bbox_inches="tight", facecolor=BG, edgecolor="none")
         pp.savefig(fig,  bbox_inches="tight", facecolor=BG, edgecolor="none")
         pp.savefig(fig2, bbox_inches="tight", facecolor=BG, edgecolor="none")
         pp.savefig(fig3, bbox_inches="tight", facecolor=BG, edgecolor="none")
 
     plt.close(fig); plt.close(fig2); plt.close(fig3)
+    if fig0 is not None:
+        plt.close(fig0)
     print(f"  Saved → {png}")
     print(f"  Saved → {png2}")
     print(f"  Saved → {png3}")
-    print(f"  Saved → {pdf}  (3 pages)")
+    n_pages = 4 if fig0 is not None else 3
+    print(f"  Saved → {pdf}  ({n_pages} pages)")
 
 
 if __name__ == "__main__":
