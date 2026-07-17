@@ -83,137 +83,151 @@
   }
 
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; height: 100%; }
   body {
     background: var(--page);
     color: var(--text-primary);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1440px; margin: 0 auto; padding: 16px 20px 60px; }
   a { color: inherit; }
-  section[id] { scroll-margin-top: 14px; }
+  button, select, input[type=text], input[type=search], input[type=range] { font-family: inherit; font-size: 13px; }
 
-  /* ── Header ─────────────────────────────────────────────────────── */
-  header.top {
-    display: flex; justify-content: space-between; align-items: flex-start;
-    gap: 16px; flex-wrap: wrap; margin-bottom: 10px;
+  /* ── App shell ──────────────────────────────────────────────────── */
+  .app { display: flex; align-items: flex-start; min-height: 100vh; }
+
+  .sidebar {
+    width: 272px; flex: none; background: var(--surface-1); border-right: 1px solid var(--border);
+    padding: 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px; z-index: 15;
   }
+  .sidebar-brand { display: flex; align-items: center; gap: 10px; }
   .brand-mark {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 40px; height: 40px; border-radius: 2px;
+    width: 34px; height: 34px; border-radius: 2px;
     background: linear-gradient(135deg, var(--bentham), var(--jamestown) 55%, var(--redbull));
-    color: #fff; font-weight: 800; font-size: 17px; flex: none;
+    color: #fff; font-weight: 800; font-size: 14px; flex: none;
   }
-  .title-block { display: flex; gap: 14px; align-items: center; }
-  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
-  .subtitle { color: var(--text-secondary); font-size: 13px; margin-top: 3px; }
-  .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  button, select, input[type=text], input[type=search], input[type=range] {
-    font-family: inherit; font-size: 13px;
+  .sidebar-brand h1 { font-size: 15.5px; margin: 0; letter-spacing: -0.01em; line-height: 1.2; }
+  .sidebar-brand .tagline { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
+  .sidebar-close { display: none; margin-left: auto; background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+
+  .sidebar-section { }
+  .sidebar-label {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em;
+    margin-bottom: 6px; font-weight: 700;
   }
+  .sidebar-label .hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-muted); }
+  .sidebar-search input { width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-primary); border-radius: 2px; padding: 7px 9px; }
+
+  .side-list { display: flex; flex-direction: column; gap: 4px; }
+  .side-chip {
+    display: flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); background: var(--surface-2);
+    color: var(--text-secondary); padding: 6px 9px; border-radius: 2px; font-size: 12px; font-weight: 600;
+    cursor: pointer; text-align: left; width: 100%; user-select: none;
+  }
+  .side-chip:hover { border-color: var(--text-muted); }
+  .side-chip.active { background: var(--text-primary); color: var(--page); border-color: transparent; }
+  .side-chip.star.active { background: var(--warning); color: #1a1400; }
+
+  .sidebar-more-toggle {
+    background: none; border: none; color: var(--text-secondary); font-size: 11.5px; font-weight: 700;
+    cursor: pointer; padding: 8px 0 2px; display: flex; align-items: center; gap: 4px; width: 100%;
+  }
+  .sidebar-more-toggle:hover { color: var(--text-primary); }
+  .sidebar-more-toggle .arrow { transition: transform .15s; font-size: 9px; }
+  .sidebar-more-toggle.open .arrow { transform: rotate(180deg); }
+  .sidebar-more { display: none; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .sidebar-more.open { display: flex; }
+  .sidebar-more select, .sidebar-more input[type=text] {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-primary);
+    border-radius: 2px; padding: 6px 9px;
+  }
+  .sidebar-more .row2 { display: flex; gap: 6px; }
+  .sidebar-more .row2 input { width: 50%; }
+  .sidebar-more .minutes-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-secondary); }
+  .sidebar-more .minutes-row input[type=range] { flex: 1; accent-color: var(--bentham); }
+
+  .blend-slider-row { margin-bottom: 10px; }
+  .blend-slider-row:last-child { margin-bottom: 0; }
+  .blend-slider-row .bl-head { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; margin-bottom: 3px; }
+  .blend-slider-row input[type=range] { width: 100%; }
+  .blend-footer { display: flex; justify-content: flex-end; margin-top: 4px; }
+
+  .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+  .sidebar-scrim { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 14; }
+  .sidebar-scrim.open { display: block; }
+
+  /* ── Main ───────────────────────────────────────────────────────── */
+  .main { flex: 1; min-width: 0; padding: 16px 22px 60px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab-btn {
+    border: 1px solid var(--border-strong); background: var(--surface-1); color: var(--text-secondary);
+    padding: 7px 13px; border-radius: 2px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  }
+  .tab-btn:hover { color: var(--text-primary); }
+  .tab-btn.active { background: var(--text-primary); color: var(--page); border-color: transparent; }
+  .tab-count { font-variant-numeric: tabular-nums; opacity: .7; margin-left: 5px; }
+  .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
   .btn {
     background: var(--surface-1); border: 1px solid var(--border-strong); color: var(--text-primary);
     border-radius: 2px; padding: 7px 11px; cursor: pointer; font-weight: 600;
   }
   .btn:hover { background: var(--surface-2); }
-  .btn.primary { background: var(--text-primary); color: var(--page); border-color: transparent; }
   .btn.small { padding: 5px 9px; font-size: 12px; font-weight: 500; }
-  .btn.star-on { color: var(--warning); border-color: var(--warning); }
+  .menu-btn { display: none; }
 
-  .quicknav { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 12px; font-size: 12.5px; }
-  .quicknav a { color: var(--text-secondary); text-decoration: none; font-weight: 600; border-bottom: 1px solid transparent; }
-  .quicknav a:hover { color: var(--text-primary); border-color: var(--border-strong); }
+  .help-btn {
+    width: 26px; height: 26px; border-radius: 2px; background: var(--surface-1); border: 1px solid var(--border-strong);
+    color: var(--text-secondary); font-weight: 700; font-size: 13px; cursor: pointer; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .help-btn:hover { background: var(--surface-2); color: var(--text-primary); }
+
+  .tip-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 12.5px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; padding: 8px 12px;
+  }
+  .tip-bar .close-tip { background: none; border: none; color: var(--text-muted); font-size: 15px; cursor: pointer; flex: none; }
 
   /* ── Stat tiles ─────────────────────────────────────────────────── */
-  .tiles {
-    display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 12px;
-  }
+  .tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 14px; }
   @media (max-width: 1200px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
   @media (max-width: 620px)  { .tiles { grid-template-columns: repeat(2, 1fr); } }
-  .tile {
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 2px;
-    padding: 10px 12px;
-  }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 2px; padding: 10px 12px; }
   .tile .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
   .tile .value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .tile .sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 
-  /* ── Panels ─────────────────────────────────────────────────────── */
+  /* ── Views / panels ─────────────────────────────────────────────── */
+  .view { display: none; }
+  .view.active { display: block; }
   .panel {
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 2px;
     padding: 14px 16px; margin-bottom: 12px;
   }
   .panel h2 { font-size: 15px; margin: 0 0 4px; }
   .panel .desc { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5; }
-  .panel-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-  .panel-head .chev { color: var(--text-muted); transition: transform .15s; font-size: 12px; }
-  .panel.collapsed .chev { transform: rotate(-90deg); }
-  .panel.collapsed .panel-body { display: none; }
 
-  /* ── Methodology ────────────────────────────────────────────────── */
-  .model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  @media (max-width: 900px) { .model-grid { grid-template-columns: 1fr; } }
-  .model-card {
-    border: 1px solid var(--border); border-radius: 2px; padding: 10px 12px;
-    border-top: 3px solid var(--c);
-  }
-  .model-card h3 { font-size: 13.5px; margin: 0 0 4px; color: var(--c); }
-  .model-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 8px; }
-  .model-card .weight-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-  .model-card .weight-row input[type=range] { flex: 1; accent-color: var(--c); }
-  .model-card .weight-val { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; width: 42px; text-align: right; }
-  .weights-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; gap: 8px; }
-
-  .reg-diag { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+  .model-grid-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+  @media (max-width: 640px) { .model-grid-mini { grid-template-columns: 1fr; } }
+  .model-card-mini { border: 1px solid var(--border); border-radius: 2px; padding: 10px 12px; border-top: 3px solid var(--c); }
+  .model-card-mini h3 { font-size: 13px; margin: 0 0 4px; color: var(--c); }
+  .model-card-mini p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 0; }
+  .reg-diag { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
   .reg-diag b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
-  /* ── Filters ────────────────────────────────────────────────────── */
-  .filters-intro {
-    font-size: 12.5px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5;
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; padding: 8px 12px;
-  }
-  .filter-group-label { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 6px; }
-  .filter-group-label:first-child { margin-top: 0; }
-  .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .filters input, .filters select {
-    background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-primary);
-    border-radius: 2px; padding: 6px 9px;
-  }
-  .filters input[type=search] { min-width: 220px; }
-  .minutes-slider { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
-  .minutes-slider input[type=range] { width: 130px; accent-color: var(--bentham); }
-  .chip-group { display: flex; gap: 4px; flex-wrap: wrap; }
-  .chip {
-    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text-secondary);
-    border-radius: 2px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: 600;
-    user-select: none;
-  }
-  .chip.active { background: var(--text-primary); color: var(--page); border-color: transparent; }
-  .chip.star { color: var(--warning); }
-  .chip.star.active { background: var(--warning); color: #1a1400; }
-  .filters-meta { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
-  .more-filters-toggle {
-    background: none; border: none; color: var(--text-secondary); font-size: 12px; font-weight: 600;
-    cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 4px;
-  }
-  .more-filters-toggle:hover { color: var(--text-primary); }
-  .more-filters-toggle .arrow { transition: transform .15s; font-size: 10px; }
-  .more-filters-toggle.open .arrow { transform: rotate(180deg); }
-  .more-filters { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-  .more-filters.open { display: block; }
-
   /* ── Help / glossary ────────────────────────────────────────────── */
-  .help-btn {
-    width: 24px; height: 24px; border-radius: 2px; background: var(--surface-1); border: 1px solid var(--border-strong);
-    color: var(--text-secondary); font-weight: 700; font-size: 13px; cursor: pointer; flex: none;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .help-btn:hover { background: var(--surface-2); color: var(--text-primary); }
   .glossary-item { margin-bottom: 12px; }
   .glossary-item dt { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
   .glossary-item dd { margin: 0; font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; }
+  .modal-section-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 8px; }
+  .modal-section-title:first-of-type { margin-top: 4px; }
 
   /* ── Top targets ────────────────────────────────────────────────── */
   .target-pos-group { margin-bottom: 14px; }
@@ -231,14 +245,14 @@
   .target-card .tc-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--text-secondary); }
   .target-card .tc-star { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text-muted); padding: 0; line-height: 1; }
   .target-card .tc-star.on { color: var(--warning); }
-  .empty-note { font-size: 12px; color: var(--text-muted); font-style: italic; }
+  .empty-note { font-size: 12.5px; color: var(--text-muted); font-style: italic; padding: 10px 0; }
 
   /* ── Charts ─────────────────────────────────────────────────────── */
   .chart-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
   @media (max-width: 1000px) { .chart-row { grid-template-columns: 1fr; } }
   canvas { display: block; width: 100%; }
   .scatter-wrap { position: relative; }
-  #scatterCanvas { height: 420px; cursor: crosshair; }
+  #scatterCanvas { height: 460px; cursor: crosshair; }
   .tooltip {
     position: absolute; pointer-events: none; background: var(--text-primary); color: var(--page);
     padding: 6px 9px; border-radius: 2px; font-size: 12px; line-height: 1.45; opacity: 0; transition: opacity .08s;
@@ -246,14 +260,14 @@
   }
   .legend-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11.5px; color: var(--text-secondary); }
   .legend-item { display: flex; align-items: center; gap: 5px; }
-  .swatch { width: 8px; height: 8px; border-radius: 0; display: inline-block; }
+  .swatch { width: 8px; height: 8px; display: inline-block; }
 
   .mini-bars { display: flex; flex-direction: column; gap: 10px; }
   .mini-bar-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
   .bar-row { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
   .bar-row .name { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bar-track { background: var(--surface-2); border-radius: 1px; height: 9px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 0; }
+  .bar-track { background: var(--surface-2); height: 9px; overflow: hidden; }
+  .bar-fill { height: 100%; }
   .bar-row .count { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 
   /* ── Table ──────────────────────────────────────────────────────── */
@@ -275,9 +289,7 @@
   td.star-cell { text-align: center; }
   .star-btn { background: none; border: none; cursor: pointer; font-size: 15px; color: var(--text-muted); padding: 0; line-height: 1; }
   .star-btn.on { color: var(--warning); }
-  .tag {
-    display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 11px; font-weight: 700;
-  }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 11px; font-weight: 700; }
   .tag-UNDERVALUED { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--success-text); }
   .tag-OVERVALUED  { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
   .tag-FAIR        { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border-strong); }
@@ -298,6 +310,7 @@
     background: var(--surface-1); border-radius: 2px; width: 100%; max-width: 640px; padding: 18px 20px;
     border: 1px solid var(--border-strong);
   }
+  .modal.wide { max-width: 760px; }
   .modal-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
   .modal-head h3 { margin: 0; font-size: 19px; }
   .modal-head .team-line { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
@@ -314,8 +327,8 @@
   .vs-avg-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
   .vs-avg-row { display: grid; grid-template-columns: 84px 1fr 48px; align-items: center; gap: 8px; font-size: 11.5px; margin: 5px 0; }
   .vs-avg-row .l { color: var(--text-secondary); }
-  .vs-avg-track { position: relative; height: 9px; background: var(--surface-2); border-radius: 1px; overflow: hidden; }
-  .vs-avg-fill { position: absolute; top: 0; bottom: 0; border-radius: 0; }
+  .vs-avg-track { position: relative; height: 9px; background: var(--surface-2); overflow: hidden; }
+  .vs-avg-fill { position: absolute; top: 0; bottom: 0; }
   .vs-avg-mid { position: absolute; left: 50%; top: -1px; bottom: -1px; width: 1px; background: var(--baseline); }
   .vs-avg-row .d { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
 
@@ -328,61 +341,57 @@
   .modal-stats .s .l { color: var(--text-muted); font-size: 10.5px; }
   .modal-stats .s .v { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-  footer { text-align: center; color: var(--text-muted); font-size: 11.5px; margin-top: 26px; line-height: 1.6; }
+  footer.page-footer { color: var(--text-muted); font-size: 11.5px; margin-top: 18px; line-height: 1.6; }
   .table-view-toggle { font-size: 12px; color: var(--text-secondary); }
+
+  /* ── Responsive: sidebar becomes an off-canvas drawer ────────────── */
+  @media (max-width: 980px) {
+    .sidebar {
+      position: fixed; left: 0; top: 0; transform: translateX(-100%);
+      transition: transform .18s ease; box-shadow: 0 0 30px rgba(0,0,0,.3);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-close { display: block; }
+    .menu-btn { display: inline-flex; }
+    .main { padding: 12px 14px 50px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="app">
 
-  <header class="top">
-    <div class="title-block">
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
       <div class="brand-mark">LM</div>
       <div>
         <h1>The Lamberts Model</h1>
-        <div class="subtitle" id="subtitleLine">Global recruitment intelligence · 165 leagues · Bentham × Jamestown × Red Bull</div>
+        <div class="tagline" id="taglineLine">165 leagues · 45,256 players</div>
       </div>
-    </div>
-    <div class="top-actions">
-      <button class="help-btn" id="helpBtn" title="What do these terms mean?">?</button>
-      <button class="btn small" id="themeToggle">🌙 Dark</button>
-      <button class="btn small" id="exportShortlist">★ Export shortlist</button>
-      <button class="btn small" id="exportCsv">⇩ Export filtered CSV</button>
-    </div>
-  </header>
-
-  <nav class="quicknav">
-    <a href="#targets">★ Top Targets</a>
-    <a href="#valuemap">Value Map</a>
-    <a href="#board">Recruitment Board</a>
-    <a href="#methodPanel">Methodology</a>
-  </nav>
-
-  <div class="tiles" id="tiles"></div>
-
-  <p class="filters-intro">
-    💡 <b>New here?</b> Jump straight to <a href="#targets">★ Top Targets</a> below for a ready-made shortlist,
-    or tap a quick filter to narrow the whole board in one click. Hover any score, tag or column header for a
-    plain-English explanation — or tap the <b>?</b> button above for the full glossary.
-  </p>
-
-  <div class="panel">
-    <div class="filter-group-label">Search</div>
-    <div class="filters" id="filters">
-      <input type="search" id="searchBox" placeholder="Search player or team…">
+      <button class="sidebar-close" id="sidebarClose">✕</button>
     </div>
 
-    <div class="filter-group-label">Quick filters <span style="text-transform:none; letter-spacing:0; font-weight:400;">— click to apply, click again to remove</span></div>
-    <div class="chip-group" id="presetChips"></div>
+    <div class="sidebar-section sidebar-search">
+      <div class="sidebar-label">Search</div>
+      <input type="search" id="searchBox" placeholder="Player or team…">
+    </div>
 
-    <div class="filter-group-label">Position</div>
-    <div class="chip-group" id="posChips"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Quick filters <span class="hint">— tap to toggle</span></div>
+      <div class="side-list" id="presetChips"></div>
+    </div>
 
-    <button class="more-filters-toggle" id="moreFiltersToggle" type="button">
-      <span class="arrow">▾</span> More filters (league, tier, age, minutes, value)
-    </button>
-    <div class="more-filters" id="moreFilters">
-      <div class="filters">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Position</div>
+      <div class="side-list" id="posChips"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <button class="sidebar-more-toggle" id="moreFiltersToggle" type="button">
+        <span class="arrow">▾</span> More filters (league, tier, age, minutes, value)
+      </button>
+      <div class="sidebar-more" id="moreFilters">
         <select id="tierFilter" title="Restrict to a league strength tier"><option value="">All league tiers</option></select>
         <select id="leagueFilter" title="Restrict to one specific league"><option value="">All leagues</option></select>
         <select id="valueTagFilter" title="Filter by how the model rates their price vs. Transfermarkt">
@@ -392,139 +401,157 @@
           <option value="OVERVALUED">Overvalued</option>
           <option value="UNLISTED">Unlisted (no TM value)</option>
         </select>
-        <input type="text" id="ageMin" placeholder="Age min" style="width:70px" title="Minimum age">
-        <input type="text" id="ageMax" placeholder="Age max" style="width:70px" title="Maximum age">
-        <label class="minutes-slider" title="Only show players who've played at least this many minutes">Min minutes <input type="range" id="minMinutes" min="500" max="3500" step="50" value="500"><span id="minMinutesVal">500</span></label>
+        <div class="row2">
+          <input type="text" id="ageMin" placeholder="Age min" title="Minimum age">
+          <input type="text" id="ageMax" placeholder="Age max" title="Maximum age">
+        </div>
+        <label class="minutes-row" title="Only show players who've played at least this many minutes">
+          Min mins <input type="range" id="minMinutes" min="500" max="3500" step="50" value="500"><span id="minMinutesVal">500</span>
+        </label>
         <button class="btn small" id="clearFilters">Clear all filters</button>
       </div>
     </div>
-    <div class="filters-meta" id="filtersMeta"></div>
-  </div>
 
-  <section id="targets" class="panel">
-    <h2>★ Top Targets</h2>
-    <p class="desc">Highest Lamberts Index player at each position within your current filters — recompute live as you move the sliders or narrow the pool. Click the star to shortlist, click the card to open the full profile.</p>
-    <div id="targetsGrid"></div>
-  </section>
-
-  <section id="valuemap" class="chart-row">
-    <div class="panel scatter-wrap">
-      <h2>Value Map — ability vs. price</h2>
-      <p class="desc">Lamberts Index (x) against Expected-Value ÷ Market-Value (y). Dot size scales with market value.
-        Top-right = high-ability players the model prices well above what Transfermarkt lists. Only players with a
-        listed market value are plotted (<span id="unlistedCount">0</span> unlisted excluded). Hover for detail,
-        click to open a player card.</p>
-      <canvas id="scatterCanvas"></canvas>
-      <div class="tooltip" id="scatterTooltip"></div>
-      <div class="legend-row">
-        <span class="legend-item"><span class="swatch" style="background:var(--good)"></span>Undervalued (≥1.3×)</span>
-        <span class="legend-item"><span class="swatch" style="background:var(--text-muted)"></span>Fair (0.7–1.3×)</span>
-        <span class="legend-item"><span class="swatch" style="background:var(--critical)"></span>Overvalued (≤0.7×)</span>
-        <span class="legend-item">Dot size ∝ market value</span>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Model blend</div>
+      <div class="blend-slider-row" style="--c:var(--bentham)">
+        <div class="bl-head"><span style="color:var(--c)">Bentham</span><span class="weight-val" id="wBenthamVal">35%</span></div>
+        <input type="range" id="wBentham" min="0" max="100" value="35">
       </div>
+      <div class="blend-slider-row" style="--c:var(--jamestown)">
+        <div class="bl-head"><span style="color:var(--c)">Jamestown</span><span class="weight-val" id="wJamestownVal">35%</span></div>
+        <input type="range" id="wJamestown" min="0" max="100" value="35">
+      </div>
+      <div class="blend-slider-row" style="--c:var(--redbull)">
+        <div class="bl-head"><span style="color:var(--c)">Red Bull</span><span class="weight-val" id="wRedbullVal">30%</span></div>
+        <input type="range" id="wRedbull" min="0" max="100" value="30">
+      </div>
+      <div class="blend-footer"><button class="btn small" id="resetWeights">Reset 35/35/30</button></div>
     </div>
-    <div class="panel">
-      <h2>Pool breakdown</h2>
-      <p class="desc">League tier and position mix of the current filtered set.</p>
-      <div class="mini-bars">
-        <div>
-          <div class="mini-bar-title">By league tier</div>
-          <div id="tierBars"></div>
-        </div>
-        <div>
-          <div class="mini-bar-title">By position</div>
-          <div id="posBars"></div>
+
+    <div class="sidebar-footer">
+      <button class="btn small" id="helpBtn">? How this works</button>
+      <button class="btn small" id="themeToggle">🌙 Dark mode</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn small menu-btn" id="menuBtn">☰ Filters</button>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="targets" id="tab-targets">★ Top Targets</button>
+          <button class="tab-btn" data-tab="board" id="tab-board">Recruitment Board</button>
+          <button class="tab-btn" data-tab="valuemap" id="tab-valuemap">Value Map</button>
+          <button class="tab-btn" data-tab="shortlist" id="tab-shortlist">Shortlist <span class="tab-count" id="shortlistTabCount">(0)</span></button>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section id="board" class="panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-      <h2 style="margin:0;">Recruitment board</h2>
-      <span class="table-view-toggle" id="tableCount"></span>
-    </div>
-    <div class="table-scroll" style="margin-top:10px;">
-      <table id="dataTable">
-        <thead><tr id="tableHead"></tr></thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-    </div>
-    <div class="pager">
-      <span id="pagerInfo"></span>
-      <div class="btns">
-        <button class="btn small" id="prevPage">‹ Prev</button>
-        <button class="btn small" id="nextPage">Next ›</button>
+      <div class="topbar-actions">
+        <button class="btn small" id="exportShortlist">★ Export shortlist</button>
+        <button class="btn small" id="exportCsv">⇩ Export filtered CSV</button>
       </div>
     </div>
-  </section>
 
-  <div class="panel collapsed" id="methodPanel">
-    <div class="panel-head" data-toggle="methodPanel">
-      <h2>Methodology — three recruitment philosophies, one blend (click to expand)</h2>
-      <span class="chev">▾</span>
+    <div class="tip-bar" id="tipBar">
+      <span>💡 <b>New here?</b> ★ Top Targets gives you a ready-made shortlist per position. Filter and adjust the model blend from the sidebar — everything recomputes live. Hover any score or tag for a plain-English explanation, or tap <b>? How this works</b>.</span>
+      <button class="close-tip" id="closeTip" title="Dismiss">✕</button>
     </div>
-    <div class="panel-body">
-      <p class="desc">
-        Every player is scored 0–100 by three independent sub-models, each built on the per-90 metrics
-        Wyscout exposes, cross-league adjusted by a 6-tier league-strength coefficient (Elite → Youth), and
-        blended into <b>THE LAMBERTS MODEL</b> using the weights below. Drag a slider to re-blend the entire
-        45k-player pool live — the targets, table, charts and stat tiles above recompute instantly.
-      </p>
-      <div class="model-grid">
-        <div class="model-card" style="--c: var(--bentham)">
-          <h3>Bentham</h3>
-          <p><b>Brentford · FC Midtjylland</b> — statistical "Moneyball" recruitment. Rewards high-volume output,
-             set-piece threat (crosses, aerials, dead-ball delivery) and the 22–27 prime trade-value window.
-             Full league-strength penalty applied.</p>
-          <div class="weight-row">
-            <input type="range" id="wBentham" min="0" max="100" value="35">
-            <span class="weight-val" id="wBenthamVal">35%</span>
-          </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="filters-meta" id="filtersMeta" style="font-size:12px; color:var(--text-muted); margin:-6px 0 12px;"></div>
+
+    <!-- ── Top Targets ─────────────────────────────────────────────── -->
+    <div class="view active" id="view-targets">
+      <div class="panel">
+        <h2>★ Top Targets</h2>
+        <p class="desc">Highest Lamberts Index player at each position within your current filters — recomputes live as you move the sliders or narrow the pool. Click the star to shortlist, click the card to open the full profile.</p>
+        <div id="targetsGrid"></div>
+      </div>
+    </div>
+
+    <!-- ── Recruitment board ───────────────────────────────────────── -->
+    <div class="view" id="view-board">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <h2 style="margin:0;">Recruitment board</h2>
+          <span class="table-view-toggle" id="tableCount"></span>
         </div>
-        <div class="model-card" style="--c: var(--jamestown)">
-          <h3>Jamestown</h3>
-          <p><b>Brighton · Union SG · Hearts</b> — multi-club data network. Rewards technical/creative ceiling
-             (dribbling, progressive carrying, chance creation) found early in lower-profile leagues, age skewed
-             to 18–22. League-strength penalty heavily damped — hidden gems are the point.</p>
-          <div class="weight-row">
-            <input type="range" id="wJamestown" min="0" max="100" value="35">
-            <span class="weight-val" id="wJamestownVal">35%</span>
-          </div>
+        <div class="table-scroll" style="margin-top:10px;">
+          <table id="dataTable">
+            <thead><tr id="tableHead"></tr></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
         </div>
-        <div class="model-card" style="--c: var(--redbull)">
-          <h3>Red Bull</h3>
-          <p><b>RB Salzburg</b> — pressing/athleticism pipeline. Rewards duels, aerial power, acceleration and
-             transition speed, with the steepest youth curve of the three (peaks 17–20, falls off hard by mid-20s).</p>
-          <div class="weight-row">
-            <input type="range" id="wRedbull" min="0" max="100" value="30">
-            <span class="weight-val" id="wRedbullVal">30%</span>
+        <div class="pager">
+          <span id="pagerInfo"></span>
+          <div class="btns">
+            <button class="btn small" id="prevPage">‹ Prev</button>
+            <button class="btn small" id="nextPage">Next ›</button>
           </div>
         </div>
       </div>
-      <div class="weights-footer">
-        <span id="weightSum">Weights normalise to 100% automatically.</span>
-        <button class="btn small" id="resetWeights">Reset to default (35 / 35 / 30)</button>
-      </div>
-      <p class="desc" style="margin-top:14px;">
-        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Bentham + Jamestown + Red Bull
-        + Age + Age² + log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via
-        Wyscout) actually lists a value for, then used to <i>predict</i> a value for every player in the pool. It
-        runs on the three raw sub-scores directly, <b>not</b> the blended Lamberts Index, so it stays a fixed,
-        objective estimate — it will not shift just because you personally weight one philosophy higher on the
-        sliders above. It is a model-derived number, not a copy of Transfermarkt's figure, so it can diverge from
-        it in either direction — that gap is the recruitment signal (Value Gap = Expected − Market).
-      </p>
-      <div class="reg-diag" id="regDiag"></div>
     </div>
-  </div>
 
-  <footer>
-    Built from Wyscout exports across all 165 tracked leagues · Data generated <span id="genDate"></span> ·
-    Expected Value is a statistical estimate for scouting triage, not a valuation opinion — always sanity-check
-    against contract status, injury history and video before acting. Shortlist is saved in this browser only
-    (localStorage) — export it to keep a copy.
-  </footer>
+    <!-- ── Value Map ───────────────────────────────────────────────── -->
+    <div class="view" id="view-valuemap">
+      <div class="chart-row">
+        <div class="panel scatter-wrap">
+          <h2>Value Map — ability vs. price</h2>
+          <p class="desc">Lamberts Index (x) against Expected-Value ÷ Market-Value (y). Square size scales with market value.
+            Top-right = high-ability players the model prices well above what Transfermarkt lists. Only players with a
+            listed market value are plotted (<span id="unlistedCount">0</span> unlisted excluded). Hover for detail,
+            click to open a player card.</p>
+          <canvas id="scatterCanvas"></canvas>
+          <div class="tooltip" id="scatterTooltip"></div>
+          <div class="legend-row">
+            <span class="legend-item"><span class="swatch" style="background:var(--good)"></span>Undervalued (≥1.3×)</span>
+            <span class="legend-item"><span class="swatch" style="background:var(--text-muted)"></span>Fair (0.7–1.3×)</span>
+            <span class="legend-item"><span class="swatch" style="background:var(--critical)"></span>Overvalued (≤0.7×)</span>
+            <span class="legend-item">Size ∝ market value</span>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Pool breakdown</h2>
+          <p class="desc">League tier and position mix of the current filtered set.</p>
+          <div class="mini-bars">
+            <div>
+              <div class="mini-bar-title">By league tier</div>
+              <div id="tierBars"></div>
+            </div>
+            <div>
+              <div class="mini-bar-title">By position</div>
+              <div id="posBars"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Shortlist ───────────────────────────────────────────────── -->
+    <div class="view" id="view-shortlist">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <h2 style="margin:0;">Your shortlist</h2>
+          <button class="btn small" id="clearShortlist">Clear shortlist</button>
+        </div>
+        <p class="desc">Every player you've starred, regardless of your current filters — saved in this browser only. Sorted by Lamberts Index.</p>
+        <div class="table-scroll">
+          <table id="shortlistTable">
+            <thead><tr id="shortlistTableHead"></tr></thead>
+            <tbody id="shortlistTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <footer class="page-footer">
+      Built from Wyscout exports across all 165 tracked leagues · Data generated <span id="genDate"></span> ·
+      Expected Value is a statistical estimate for scouting triage, not a valuation opinion — always sanity-check
+      against contract status, injury history and video before acting. Shortlist is saved in this browser only
+      (localStorage) — export it to keep a copy.
+    </footer>
+  </main>
 </div>
 
 <div class="modal-backdrop" id="modalBackdrop">
@@ -574,7 +601,7 @@
     else document.documentElement.removeAttribute("data-theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const isDark = mode ? mode === "dark" : prefersDark;
-    themeBtn.textContent = isDark ? "☀️ Light" : "🌙 Dark";
+    themeBtn.textContent = isDark ? "☀️ Light mode" : "🌙 Dark mode";
   }
   let manualTheme = null;
   themeBtn.addEventListener("click", () => {
@@ -588,14 +615,40 @@
 
   // ── Header / meta ──────────────────────────────────────────────────
   document.getElementById("genDate").textContent = D.generatedAt;
-  document.getElementById("subtitleLine").textContent =
-    `Global recruitment intelligence · ${D.leagueCount} leagues · ${N.toLocaleString()} players · min ${D.minMinutes} minutes at build time · Bentham × Jamestown × Red Bull`;
+  document.getElementById("taglineLine").textContent = `${D.leagueCount} leagues · ${N.toLocaleString()} players`;
 
   const rd = D.regression;
-  document.getElementById("regDiag").innerHTML =
-    `<span>R² <b>${rd.r_squared}</b></span>` +
-    `<span>Trained on <b>${rd.n_train.toLocaleString()}</b> of ${rd.n_total.toLocaleString()} players with a listed Transfermarkt value</span>` +
-    `<span>Features: <b>${rd.features.filter(f => f !== "intercept").length}</b></span>`;
+
+  // ── Sidebar mobile drawer ────────────────────────────────────────────
+  const sidebarEl = document.getElementById("sidebar");
+  const scrimEl = document.getElementById("sidebarScrim");
+  function openSidebar() { sidebarEl.classList.add("open"); scrimEl.classList.add("open"); }
+  function closeSidebar() { sidebarEl.classList.remove("open"); scrimEl.classList.remove("open"); }
+  document.getElementById("menuBtn").addEventListener("click", openSidebar);
+  document.getElementById("sidebarClose").addEventListener("click", closeSidebar);
+  scrimEl.addEventListener("click", closeSidebar);
+
+  // ── Tabs ─────────────────────────────────────────────────────────────
+  const TABS = ["targets", "board", "valuemap", "shortlist"];
+  let currentTab = "targets";
+  function switchTab(tab) {
+    currentTab = tab;
+    TABS.forEach(t => {
+      document.getElementById("view-" + t).classList.toggle("active", t === tab);
+      document.getElementById("tab-" + t).classList.toggle("active", t === tab);
+    });
+    if (tab === "valuemap") drawScatter();
+  }
+  TABS.forEach(t => document.getElementById("tab-" + t).addEventListener("click", () => switchTab(t)));
+
+  // ── First-run tip ────────────────────────────────────────────────────
+  const TIP_KEY = "lambertsModel_tipDismissed_v1";
+  const tipBar = document.getElementById("tipBar");
+  try { if (localStorage.getItem(TIP_KEY)) tipBar.style.display = "none"; } catch (e) {}
+  document.getElementById("closeTip").addEventListener("click", () => {
+    tipBar.style.display = "none";
+    try { localStorage.setItem(TIP_KEY, "1"); } catch (e) {}
+  });
 
   // ── Position averages (fixed, for "vs position average" in modal) ──
   const posAvg = {};
@@ -659,7 +712,6 @@
   ["bentham", "jamestown", "redbull"].forEach(key => {
     const cap = key[0].toUpperCase() + key.slice(1);
     const slider = document.getElementById("w" + cap);
-    const val = document.getElementById("w" + cap + "Val");
     slider.addEventListener("input", () => {
       weights[key] = +slider.value;
       const total = weights.bentham + weights.jamestown + weights.redbull || 1;
@@ -682,12 +734,6 @@
     refreshAll();
   });
 
-  document.querySelectorAll(".panel-head[data-toggle]").forEach(h => {
-    h.addEventListener("click", () => {
-      document.getElementById(h.dataset.toggle).classList.toggle("collapsed");
-    });
-  });
-
   // ── Shortlist (localStorage-backed) ──────────────────────────────────
   const SHORTLIST_KEY = "lambertsModel_shortlist_v1";
   let shortlist = new Set();
@@ -703,6 +749,13 @@
     saveShortlist();
     refreshAll();
   }
+  document.getElementById("clearShortlist").addEventListener("click", () => {
+    if (!shortlist.size) return;
+    if (!confirm(`Remove all ${shortlist.size} players from your shortlist?`)) return;
+    shortlist.clear();
+    saveShortlist();
+    refreshAll();
+  });
 
   // ── Filters state ──────────────────────────────────────────────────
   const maxMinutes = ROWS.reduce((m, r) => Math.max(m, r[COL.minutes]), D.minMinutes);
@@ -731,8 +784,9 @@
 
   const posChipsEl = document.getElementById("posChips");
   POS_ORDER.forEach(p => {
-    const chip = document.createElement("span");
-    chip.className = "chip"; chip.textContent = POS_LABELS[p] || p; chip.dataset.pos = p;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "side-chip"; chip.textContent = POS_LABELS[p] || p; chip.dataset.pos = p;
     chip.title = `Show only ${POS_LABELS[p] || p}s`;
     chip.addEventListener("click", () => {
       if (filters.pos.has(p)) { filters.pos.delete(p); chip.classList.remove("active"); }
@@ -778,8 +832,9 @@
   const presetChipsEl = document.getElementById("presetChips");
   const presetChipEls = {};
   PRESETS.forEach(preset => {
-    const chip = document.createElement("span");
-    chip.className = "chip" + (preset.star ? " star" : "");
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "side-chip" + (preset.star ? " star" : "");
     chip.textContent = preset.label;
     chip.title = preset.title;
     chip.addEventListener("click", () => {
@@ -822,7 +877,7 @@
     document.getElementById("ageMax").value = "";
     document.getElementById("minMinutes").value = D.minMinutes;
     document.getElementById("minMinutesVal").textContent = D.minMinutes.toLocaleString();
-    document.querySelectorAll("#posChips .chip").forEach(c => c.classList.remove("active"));
+    document.querySelectorAll("#posChips .side-chip").forEach(c => c.classList.remove("active"));
     Object.values(presetChipEls).forEach(c => c.classList.remove("active"));
     state.page = 1;
     refreshAll();
@@ -846,19 +901,24 @@
     { key: "redbullScore", label: "Red Bull", title: "Red Bull sub-score, 0–100 (RB Salzburg philosophy)" },
     { key: "lambertsIndex", label: "Lamberts", title: "The blended Lamberts Index — percentile rank (0–100) within this player's position" },
   ];
-  const theadRow = document.getElementById("tableHead");
-  TABLE_COLS.forEach(c => {
-    const th = document.createElement("th");
-    th.textContent = c.label; th.dataset.key = c.key;
-    if (c.title) th.title = c.title;
-    if (c.nosort) th.classList.add("nosort");
-    else th.addEventListener("click", () => {
-      if (state.sortCol === c.key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-      else { state.sortCol = c.key; state.sortDir = "desc"; }
-      renderTable();
+  function buildHeadRow(target, sortable) {
+    target.innerHTML = "";
+    TABLE_COLS.forEach(c => {
+      const th = document.createElement("th");
+      th.textContent = c.label; th.dataset.key = c.key;
+      if (c.title) th.title = c.title;
+      if (c.nosort || !sortable) th.classList.add("nosort");
+      else th.addEventListener("click", () => {
+        if (state.sortCol === c.key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+        else { state.sortCol = c.key; state.sortDir = "desc"; }
+        renderTable();
+      });
+      target.appendChild(th);
     });
-    theadRow.appendChild(th);
-  });
+  }
+  const theadRow = document.getElementById("tableHead");
+  buildHeadRow(theadRow, true);
+  buildHeadRow(document.getElementById("shortlistTableHead"), false);
 
   function fmtEUR(v) {
     if (v === null || v === undefined) return "—";
@@ -928,11 +988,12 @@
       { label: "Undervalued", value: undervalued.toLocaleString(), sub: "EV ≥ 1.3× market value", title: VALUE_TAG_DESC.UNDERVALUED },
       { label: "Avg value gap", value: fmtEURSigned(avgGap), sub: "Expected − Market", title: "Average of (Expected Value − Market Value) across players with a listed market value" },
       { label: "Shortlisted", value: shortlist.size.toLocaleString(), sub: "saved in this browser", title: "Players you've starred — saved locally, export any time" },
-      { label: "Model blend", value: `${Math.round(weights.bentham/totalW*100)}/${Math.round(weights.jamestown/totalW*100)}/${Math.round(weights.redbull/totalW*100)}`, sub: "Bentham / Jamestown / RB", title: "Current slider weighting — adjust it in the Methodology panel at the bottom of the page" },
+      { label: "Model blend", value: `${Math.round(weights.bentham/totalW*100)}/${Math.round(weights.jamestown/totalW*100)}/${Math.round(weights.redbull/totalW*100)}`, sub: "Bentham / Jamestown / RB", title: "Current slider weighting — adjust it from the sidebar" },
     ];
     document.getElementById("tiles").innerHTML = tiles.map(t =>
       `<div class="tile" title="${t.title || ""}"><div class="label">${t.label}</div><div class="value">${t.value}</div><div class="sub">${t.sub}</div></div>`
     ).join("");
+    document.getElementById("shortlistTabCount").textContent = `(${shortlist.size})`;
   }
 
   // ── Top Targets ──────────────────────────────────────────────────────
@@ -949,24 +1010,7 @@
         return lambertsScore[b] - lambertsScore[a];
       }).slice(0, 3);
       if (!idxs.length) return "";
-      const cards = idxs.map(i => {
-        const r = ROWS[i];
-        const starred = shortlist.has(i);
-        return `<div class="target-card" data-idx="${i}">
-          <div class="tc-top">
-            <div>
-              <div class="tc-name">${r[COL.player]}</div>
-              <div class="tc-team">${r[COL.team]} · ${r[COL.league]} · Age ${r[COL.age] ?? "—"}</div>
-            </div>
-            <button class="tc-star ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button>
-          </div>
-          <div class="tc-bottom">
-            <span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}" title="${lambertsTierOf(i)} — ${LAMBERTS_TIER_DESC[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span>
-            <span class="tag tag-${r[COL.valueTag]}" title="${VALUE_TAG_DESC[r[COL.valueTag]]}">${r[COL.valueTag]}</span>
-            <span>${fmtEUR(r[COL.expectedValue])}</span>
-          </div>
-        </div>`;
-      }).join("");
+      const cards = idxs.map(i => targetCardHtml(i)).join("");
       return `<div class="target-pos-group">
         <div class="target-pos-title">${POS_LABELS[p]}</div>
         <div class="target-cards">${cards}</div>
@@ -974,13 +1018,35 @@
     }).join("");
     const grid = document.getElementById("targetsGrid");
     grid.innerHTML = html || `<p class="empty-note">No players match the current filters.</p>`;
-    grid.querySelectorAll(".target-card").forEach(card => {
+    wireCardEvents(grid);
+  }
+
+  function targetCardHtml(i) {
+    const r = ROWS[i];
+    const starred = shortlist.has(i);
+    return `<div class="target-card" data-idx="${i}">
+      <div class="tc-top">
+        <div>
+          <div class="tc-name">${r[COL.player]}</div>
+          <div class="tc-team">${r[COL.team]} · ${r[COL.league]} · Age ${r[COL.age] ?? "—"}</div>
+        </div>
+        <button class="tc-star ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button>
+      </div>
+      <div class="tc-bottom">
+        <span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}" title="${lambertsTierOf(i)} — ${LAMBERTS_TIER_DESC[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span>
+        <span class="tag tag-${r[COL.valueTag]}" title="${VALUE_TAG_DESC[r[COL.valueTag]]}">${r[COL.valueTag]}</span>
+        <span>${fmtEUR(r[COL.expectedValue])}</span>
+      </div>
+    </div>`;
+  }
+  function wireCardEvents(container) {
+    container.querySelectorAll(".target-card").forEach(card => {
       card.addEventListener("click", (e) => {
         if (e.target.closest(".tc-star")) return;
         openModal(+card.dataset.idx);
       });
     });
-    grid.querySelectorAll(".tc-star").forEach(btn => {
+    container.querySelectorAll(".tc-star").forEach(btn => {
       btn.addEventListener("click", (e) => { e.stopPropagation(); toggleShortlist(+btn.dataset.starIdx); });
     });
   }
@@ -1027,10 +1093,11 @@
   function layoutCanvas() {
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
+    const cssH = rect.height || 460;
     canvas.width = Math.max(300, rect.width) * dpr;
-    canvas.height = 420 * dpr;
+    canvas.height = cssH * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { w: Math.max(300, rect.width), h: 420 };
+    return { w: Math.max(300, rect.width), h: cssH };
   }
 
   function dotRadius(mv) {
@@ -1038,6 +1105,7 @@
   }
 
   function drawScatter() {
+    if (currentTab !== "valuemap") return;
     const { w, h } = layoutCanvas();
     ctx.clearRect(0, 0, w, h);
     const pad = { l: 44, r: 16, t: 14, b: 34 };
@@ -1136,7 +1204,40 @@
   });
   window.addEventListener("resize", () => drawScatter());
 
-  // ── Table render ─────────────────────────────────────────────────────
+  // ── Shared row template (board + shortlist tables) ─────────────────
+  function buildRowHtml(i) {
+    const r = ROWS[i];
+    const ratio = (r[COL.marketValue] > 0) ? (r[COL.expectedValue] / r[COL.marketValue]).toFixed(2) + "×" : "—";
+    const starred = shortlist.has(i);
+    return `<tr data-idx="${i}">
+      <td class="star-cell"><button class="star-btn ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button></td>
+      <td class="player-cell">${r[COL.player]}<span class="team">${r[COL.team]}</span></td>
+      <td>${r[COL.league]}<br><span style="color:var(--text-muted); font-size:11px;" title="${LEAGUE_TIER_DESC[r[COL.tier]] || ""}">T${r[COL.tier]} ${r[COL.tierLabel]}</span></td>
+      <td>${r[COL.pos]}</td>
+      <td>${r[COL.age] ?? "—"}</td>
+      <td>${fmtEUR(r[COL.marketValue])}</td>
+      <td>${fmtEUR(r[COL.expectedValue])}</td>
+      <td>${ratio}</td>
+      <td><span class="tag tag-${r[COL.valueTag]}" title="${VALUE_TAG_DESC[r[COL.valueTag]]}">${r[COL.valueTag]}</span></td>
+      <td>${(r[COL.benthamScore] ?? 0).toFixed(0)}</td>
+      <td>${(r[COL.jamestownScore] ?? 0).toFixed(0)}</td>
+      <td>${(r[COL.redbullScore] ?? 0).toFixed(0)}</td>
+      <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}" title="${lambertsTierOf(i)} — ${LAMBERTS_TIER_DESC[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span></td>
+    </tr>`;
+  }
+  function wireRowEvents(tbody) {
+    tbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest(".star-btn")) return;
+        openModal(+tr.dataset.idx);
+      });
+    });
+    tbody.querySelectorAll(".star-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => { e.stopPropagation(); toggleShortlist(+btn.dataset.starIdx); });
+    });
+  }
+
+  // ── Board table ──────────────────────────────────────────────────────
   function getSortedFiltered() {
     const dir = state.sortDir === "asc" ? 1 : -1;
     return state.filtered.slice().sort((a, b) => {
@@ -1165,36 +1266,8 @@
     const pageRows = sorted.slice(startI, startI + state.pageSize);
 
     const tbody = document.getElementById("tableBody");
-    tbody.innerHTML = pageRows.map(i => {
-      const r = ROWS[i];
-      const ratio = (r[COL.marketValue] > 0) ? (r[COL.expectedValue] / r[COL.marketValue]).toFixed(2) + "×" : "—";
-      const starred = shortlist.has(i);
-      return `<tr data-idx="${i}">
-        <td class="star-cell"><button class="star-btn ${starred ? "on" : ""}" data-star-idx="${i}" title="Shortlist">${starred ? "★" : "☆"}</button></td>
-        <td class="player-cell">${r[COL.player]}<span class="team">${r[COL.team]}</span></td>
-        <td>${r[COL.league]}<br><span style="color:var(--text-muted); font-size:11px;" title="${LEAGUE_TIER_DESC[r[COL.tier]] || ""}">T${r[COL.tier]} ${r[COL.tierLabel]}</span></td>
-        <td>${r[COL.pos]}</td>
-        <td>${r[COL.age] ?? "—"}</td>
-        <td>${fmtEUR(r[COL.marketValue])}</td>
-        <td>${fmtEUR(r[COL.expectedValue])}</td>
-        <td>${ratio}</td>
-        <td><span class="tag tag-${r[COL.valueTag]}" title="${VALUE_TAG_DESC[r[COL.valueTag]]}">${r[COL.valueTag]}</span></td>
-        <td>${(r[COL.benthamScore] ?? 0).toFixed(0)}</td>
-        <td>${(r[COL.jamestownScore] ?? 0).toFixed(0)}</td>
-        <td>${(r[COL.redbullScore] ?? 0).toFixed(0)}</td>
-        <td><span class="lt-chip" style="background:${TIER_CHIP_COLOR[lambertsTierOf(i)]}" title="${lambertsTierOf(i)} — ${LAMBERTS_TIER_DESC[lambertsTierOf(i)]}">${lambertsIndex[i].toFixed(1)}</span></td>
-      </tr>`;
-    }).join("");
-
-    tbody.querySelectorAll("tr").forEach(tr => {
-      tr.addEventListener("click", (e) => {
-        if (e.target.closest(".star-btn")) return;
-        openModal(+tr.dataset.idx);
-      });
-    });
-    tbody.querySelectorAll(".star-btn").forEach(btn => {
-      btn.addEventListener("click", (e) => { e.stopPropagation(); toggleShortlist(+btn.dataset.starIdx); });
-    });
+    tbody.innerHTML = pageRows.map(buildRowHtml).join("");
+    wireRowEvents(tbody);
 
     document.getElementById("pagerInfo").textContent =
       `Page ${state.page} of ${totalPages} · ${sorted.length.toLocaleString()} players`;
@@ -1203,9 +1276,22 @@
   document.getElementById("prevPage").addEventListener("click", () => { if (state.page > 1) { state.page--; renderTable(); } });
   document.getElementById("nextPage").addEventListener("click", () => { state.page++; renderTable(); });
 
+  // ── Shortlist table ──────────────────────────────────────────────────
+  function renderShortlistView() {
+    const tbody = document.getElementById("shortlistTableBody");
+    if (!shortlist.size) {
+      tbody.innerHTML = `<tr><td colspan="${TABLE_COLS.length}"><p class="empty-note">Your shortlist is empty — click any ★ in Top Targets or the Recruitment Board to add a player.</p></td></tr>`;
+      return;
+    }
+    const idxs = [...shortlist].sort((a, b) => lambertsIndex[b] - lambertsIndex[a]);
+    tbody.innerHTML = idxs.map(buildRowHtml).join("");
+    wireRowEvents(tbody);
+  }
+
   // ── Modal ────────────────────────────────────────────────────────────
   const backdrop = document.getElementById("modalBackdrop");
   const modalContent = document.getElementById("modalContent");
+  const modalEl = modalContent; // alias
 
   function vsAvgRow(label, color, value, avg) {
     const delta = value - avg;
@@ -1225,6 +1311,7 @@
   }
 
   function openModal(idx) {
+    modalContent.classList.remove("wide");
     const r = ROWS[idx];
     const ratio = r[COL.marketValue] > 0 ? (r[COL.expectedValue] / r[COL.marketValue]) : null;
     const avg = posAvg[r[COL.pos]] || { bentham: 50, jamestown: 50, redbull: 50 };
@@ -1286,24 +1373,64 @@
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
-  // ── Glossary ─────────────────────────────────────────────────────────
+  // ── "How this works" modal (methodology + glossary combined) ────────
   const GLOSSARY = [
     ["Lamberts Index", "A player's percentile rank (0–100) within their own position, after blending the three sub-model scores. 100 means the top player at that position in the whole pool; 50 means dead-average for that position."],
-    ["Bentham / Jamestown / Red Bull scores", "The three underlying philosophies the Lamberts Index blends together — each scored 0–100 on its own terms. See the Methodology panel at the bottom of the page for what each one rewards, and drag its sliders to change how much weight each one gets."],
-    ["Expected Value", "The model's own valuation, learned from performance data — age, output, position and league strength — not copied from Transfermarkt. It stays fixed regardless of how you set the sub-model weight sliders."],
+    ["Expected Value", "The model's own valuation, learned from performance data — age, output, position and league strength — not copied from Transfermarkt. It stays fixed regardless of how you set the sidebar's blend sliders."],
     ["Value Gap / EV÷MV", "Expected Value minus (or divided by) the Transfermarkt-listed Market Value. A positive gap / ratio above 1× means the model thinks the player is worth more than the market currently charges."],
     ["Undervalued / Fair / Overvalued / Unlisted", "Undervalued: Expected Value ≥ 1.3× market value. Fair: within 0.7×–1.3×. Overvalued: ≤ 0.7×. Unlisted: no Transfermarkt value on file to compare against."],
     ["League tiers (T1 Elite → T6 Youth)", "A 6-tier strength rating for all 165 leagues, from the 5 major European leagues (T1) down to youth/grassroots competitions (T6). Every player's stats are adjusted for this before comparing them across leagues."],
     ["Top Targets", "The single best player at each position within your current filters, refreshed live as you filter or move the weight sliders — a fast starting shortlist."],
-    ["Shortlist (★)", "Click any star to save a player — saved in this browser only. Use the ★ My Shortlist quick filter to see just your list, or export it as its own CSV."],
+    ["Shortlist (★)", "Click any star to save a player — saved in this browser only. Use the ★ My Shortlist quick filter or the Shortlist tab to see just your list, or export it as its own CSV."],
   ];
   function openGlossary() {
+    modalContent.classList.add("wide");
     modalContent.innerHTML = `
       <div class="modal-head">
-        <div><h3>Glossary</h3><div class="team-line">Plain-English definitions for every term used on this page.</div></div>
+        <div><h3>How The Lamberts Model works</h3><div class="team-line">Methodology, valuation logic and a plain-English glossary.</div></div>
         <button class="modal-close" id="modalCloseBtn">✕</button>
       </div>
-      <dl style="margin-top:16px;">
+      <p style="font-size:12.5px; color:var(--text-secondary); line-height:1.5; margin-top:14px;">
+        Every player is scored 0–100 by three independent sub-models, each built on the per-90 metrics Wyscout
+        exposes, cross-league adjusted by a 6-tier league-strength coefficient (Elite → Youth), and blended into
+        <b>THE LAMBERTS MODEL</b> using the weights you set in the sidebar. Move a slider there to re-blend the
+        entire 45k-player pool live — Top Targets, the board, charts and stat tiles all recompute instantly.
+      </p>
+      <div class="model-grid-mini">
+        <div class="model-card-mini" style="--c: var(--bentham)">
+          <h3>Bentham</h3>
+          <p><b>Brentford · FC Midtjylland</b> — statistical "Moneyball" recruitment. Rewards high-volume output,
+             set-piece threat (crosses, aerials, dead-ball delivery) and the 22–27 prime trade-value window. Full
+             league-strength penalty applied.</p>
+        </div>
+        <div class="model-card-mini" style="--c: var(--jamestown)">
+          <h3>Jamestown</h3>
+          <p><b>Brighton · Union SG · Hearts</b> — multi-club data network. Rewards technical/creative ceiling
+             (dribbling, progressive carrying, chance creation) found early in lower-profile leagues, age skewed to
+             18–22. League-strength penalty heavily damped — hidden gems are the point.</p>
+        </div>
+        <div class="model-card-mini" style="--c: var(--redbull)">
+          <h3>Red Bull</h3>
+          <p><b>RB Salzburg</b> — pressing/athleticism pipeline. Rewards duels, aerial power, acceleration and
+             transition speed, with the steepest youth curve of the three (peaks 17–20, falls off hard by mid-20s).</p>
+        </div>
+      </div>
+      <p style="font-size:12.5px; color:var(--text-secondary); line-height:1.5;">
+        <b>Expected Value</b> is a separate OLS regression — <code>log(Market Value) ~ Bentham + Jamestown + Red Bull
+        + Age + Age² + log(Minutes) + Position + League Tier</code> — fit only on the players Transfermarkt (via
+        Wyscout) actually lists a value for, then used to <i>predict</i> a value for every player in the pool. It
+        runs on the three raw sub-scores directly, <b>not</b> the blended Lamberts Index, so it stays a fixed,
+        objective estimate — it will not shift just because you personally weight one philosophy higher on the
+        sliders. It is a model-derived number, not a copy of Transfermarkt's figure, so it can diverge from it in
+        either direction — that gap is the recruitment signal (Value Gap = Expected − Market).
+      </p>
+      <div class="reg-diag">
+        <span>R² <b>${rd.r_squared}</b></span>
+        <span>Trained on <b>${rd.n_train.toLocaleString()}</b> of ${rd.n_total.toLocaleString()} players with a listed Transfermarkt value</span>
+        <span>Features: <b>${rd.features.filter(f => f !== "intercept").length}</b></span>
+      </div>
+      <div class="modal-section-title">Glossary</div>
+      <dl>
         ${GLOSSARY.map(([term, def]) => `<div class="glossary-item"><dt>${term}</dt><dd>${def}</dd></div>`).join("")}
       </dl>
     `;
@@ -1337,7 +1464,7 @@
     exportRowsCsv(getSortedFiltered(), "lamberts_model_filtered.csv");
   });
   document.getElementById("exportShortlist").addEventListener("click", () => {
-    if (!shortlist.size) { alert("Your shortlist is empty — click a ★ in the table or Top Targets to add players."); return; }
+    if (!shortlist.size) { alert("Your shortlist is empty — click a ★ in Top Targets or the Recruitment Board to add players."); return; }
     const idxs = [...shortlist].sort((a, b) => lambertsIndex[b] - lambertsIndex[a]);
     exportRowsCsv(idxs, "lamberts_model_shortlist.csv");
   });
@@ -1350,6 +1477,7 @@
     renderBreakdownBars();
     drawScatter();
     renderTable();
+    renderShortlistView();
     document.getElementById("filtersMeta").textContent =
       `Showing ${state.filtered.length.toLocaleString()} of ${N.toLocaleString()} players across ${D.leagueCount} leagues.`;
   }
