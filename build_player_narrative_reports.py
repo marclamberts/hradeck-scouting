@@ -753,6 +753,56 @@ PLAYERS = [
         ],
         overall_rating="8", fit_hk="7",
     ),
+    dict(
+        slug="T_Fredricson",
+        name="T. Fredricson",
+        season="2025/2026", club="Manchester United U21",
+        report_date="20-07-2026", position="RCB / LCB", age=21, foot="Right",
+        height="n/a",
+        physique=(
+            "Size is not confirmed, but he competes well in the air and rarely gets bullied off the "
+            "ball. Reads as a composed, alert defender rather than a physical specimen."
+        ),
+        pace=(
+            "Comfortable stepping out with the ball and carrying it forward, more mobile than a "
+            "typical stopper."
+        ),
+        work_rate=(
+            "Very heavily involved in build up play. Constantly available to receive the ball and "
+            "move it on. Defensive work looks tidy and controlled."
+        ),
+        attitude=(
+            "Wins the large majority of his challenges and rarely fouls. Calm and composed rather "
+            "than rash."
+        ),
+        technical=(
+            "An outstanding passer for a young centre back. Comfortable in tight areas and moves the "
+            "ball forward with real purpose rather than just playing it safe sideways."
+        ),
+        intelligence=(
+            "Reads danger early and steps in to win the ball back cleanly. Looks comfortable "
+            "dictating the tempo from the back."
+        ),
+        comments=(
+            "A young English centre back who has barely featured for the first team so far, but what "
+            "has been seen on video is genuinely promising. He is composed on the ball, wins it back "
+            "cleanly, and looks capable of building attacks from deep rather than simply clearing his "
+            "lines under pressure. Encouraging early signs from a very small number of matches "
+            "watched, well worth continuing to track closely as more minutes come his way."
+        ),
+        strengths=[
+            "Outstanding passing range and composure for a young centre back",
+            "Wins the large majority of his defensive challenges",
+            "Disciplined, rarely fouls",
+            "Comfortable carrying the ball forward out from the back",
+        ],
+        weaknesses=[
+            "An extremely small number of matches watched so far, this is an early look rather than a settled picture",
+            "Physical frame not yet confirmed",
+            "Needs a longer run of matches before wider conclusions can be drawn",
+        ],
+        overall_rating="6", fit_hk="5.5",
+    ),
 ]
 
 
