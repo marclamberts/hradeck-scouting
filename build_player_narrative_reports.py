@@ -10,9 +10,10 @@ two-line ratings block at the bottom. Layout metrics (font sizes, colour,
 underline styling, margins, spacing) were reverse-engineered directly from
 the reference PDF's internal structure (fonts, spans, vector underlines).
 
-Analysis text is written from the underlying Wyscout numbers (see reports/
+Analysis text is grounded in each player's Wyscout numbers (see reports/
 for the companion statistical "Full" PDFs, which share the same source
-data) but is deliberately descriptive — no stats or percentages appear here.
+data), but is written as plain scouting prose: no stats, percentages, or
+data/analytics language, and no em dashes.
 
 Output: reports/{Slug}_Player_Report.pdf  (one per player in PLAYERS)
 """
@@ -123,40 +124,40 @@ PLAYERS = [
         report_date="17-07-2026", position="CF", age=22, foot="n/a",
         height="n/a",
         physique=(
-            "Height and weight are not confirmed, but he holds his own physically inside the box and "
-            "competes well in the air, giving the impression of a sturdy, competitive frame rather than "
-            "a light, elusive forward."
+            "He looks physically sturdy inside the box and competes well in the air, giving the "
+            "impression of a strong, competitive frame rather than a light, elusive forward."
         ),
         pace=(
-            "Not a mobile or explosive forward. He offers almost no running in behind and rarely drives "
-            "with the ball from deeper positions — his game is built on where he stands in the box, not "
-            "on how fast he gets there."
+            "Not a mobile or explosive forward. He rarely runs in behind and rarely drives with the "
+            "ball from deeper areas. His game is built on where he stands in the box, not on how fast "
+            "he gets there."
         ),
         work_rate=(
-            "Limited pressing intensity for a lone striker, though he is not entirely passive off the "
-            "ball and does put in a moderate defensive shift when needed."
+            "Limited pressing for a lone striker, though he is not entirely passive off the ball and "
+            "does put in a moderate shift defensively when needed."
         ),
         attitude=(
-            "Engages in duels often but wins few of them. That points to persistence and a willingness "
-            "to compete rather than genuine physical control or dominance in those contests."
+            "He competes for the ball often but does not come away with it as often as he would like. "
+            "That points to persistence and a willingness to fight rather than genuine physical "
+            "dominance."
         ),
         technical=(
-            "A tidy, reliable passer, but his work with the ball at his feet is weak — dribbles rarely "
-            "come off — and he offers almost nothing creatively for teammates. Not a carrier or a "
+            "A tidy, reliable passer, but his work with the ball at his feet is weak. Dribbles rarely "
+            "come off, and he offers almost nothing creatively for teammates. Not a carrier or a "
             "creator."
         ),
         intelligence=(
-            "Finds good scoring positions consistently and generates encouraging underlying chances, "
-            "but badly underdelivers in front of goal relative to the openings he creates for himself — "
-            "a clear composure and finishing gap."
+            "He finds good scoring positions consistently and moves well in the box, but he badly "
+            "underdelivers in front of goal relative to the chances he creates for himself. A clear "
+            "composure and finishing gap."
         ),
         comments=(
-            "A young Brazilian No.9 whose movement and underlying chance generation are more "
-            "encouraging than his output. On a small sample, he combines a real presence inside the box "
-            "with almost no mobility or ball-carrying quality, and a finishing return that lags well "
-            "behind the chances he creates. For Hradec Králové specifically: the club's vertical, "
-            "transition-based attacking model rewards forwards who can progress and accelerate the ball "
-            "themselves — Vinicius's profile runs counter to that identity."
+            "A young Brazilian number nine whose movement is more encouraging than his finishing. He "
+            "combines a real presence inside the box with almost no mobility or ball carrying quality, "
+            "and a finishing touch that lags well behind the chances he creates for himself. For "
+            "Hradec Králové specifically, the club's vertical, transition based attacking style "
+            "rewards forwards who can progress and accelerate the ball themselves. Vinicius's game "
+            "runs counter to that identity."
         ),
         strengths=[
             "Consistently finds good scoring positions and threatens the box",
@@ -164,10 +165,10 @@ PLAYERS = [
             "Reliable, tidy passer under pressure",
         ],
         weaknesses=[
-            "Significant finishing underperformance relative to the chances he creates",
+            "Clear finishing underperformance relative to the chances he creates",
             "Very limited mobility and ball progression from deep",
-            "Poor ball retention when dribbling, with minimal creative output",
-            "Small sample size — the profile should be treated as provisional",
+            "Poor ball retention when dribbling, with minimal creative touch",
+            "A small number of matches watched so far, the picture should be treated as early",
         ],
         overall_rating="5.5", fit_hk="4",
     ),
@@ -178,50 +179,49 @@ PLAYERS = [
         report_date="17-07-2026", position="LB / LCB", age=22, foot="Left",
         height="1.85m",
         physique=(
-            "A good, physically mature frame for a full-back, backed up by genuine competitiveness in "
-            "the air against crosses and long balls — well above what is typical for the position."
+            "A good, physically mature frame for a full back, and he competes well in the air against "
+            "crosses and long balls, well above what is typical for the position."
         ),
         pace=(
-            "Shows some ball-carrying instinct from deep positions and a moderate ability to break "
-            "lines with the dribble, though he is not an explosive or especially frequent runner — "
-            "worth confirming on video given the limited sample available."
+            "Shows some ball carrying instinct from deep positions and a moderate ability to break "
+            "lines with the dribble, though he is not an explosive or especially frequent runner. "
+            "Worth confirming on more video."
         ),
         work_rate=(
-            "Very heavily involved in build-up play — consistently on the ball and progressing it "
+            "Very heavily involved in build up play. Consistently on the ball and looking to move it "
             "forward. Defensive work off the ball is solid without being spectacular."
         ),
         attitude=(
-            "Competes actively in duels without over-committing or becoming reckless. Reads as a "
-            "disciplined, engaged defender rather than an aggressive risk-taker."
+            "Competes actively in duels without over committing or becoming reckless. Reads as a "
+            "disciplined, engaged defender rather than an aggressive risk taker."
         ),
         technical=(
-            "Left-footed with genuine passing range and composure on the ball. His crossing volume is "
-            "decent but end product from wide areas is inconsistent — passing, not crossing, is his "
-            "standout tool."
+            "Left footed with genuine passing range and composure on the ball. His crossing looks "
+            "decent in volume but the end product from wide areas is inconsistent. Passing, not "
+            "crossing, is his standout tool."
         ),
         intelligence=(
-            "Profiles as a genuine ball-playing full-back — he progresses the team primarily through "
+            "Looks like a genuine ball playing full back. He progresses the team mainly through "
             "passing rather than dribbling or crossing, and offers a reliable outlet from deep "
             "positions."
         ),
         comments=(
-            "A young, left-footed, ball-progressing full-back / wide centre-back from Karviná. The "
-            "sample is small and the near-absence of attacking end product is expected for the role "
-            "rather than a concern. His standout trait — progressive passing — is a good stylistic "
-            "match for a team that wants to build quickly through deep, secure passers, but his "
-            "one-on-one defending needs live or video verification before trusting it at a higher "
-            "level."
+            "A young, left footed, ball progressing full back or wide centre back from Karviná. The "
+            "near absence of goal involvement is expected for the role rather than a concern. His "
+            "standout trait, progressive passing, is a good stylistic match for a team that wants to "
+            "build quickly through deep, secure passers, but his one on one defending needs further "
+            "live or video confirmation before trusting it at a higher level."
         ),
         strengths=[
-            "Strong progressive passing range and composure in possession",
+            "Strong progressive passing and composure in possession",
             "Competitive in the air for his position",
             "Composed and controlled in duels, rarely reckless",
-            "Positional versatility across left-back and left centre-back",
+            "Positional versatility across left back and left centre back",
         ],
         weaknesses=[
-            "Isolated one-on-one defending looks like the weaker part of his game relative to peers",
-            "Crossing end product is inconsistent despite reasonable delivery volume",
-            "Small sample size — defensive robustness still unverified",
+            "Isolated one on one defending looks like the weaker part of his game relative to peers",
+            "Crossing end product is inconsistent despite reasonable delivery",
+            "Limited matches watched so far, defensive robustness still unconfirmed",
             "No attacking end product on the season, though this is expected for the role",
         ],
         overall_rating="6", fit_hk="6",
@@ -233,49 +233,50 @@ PLAYERS = [
         report_date="17-07-2026", position="CF", age=24, foot="Right",
         height="1.94m",
         physique=(
-            "A genuinely imposing physical frame that shows up clearly in how he plays — a real focal "
+            "A genuinely imposing physical frame that shows up clearly in how he plays. A real focal "
             "point and target man, though there is still more to unlock in the air relative to his "
             "size."
         ),
         pace=(
-            "Not an explosive runner, but carries enough mobility to be useful in transition, and it "
-            "shows up clearly in his ball-carrying, which is comfortably the best of this group."
+            "Not an explosive runner, but he carries enough mobility to be useful in transition, and "
+            "it shows up clearly in his ball carrying, which is comfortably the best of this group."
         ),
         work_rate=(
-            "A competitive defensive workload for a No.9 — functional rather than elite in his "
-            "pressing contribution."
+            "A competitive defensive shift for a number nine. Functional rather than elite in his "
+            "pressing."
         ),
         attitude=(
-            "Shows real physical dominance and competitiveness in defensive duels, even though his "
-            "overall duel return is dragged down by a weaker showing in offensive duels."
+            "Shows real physical dominance and competitiveness in defensive duels, even though he is "
+            "less effective in duels going forward."
         ),
         technical=(
-            "The most complete technical package of the three covered here — good shot quality, "
-            "functional passing, and clearly the best dribbling success rate of the group."
+            "The most complete technical package of the three covered here. Good shot quality, "
+            "functional passing, and clearly the best dribbling of the group."
         ),
         intelligence=(
-            "Excellent movement into the box combined with a finishing return that outstrips his "
-            "underlying chance quality — a real signal of composure and instinct in front of goal."
+            "Excellent movement into the box combined with a finishing touch that looks better than "
+            "the chances themselves would suggest. A real sign of composure and instinct in front of "
+            "goal."
         ),
         comments=(
-            "The strongest and most complete centre-forward profile of the three covered in this "
-            "cycle. A physically mature target forward, one tier below Hradec Králové's level, who is "
-            "outperforming his own underlying chances, carrying the ball well for a player of his "
-            "size, and profiles as an elite finisher and target man. Genuinely ready for a look at a "
+            "The strongest and most complete centre forward of the three covered in this cycle. A "
+            "physically mature target forward, one tier below Hradec Králové's level, who finishes "
+            "better than his chances alone would suggest, carries the ball well for a player of his "
+            "size, and looks like an elite finisher and target man. Genuinely ready for a look at a "
             "higher level, with the usual caveat that a step up a division brings its own adjustment "
             "risk."
         ),
         strengths=[
-            "Outperforming his own underlying chance quality — a real finishing signal",
-            "Profiles as an elite finisher and target man",
-            "Best shot quality and ball-carrying success of the group",
-            "Standout physical and competitive signal in defensive duels",
+            "Finishes better than his chances alone would suggest, a real sign of quality in front of goal",
+            "Looks like an elite finisher and target man",
+            "Best shot quality and ball carrying of the group",
+            "Standout physical and competitive edge in defensive duels",
         ],
         weaknesses=[
-            "Offensive duel win rate is below what his frame would suggest",
-            "Limited creative output — finishes far more than he creates for others",
-            "Aerial dominance is modest relative to his height — underdelivering in the air so far",
-            "One tier below Hradec's level — the jump to the Czech top flight is the main adaptation risk",
+            "Less effective in duels going forward than his frame would suggest",
+            "Limited creative touch, finishes far more than he creates for others",
+            "Aerial presence is modest relative to his height, underdelivering in the air so far",
+            "One tier below Hradec's level, the jump to the Czech top flight is the main adjustment risk",
         ],
         overall_rating="7.5", fit_hk="7",
     ),
@@ -286,45 +287,46 @@ PLAYERS = [
         report_date="20-07-2026", position="LCB", age=21, foot="n/a",
         height="n/a",
         physique=(
-            "Size is unrecorded, but he holds up well in the air and is rarely beaten cheaply — reads "
-            "as a composed, positionally sound defender more than an imposing physical specimen."
+            "Size is not confirmed, but he holds up well in the air and is rarely beaten cheaply. He "
+            "reads as a composed, positionally sound defender more than an imposing physical "
+            "specimen."
         ),
         pace=(
             "Not a runner or a carrier out from the back. His value is in reading the game and "
             "distributing, not in driving forward with the ball himself."
         ),
         work_rate=(
-            "An ever-present figure at the back who barely misses a match — a genuine workhorse who "
+            "An ever present figure at the back who barely misses a match. A genuine workhorse who "
             "gets across to cover consistently."
         ),
         attitude=(
-            "Wins the large majority of the duels and defensive contests he enters — calm, controlled, "
-            "and disciplined enough to avoid unnecessary fouls."
+            "Wins the large majority of the challenges he enters. Calm, controlled, and disciplined "
+            "enough to avoid unnecessary fouls."
         ),
         technical=(
-            "An outstanding distributor for a centre-back — very high passing volume, excellent "
-            "accuracy, and a genuine habit of progressing the ball forward through his passing rather "
-            "than just recycling possession sideways."
+            "An outstanding distributor for a centre back. Very comfortable in possession, accurate "
+            "in his passing, and shows a genuine habit of moving the ball forward through his passing "
+            "rather than just recycling it sideways."
         ),
         intelligence=(
-            "Anticipation and reading of the game are his standout traits — he intercepts at an "
-            "excellent rate for the position, regularly snuffing out danger before it develops."
+            "Reading the game is his standout trait. He steps in to intercept at an excellent rate for "
+            "the position, regularly snuffing out danger before it develops."
         ),
         comments=(
-            "A genuinely reliable, ever-present defensive foundation — not a ball-carrier or physical "
-            "dominator, but an excellent reader of the game and one of the best passing centre-backs "
-            "covered in this cycle. The archetype of a modern, possession-comfortable stopper who lets "
+            "A genuinely reliable, ever present defensive foundation. Not a ball carrier or a physical "
+            "dominator, but an excellent reader of the game and one of the best passing centre backs "
+            "covered in this cycle. The archetype of a modern, possession comfortable stopper who lets "
             "others do the carrying."
         ),
         strengths=[
             "Excellent reading of the game and interceptions",
-            "Outstanding passing volume and accuracy for a centre-back",
-            "Controlled and disciplined — rarely fouls",
-            "Ever-present availability across a long season",
+            "Outstanding passing for a centre back",
+            "Controlled and disciplined, rarely fouls",
+            "Ever present across a long season",
         ],
         weaknesses=[
-            "Almost no ball-carrying threat from the back",
-            "Modest aerial return for a centre-back",
+            "Almost no ball carrying threat from the back",
+            "Modest aerial presence for a centre back",
             "Limited attacking upside",
             "Needs a system that values distribution over physical dominance",
         ],
@@ -337,7 +339,7 @@ PLAYERS = [
         report_date="20-07-2026", position="LCMF / LDMF", age=20, foot="n/a",
         height="n/a",
         physique=(
-            "Nothing in his profile marks him out physically — a functional rather than imposing "
+            "Nothing in how he plays marks him out physically. A functional rather than imposing "
             "midfield frame."
         ),
         pace=(
@@ -346,34 +348,34 @@ PLAYERS = [
         ),
         work_rate=(
             "A committed defensive contributor for his age, consistently involved without being the "
-            "primary destroyer in his midfield."
+            "main destroyer in his midfield."
         ),
         attitude=(
-            "Competes actively without being reckless — engaged in the game rather than passive."
+            "Competes actively without being reckless. Engaged in the game rather than passive."
         ),
         technical=(
-            "Tidy in possession with a decent passing platform; modest end product going forward but "
+            "Tidy in possession with a decent passing platform. Modest end product going forward but "
             "shows flashes of creativity."
         ),
         intelligence=(
-            "Still developing — his underlying involvement suggests a genuine two-way profile rather "
-            "than a specialist, but nothing yet marks him out as elite in either direction."
+            "Still developing. His overall involvement in the game suggests a genuine two way player "
+            "rather than a specialist, but nothing yet marks him out as elite in either direction."
         ),
         comments=(
-            "A young Australian central midfielder with a broad, two-way skill set rather than one "
-            "standout trait. Encouraging for his age but not yet a finished or specialist profile — "
-            "worth monitoring for development rather than an immediate difference-maker."
+            "A young Australian central midfielder with a broad, two way game rather than one "
+            "standout trait. Encouraging for his age but not yet a finished or specialist player. "
+            "Worth monitoring for development rather than an immediate difference maker."
         ),
         strengths=[
-            "Genuine two-way involvement for his age",
+            "Genuine two way contribution for his age",
             "Tidy on the ball with some carrying and creative instinct",
             "Competitive without being reckless",
         ],
         weaknesses=[
             "No standout elite trait yet in any single phase",
             "Limited end product going forward",
-            "Physical and duel numbers are unremarkable",
-            "Young, developing profile — needs time",
+            "Physical presence and duelling are unremarkable",
+            "Young, developing player who needs time",
         ],
         overall_rating="5.5", fit_hk="5",
     ),
@@ -384,43 +386,44 @@ PLAYERS = [
         report_date="20-07-2026", position="LCB", age=25, foot="Left",
         height="1.89m",
         physique=(
-            "A good, physically mature frame for a centre-back — genuinely competitive in the air."
+            "A good, physically mature frame for a centre back. Genuinely competitive in the air."
         ),
         pace=(
-            "Surprisingly comfortable carrying the ball out from the back for a centre-back, with an "
-            "unusually high success rate on the occasions he does dribble."
+            "Surprisingly comfortable carrying the ball out from the back for a centre back, with an "
+            "unusually high success rate on the occasions he does dribble past a man."
         ),
         work_rate=(
-            "Disciplined and controlled positioning, reflected in a very low foul count."
+            "Disciplined and controlled positioning, reflected in a very low number of fouls "
+            "conceded."
         ),
         attitude=(
-            "Reads danger early rather than relying on recovery challenges — a proactive rather than "
+            "Reads danger early rather than relying on recovery challenges. A proactive rather than "
             "reactive defender."
         ),
         technical=(
-            "An excellent distributor — very high passing volume and accuracy, genuinely comfortable "
+            "An excellent distributor. Very comfortable and accurate in possession, genuinely happy "
             "building play from the back."
         ),
         intelligence=(
-            "His interceptions are the standout trait of his entire profile — among the best readers "
-            "of the game covered in this cycle."
+            "His reading of the game and interceptions are the standout traits of his entire game. "
+            "Among the best readers of danger covered in this cycle."
         ),
         comments=(
-            "A composed, left-footed centre-back with genuine passing range and elite anticipation, "
-            "though the sample is small. Profiles as exactly the kind of ball-playing defender a "
-            "possession-based build-up wants, but needs a larger body of evidence before trusting the "
-            "numbers fully."
+            "A composed, left footed centre back with genuine passing range and sharp anticipation, "
+            "though the picture is still based on a small number of matches watched. He looks like "
+            "exactly the kind of ball playing defender a possession based build up wants, but needs a "
+            "larger body of video evidence before trusting the picture fully."
         ),
         strengths=[
-            "Elite interceptions and reading of the game",
+            "Excellent reading of the game and interceptions",
             "Excellent passing range and accuracy",
             "Comfortable carrying the ball out from the back",
-            "Left-footed variety at the back",
+            "Left footed variety at the back",
         ],
         weaknesses=[
-            "Very small sample size — a heavy caveat on all of the above",
-            "Aerial output is solid but not standout",
-            "Needs a larger run of matches to confirm the profile",
+            "Small number of matches watched so far, a heavy caveat on all of the above",
+            "Aerial presence is solid but not standout",
+            "Needs a larger run of matches to confirm the picture",
         ],
         overall_rating="6.5", fit_hk="6",
     ),
@@ -431,42 +434,42 @@ PLAYERS = [
         report_date="20-07-2026", position="LCB / RCB", age=22, foot="Right",
         height="1.83m",
         physique=(
-            "A well-built, physically dominant centre-back — wins the vast majority of his defensive "
-            "and aerial contests, a genuine physical presence."
+            "A well built, physically dominant centre back. Wins the vast majority of his defensive "
+            "and aerial challenges, a genuine physical presence."
         ),
         pace=(
-            "Not a mobile ball-carrier, but positioned to defend rather than to progress play himself."
+            "Not a mobile ball carrier, but positioned to defend rather than to progress play himself."
         ),
         work_rate=(
-            "Extremely disciplined off the ball — rarely fouls, rarely caught out of position."
+            "Extremely disciplined off the ball. Rarely fouls, rarely caught out of position."
         ),
         attitude=(
-            "Among the most dominant defenders covered in this cycle in one-on-one and aerial "
-            "contests — real physical control of his box."
+            "Among the most dominant defenders covered in this cycle in one on one and aerial "
+            "contests. Real physical control of his box."
         ),
         technical=(
-            "A capable, accurate passer who can progress the ball when needed, without being a "
+            "A capable, accurate passer who can move the ball forward when needed, without being a "
             "specialist distributor."
         ),
         intelligence=(
-            "Reads danger well and times interventions cleanly rather than relying on recovery pace — "
-            "an old-school stopper profile with modern passing competence, and even chips in with the "
-            "odd goal from set-piece situations."
+            "Reads danger well and times his interventions cleanly rather than relying on recovery "
+            "pace. An old school stopper with modern passing ability, and he even chips in with the "
+            "odd goal from set piece situations."
         ),
         comments=(
-            "The most dominant defensive profile of the centre-backs covered here — outstanding in "
+            "The most dominant defensive player of the centre backs covered here. Outstanding in "
             "duels and in the air, disciplined, and capable enough on the ball not to be a liability "
             "in possession. A genuinely strong defensive foundation."
         ),
         strengths=[
-            "Elite duel and aerial win rate",
-            "Very disciplined — low foul count",
-            "Reliable passer when asked to progress the ball",
+            "Dominant in duels and in the air",
+            "Very disciplined, low number of fouls",
+            "Reliable passer when asked to move the ball forward",
             "Occasional goal threat from set pieces",
         ],
         weaknesses=[
-            "Not a ball-carrier or progressive runner",
-            "Offensive duel engagement is modest",
+            "Not a ball carrier or progressive runner",
+            "Less involved in duels going forward",
             "Needs to be paired with more mobile cover alongside him",
         ],
         overall_rating="7", fit_hk="6.5",
@@ -478,44 +481,44 @@ PLAYERS = [
         report_date="20-07-2026", position="RW / RAMF", age=20, foot="n/a",
         height="n/a",
         physique=(
-            "Undersized for aerial contests, which clearly isn't his game — this is a ground-based, "
+            "Undersized for aerial contests, which clearly is not his game. This is a ground based, "
             "dribbling wide threat rather than a physical presence."
         ),
         pace=(
-            "A genuinely explosive carrier — his dribbling is the standout trait of his entire "
-            "profile, comfortably the most dynamic ball-carrier covered in this cycle."
+            "A genuinely explosive carrier. His dribbling is the standout trait of his entire game, "
+            "comfortably the most dynamic ball carrier covered in this cycle."
         ),
         work_rate=(
-            "Limited defensive contribution — his value is almost entirely in the final third."
+            "Limited defensive contribution. His value is almost entirely in the final third."
         ),
         attitude=(
-            "Competitive and direct in one-on-one attacking situations, less involved physically "
+            "Competitive and direct in one on one attacking situations, less involved physically "
             "without the ball."
         ),
         technical=(
-            "A genuine dribbler and crosser with real end product for his age — goals and underlying "
-            "chance quality both point to a live goal threat from wide areas."
+            "A genuine dribbler and crosser with real end product for his age. Goals and the way he "
+            "gets chances both point to a live goal threat from wide areas."
         ),
         intelligence=(
-            "Gets into the box consistently and creates shooting opportunities for himself through "
-            "direct running rather than combination play."
+            "Gets into the box consistently and creates shooting chances for himself through direct "
+            "running rather than combination play."
         ),
         comments=(
-            "The most explosive attacking talent covered in this cycle — a young, direct wide "
-            "forward whose dribbling and box-arrival numbers stand out clearly. Raw defensively, but "
-            "a genuine attacking weapon at his age."
+            "The most explosive attacking talent covered in this cycle. A young, direct wide forward "
+            "whose dribbling and movement into the box stand out clearly. Raw defensively, but a "
+            "genuine attacking weapon at his age."
         ),
         strengths=[
-            "Elite dribbling volume and success rate",
+            "Elite dribbling and directness",
             "Genuine goal threat for a winger",
             "Gets into the box consistently",
-            "Direct, progressive ball-carrier",
+            "Direct, progressive ball carrier",
         ],
         weaknesses=[
             "Minimal aerial or physical presence",
             "Limited defensive work",
             "Crossing end product is inconsistent",
-            "Young — defensive side of his game still needs development",
+            "Young, the defensive side of his game still needs development",
         ],
         overall_rating="7", fit_hk="6",
     ),
@@ -526,7 +529,7 @@ PLAYERS = [
         report_date="20-07-2026", position="RB / RWB / RCB", age=24, foot="Right",
         height="1.80m",
         physique=(
-            "Nothing about his frame stands out — a functional rather than imposing physical profile."
+            "Nothing about his frame stands out. A functional rather than imposing physical presence."
         ),
         pace=(
             "Some dribbling and carrying instinct, without anything that marks him out as an "
@@ -539,26 +542,26 @@ PLAYERS = [
             "Competes evenly across his duels without dominating any single phase."
         ),
         technical=(
-            "Genuine crossing and passing range for a full-back, with a real creative signal despite "
-            "almost no goal involvement of his own."
+            "Genuine crossing and passing range for a full back, with a real creative touch despite "
+            "almost no goals of his own."
         ),
         intelligence=(
-            "More of a creator than a scorer from wide areas — his underlying creative contribution "
-            "stands out more than his defensive numbers."
+            "More of a creator than a scorer from wide areas. His creative contribution stands out "
+            "more than his defending."
         ),
         comments=(
-            "A Uruguayan full-back whose value leans towards service and creation from wide areas "
-            "rather than physical defending or goal threat. A solid, functional profile without a "
+            "A Uruguayan full back whose value leans towards service and creation from wide areas "
+            "rather than physical defending or goal threat. A solid, functional player without a "
             "standout trait in any one direction."
         ),
         strengths=[
-            "Genuine creative signal from a defensive position",
+            "Genuine creative touch from a defensive position",
             "Reasonable crossing range",
             "Positional versatility across the back line",
         ],
         weaknesses=[
             "No goal threat of his own",
-            "Defensive duel win rate is unremarkable",
+            "Defending in duels is unremarkable",
             "No standout physical or defensive trait",
         ],
         overall_rating="5.5", fit_hk="5",
@@ -570,41 +573,41 @@ PLAYERS = [
         report_date="20-07-2026", position="LWB / LB / RWB", age=23, foot="n/a",
         height="n/a",
         physique=(
-            "Nothing in the data marks him out physically — a functional rather than dominant frame."
+            "Nothing marks him out physically. A functional rather than dominant frame."
         ),
         pace=(
-            "A genuine ball-carrier for a wing-back — comfortable dribbling and progressing the ball "
+            "A genuine ball carrier for a wing back. Comfortable dribbling and moving the ball "
             "forward."
         ),
         work_rate=(
-            "Engages in a high volume of duels and delivers a real volume of service into the box."
+            "Engages in a lot of duels and delivers a real amount of service into the box."
         ),
         attitude=(
-            "Very high overall engagement in duels, though his discipline is a mild concern."
+            "Very willing to engage in duels, though his discipline is a mild concern."
         ),
         technical=(
             "Genuine crossing range and volume, and involved in chance creation more than most "
-            "defenders covered in this cycle — the underlying final-third involvement he generates "
-            "suggests real quality that simply hasn't converted into goals of his own yet."
+            "defenders covered in this cycle. The way he gets into good positions in the final third "
+            "suggests real quality that simply has not turned into goals of his own yet."
         ),
         intelligence=(
-            "A modern, attack-minded wing-back who gets forward and contributes to the final third "
-            "consistently, though his own defensive return lags behind his attacking involvement."
+            "A modern, attack minded wing back who gets forward and contributes to the final third "
+            "consistently, though his own defending lags behind his attacking involvement."
         ),
         comments=(
-            "A Nigerian wing-back with real attacking upside — good ball-carrying, crossing volume, "
-            "and involvement in the final third — but his defensive numbers and discipline lag behind "
-            "the attacking side of his game. A boom-or-bust profile that leans attacking."
+            "A Nigerian wing back with real attacking upside. Good ball carrying, crossing, and "
+            "involvement in the final third, but his defending and discipline lag behind the "
+            "attacking side of his game. A boom or bust player who leans attacking."
         ),
         strengths=[
-            "Genuine attacking involvement and chance creation from wing-back",
-            "Good ball-carrying and crossing range",
+            "Genuine attacking involvement and chance creation from wing back",
+            "Good ball carrying and crossing range",
             "Willing and frequent in duels",
         ],
         weaknesses=[
-            "Defensive duel win rate is below what's needed at a higher level",
-            "Discipline and foul concerns",
-            "His own attacking involvement hasn't yet converted into goals",
+            "Defending in duels is below what's needed at a higher level",
+            "Discipline and fouls are a concern",
+            "His own attacking play has not yet turned into goals",
         ],
         overall_rating="6", fit_hk="5.5",
     ),
@@ -615,39 +618,39 @@ PLAYERS = [
         report_date="20-07-2026", position="RB / RCB", age=24, foot="Right",
         height="1.86m",
         physique=(
-            "A good, physically competitive frame — wins more than his share in the air for a "
-            "full-back."
+            "A good, physically competitive frame. Wins more than his share in the air for a full "
+            "back."
         ),
         pace=(
-            "A willing progressor from deep positions, without being an especially explosive carrier."
+            "A willing carrier from deep positions, without being an especially explosive runner."
         ),
         work_rate=(
-            "A functional defensive workload, consistently involved without being a standout "
-            "destroyer."
+            "A functional defensive shift, consistently involved without being a standout destroyer."
         ),
         attitude=(
             "Competes fairly evenly across his duels without dominating any one phase."
         ),
         technical=(
-            "A reliable, accurate passer with genuine range for a full-back."
+            "A reliable, accurate passer with genuine range for a full back."
         ),
         intelligence=(
             "Reads danger early and gets across to intercept at a healthy rate for the position."
         ),
         comments=(
-            "A versatile, dual-nationality full-back / wide centre-back on a small sample — solid "
-            "across the board without one standout trait yet, worth monitoring as the sample grows."
+            "A versatile, dual nationality full back or wide centre back on a small number of matches "
+            "watched so far. Solid across the board without one standout trait yet, worth monitoring "
+            "as more games are seen."
         ),
         strengths=[
-            "Aerially competitive for his position",
+            "Competitive in the air for his position",
             "Reliable passer with genuine range",
             "Positional versatility",
             "Reads danger well",
         ],
         weaknesses=[
-            "Small sample size — treat as provisional",
+            "Small number of matches watched so far, treat as an early picture",
             "No standout attacking or defensive trait yet",
-            "Ball-carrying is limited",
+            "Ball carrying is limited",
         ],
         overall_rating="5.5", fit_hk="5",
     ),
@@ -658,47 +661,46 @@ PLAYERS = [
         report_date="20-07-2026", position="CF / LAMF", age=22, foot="Right",
         height="n/a",
         physique=(
-            "Height and weight are unrecorded, but his willingness to engage in a very high volume of "
-            "duels suggests he doesn't shy away from contact, even if he doesn't consistently win "
-            "those contests."
+            "Size is not confirmed, but his willingness to get stuck into a lot of duels suggests he "
+            "does not shy away from contact, even if he does not always come away with the ball."
         ),
         pace=(
-            "A direct, high-volume dribbler who gets into the box and shooting positions very "
-            "consistently — clearly comfortable running at defenders."
+            "A direct, high volume dribbler who gets into the box and into shooting positions very "
+            "consistently. Clearly comfortable running at defenders."
         ),
         work_rate=(
-            "Engages constantly — an extremely high overall duel count marks him as a persistently "
-            "involved, combative forward."
+            "Constantly engaged. A very high amount of duelling marks him as a persistently involved, "
+            "combative forward."
         ),
         attitude=(
-            "Very high engagement across duels, though a concerning foul count suggests that "
-            "competitiveness sometimes tips into rash challenges."
+            "Very willing to engage physically, though a concerning number of fouls conceded suggests "
+            "that competitiveness sometimes tips into rash challenges."
         ),
         technical=(
             "Direct and productive in front of goal, though his overall involvement in general "
-            "passing play is minimal — a penalty-box operator more than a build-up participant."
+            "passing play is minimal. A penalty box operator more than a build up participant."
         ),
         intelligence=(
-            "Gets into the box and shoots more than almost anyone in this batch relative to his "
-            "minutes — a real, live goal threat, running slightly ahead of his underlying chance "
-            "quality."
+            "Gets into the box and shoots more than almost anyone covered in this cycle relative to "
+            "his minutes on the pitch. A real, live goal threat, and his finishing has been slightly "
+            "ahead of the chances themselves so far."
         ),
         comments=(
-            "A young Ivorian forward with a genuine, direct goal threat and very high work and duel "
-            "engagement, on a small sample. The discipline concerns and low general passing "
-            "involvement suggest a raw, high-ceiling talent who needs polishing rather than a "
-            "finished product."
+            "A young Ivorian forward with a genuine, direct goal threat and very high energy and "
+            "duelling, on a small number of matches watched so far. The discipline concerns and low "
+            "general involvement in passing suggest a raw, high ceiling talent who needs polishing "
+            "rather than a finished product."
         ),
         strengths=[
-            "Genuine goal output slightly ahead of his underlying chance quality",
-            "Very high box-arrival and dribbling volume",
-            "Combative and persistent engagement",
+            "Goal output slightly ahead of the chances he gets, a good early sign",
+            "Very high box arrival and dribbling",
+            "Combative and persistent",
         ],
         weaknesses=[
-            "Discipline and foul concerns",
+            "Discipline and fouls are a concern",
             "Minimal involvement in general passing play",
-            "Offensive duel win rate below what his engagement volume would suggest",
-            "Small sample size — treat as provisional",
+            "Comes away with the ball in duels less often than his engagement would suggest",
+            "Small number of matches watched so far, treat as an early picture",
         ],
         overall_rating="6.5", fit_hk="5.5",
     ),
@@ -709,44 +711,44 @@ PLAYERS = [
         report_date="20-07-2026", position="LDMF / LCMF", age=26, foot="Right",
         height="1.60m",
         physique=(
-            "A notably small, light frame for a central midfielder — yet it clearly doesn't limit his "
-            "effectiveness across almost every phase of the game."
+            "A notably small, light frame for a central midfielder, yet it clearly does not limit how "
+            "effective he is across almost every phase of the game."
         ),
         pace=(
             "Comfortable carrying the ball through midfield with a genuine dribbling and progression "
             "game."
         ),
         work_rate=(
-            "A true ever-present — barely misses a match, and the sheer volume of matches played "
+            "A true ever present. Barely misses a match, and the sheer number of matches played "
             "speaks to durability and trust from his coaching staff."
         ),
         attitude=(
-            "Wins the clear majority of his duels despite his frame — competes on technique and "
+            "Wins the clear majority of his duels despite his frame. Competes on technique and "
             "anticipation rather than physicality."
         ),
         technical=(
-            "A genuinely well-rounded passer and dribbler, contributing directly to goals through "
-            "both his own finishing and his creative output."
+            "A genuinely well rounded passer and dribbler, contributing directly to goals through "
+            "both his own finishing and his creative play."
         ),
         intelligence=(
-            "A complete central-midfield profile — contributes going forward, wins the ball back, and "
-            "rarely stops playing. One of the most well-rounded profiles covered in this cycle."
+            "A complete central midfield player. Contributes going forward, wins the ball back, and "
+            "rarely stops playing. One of the most well rounded players covered in this cycle."
         ),
         comments=(
             "The standout performer of this batch. A physically undersized central midfielder who "
-            "compensates entirely through technique, engagement, and availability — genuine goal and "
-            "assist involvement from central midfield, excellent defensive duel numbers, and "
-            "remarkable durability. The physical profile is the only real question mark against an "
-            "otherwise complete package."
+            "compensates entirely through technique, energy, and availability. Genuine goal and "
+            "assist involvement from central midfield, excellent defending in duels, and remarkable "
+            "durability. His physical frame is the only real question mark against an otherwise "
+            "complete package."
         ),
         strengths=[
             "Genuine goal and assist involvement from central midfield",
-            "Excellent defensive duel win rate despite his size",
+            "Excellent defending in duels despite his size",
             "Outstanding durability and availability",
-            "Well-rounded passing and carrying game",
+            "Well rounded passing and carrying game",
         ],
         weaknesses=[
-            "Notably light physical frame — likely to be tested aerially and physically at a higher level",
+            "Notably light physical frame, likely to be tested aerially and physically at a higher level",
             "Crossing and wide delivery are modest",
         ],
         overall_rating="8", fit_hk="7",
