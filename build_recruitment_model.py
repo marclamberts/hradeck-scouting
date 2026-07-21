@@ -54,6 +54,10 @@ FIT_COLORS = {
     "Excellent Fit": C["excellent"], "Good Fit": C["good"],
     "Moderate Fit": C["moderate"], "Below Profile": C["below"],
 }
+BRIGHTON_COLORS = {
+    "Prime Target": C["elite"], "Strong Fit": C["high"], "Speculative": C["fair"],
+    "Long Shot": C["noval"], "Not A Fit": C["noval"],
+}
 TIER_COLORS = {1: C["tier1"], 2: C["tier2"], 3: C["tier3"], 4: C["tier4"], 5: C["tier5"], 6: C["tier6"]}
 
 POS_LABELS = {
@@ -74,6 +78,7 @@ MASTER_COLS = [
     "Player", "Club", "TeamType", "League", "Country", "Tier", "TierLabel",
     "PositionGroup", "Full Position", "AgeYears", "Contract", "_minutes",
     "_mkt_val", "ModelValueEUR", "ValueGapEUR", "ValueRatio", "ValueTier",
+    "ProjectedPeakValueEUR", "DevelopmentUpsideEUR", "BrightonScore", "BrightonLabel",
     "TrajectoryTag", "PhysicalLeagueFitScore", "PhysicalLeagueFitLabel",
     "AdjustedCompositeScore", "CompositeRecruitmentScore",
 ] + list(STAT_MAP.values())
@@ -86,6 +91,8 @@ DISPLAY_RENAME = {
     "ValueTier": "Value Tier", "TrajectoryTag": "Trajectory",
     "PhysicalLeagueFitScore": "Physical Fit", "PhysicalLeagueFitLabel": "Physical Fit Label",
     "AdjustedCompositeScore": "Composite Score", "CompositeRecruitmentScore": "League-Relative Score",
+    "ProjectedPeakValueEUR": "Peak Val (€)", "DevelopmentUpsideEUR": "Dev. Upside (€)",
+    "BrightonScore": "Brighton Score", "BrightonLabel": "Brighton Fit",
 } | {v: k for k, v in STAT_MAP.items()}
 
 
@@ -113,6 +120,9 @@ def build_master(players: pd.DataFrame) -> pd.DataFrame:
     out["_minutes"] = out["_minutes"].fillna(0).astype(int)
     out["CompositeRecruitmentScore"] = out["CompositeRecruitmentScore"].round(1)
     out["AdjustedCompositeScore"] = out["AdjustedCompositeScore"].round(1)
+    out["ProjectedPeakValueEUR"] = out["ProjectedPeakValueEUR"].fillna(0).astype(int)
+    out["DevelopmentUpsideEUR"] = out["DevelopmentUpsideEUR"].fillna(0).astype(int)
+    out["BrightonScore"] = out["BrightonScore"].round(1)
     for c in STAT_MAP.values():
         out[c] = pd.to_numeric(out[c], errors="coerce").round(2)
 
@@ -243,6 +253,7 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
         ("Physical League Fits", "Best fits for a quick, physical league, calibrated against the Czech First League"),
         ("Position Boards", "Top undervalued, not-past-peak targets per position"),
         ("Youth Prospects", "Best performers age ≤ 20 in youth leagues/teams — evaluated on output, not market value"),
+        ("Brighton Mechanics", "Buy-low/develop/resell targets — modelled on Brighton & Hove Albion's recruitment approach"),
         ("Full Database", "Every player loaded, all columns, for manual filtering"),
     ]
     ws.append([None, "Sheet", "Contents"])
@@ -315,6 +326,15 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
                "produce Czech-top-flight-level physical/tempo numbers"])
     ws[f"B{ws.max_row}"].font = Font(bold=True)
 
+    ws.append([None])
+    ws.append([None, "BRIGHTON MECHANICS — BUY LOW, DEVELOP, RESELL"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    for line in rm.BRIGHTON_NOTES.strip("\n").split("\n"):
+        ws.append([None, line])
+        row = ws.max_row
+        if line.isupper() or line.startswith("─"):
+            ws[f"B{row}"].font = Font(bold=True)
+
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 26
     ws.column_dimensions["C"].width = 95
@@ -368,6 +388,12 @@ def build_physical_fit_board(master: pd.DataFrame, top_n: int = 300) -> pd.DataF
 def build_youth_prospects(master: pd.DataFrame, max_age: int = 20, top_n: int = 300) -> pd.DataFrame:
     df = master[(master["TeamType"] == "Youth") & (master["Age"].fillna(99) <= max_age)]
     df = df.sort_values("Composite Score", ascending=False).head(top_n)
+    return df.reset_index(drop=True)
+
+
+def build_brighton_board(master: pd.DataFrame, top_n: int = 400) -> pd.DataFrame:
+    df = master[master["Brighton Fit"].isin(["Prime Target", "Strong Fit", "Speculative"])]
+    df = df.sort_values("Brighton Score", ascending=False).head(top_n)
     return df.reset_index(drop=True)
 
 
@@ -515,6 +541,16 @@ def run(min_minutes_senior: int, min_minutes_youth: int, leagues: list[str] | No
         "Youth leagues/teams evaluated on performance output (market value is unreliable at this level)  ·  Sorted by Composite Score",
         youth,
         color_cols={"Physical Fit Label": FIT_COLORS},
+    )
+
+    print("Writing Brighton Mechanics…")
+    brighton = build_brighton_board(master)
+    write_data_sheet(
+        wb.create_sheet("Brighton Mechanics"),
+        f"BRIGHTON MECHANICS — BUY LOW, DEVELOP, RESELL — {len(brighton)} PLAYERS",
+        "Age Fit + Composite Score + Undervaluation + Trajectory, modelled on Brighton's recruitment approach  ·  Sorted by Brighton Score",
+        brighton,
+        color_cols={"Brighton Fit": BRIGHTON_COLORS, "Value Tier": VALUE_TIER_COLORS, "Trajectory": TRAJECTORY_COLORS},
     )
 
     print("Writing Full Database…")

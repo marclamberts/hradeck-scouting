@@ -419,6 +419,7 @@ def compute_value_model(df: pd.DataFrame, ridge_lambda: float = 5.0) -> pd.DataF
         # Not enough signal to fit — fall back to composite-only scaling
         df["ModelValueEUR"] = (comp / 100.0 * 2_000_000).round(-3)
         df["_value_r2"] = np.nan
+        df["ProjectedPeakValueEUR"] = df["ModelValueEUR"]
     else:
         y_train = np.log1p(mv[train_mask].values)
         beta = _ridge_fit(X_train, y_train, lam=ridge_lambda)
@@ -432,6 +433,25 @@ def compute_value_model(df: pd.DataFrame, ridge_lambda: float = 5.0) -> pd.DataF
         df["ModelValueEUR"] = np.expm1(y_pred_all).clip(min=0).round(-3)
         df["_value_r2"] = r2
 
+        # "Aging into peak" projection: same player (same quality, league,
+        # minutes, position) but at the age their position typically peaks —
+        # isolates the pure age-value effect the regression already learned,
+        # without speculating about further skill development. This is the
+        # basis for the Brighton-style "development upside" read: what does
+        # this player's current output become worth once they reach the age
+        # window the market usually pays most for at their position.
+        peak_start = df["PositionGroup"].map(lambda p: PEAK_WINDOWS.get(p, (24, 28))[0]).astype(float)
+        feat_peak = feat.copy()
+        feat_peak["age"] = peak_start
+        feat_peak["age2"] = peak_start ** 2
+        X_peak_std = (feat_peak.values.astype(float) - mu) / sig
+        y_pred_peak = _ridge_predict(X_peak_std, beta)
+        projected = np.expm1(y_pred_peak).clip(min=0).round(-3)
+        # No further aging upside once already at/past that window
+        projected = np.where(age.values >= peak_start.values, df["ModelValueEUR"].values, projected)
+        df["ProjectedPeakValueEUR"] = np.maximum(projected, df["ModelValueEUR"].values)
+
+    df["DevelopmentUpsideEUR"] = (df["ProjectedPeakValueEUR"] - df["ModelValueEUR"]).clip(lower=0)
     df["ValueGapEUR"] = df["ModelValueEUR"] - df["_mkt_val"]
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = np.where(df["_mkt_val"] > 1000, df["ModelValueEUR"] / df["_mkt_val"], np.nan)
@@ -451,6 +471,82 @@ def compute_value_model(df: pd.DataFrame, ridge_lambda: float = 5.0) -> pd.DataF
         return "OVERPRICED"
 
     df["ValueTier"] = df["ValueRatio"].apply(tier)
+    return df
+
+
+# ── 4b. Brighton mechanics — buy low, develop, resell ───────────────────────
+
+BRIGHTON_NOTES = """
+BRIGHTON MECHANICS — BUY LOW, DEVELOP, RESELL
+────────────────────────────────────────────
+Modelled on Brighton & Hove Albion's own recruitment approach: a wide global
+scouting net into mid-tier and unfashionable leagues, a strong preference for
+players still short of their prime, and a willingness to pay for underlying
+data over reputation — buying early, developing on the pitch, and banking the
+resale profit once the market catches up.
+
+Brighton Score blends four signals per player:
+  30%  Age Fit         — peaks at 19-21, decays either side, roughly zero by 28
+  30%  Quality         — Composite Score (cross-league adjusted performance)
+  25%  Undervaluation  — percentile rank of Value Ratio (Model Value / Market Value)
+  15%  Trajectory      — Rising scores highest, Peak Window partial, Past Peak excluded
+
+Development Upside (€) reuses the valuation regression with one change: the
+player's age is swapped for their position's typical peak-age, holding
+quality, league and minutes fixed. That isolates the pure "aging into peak"
+effect the market already pays for — the closest honest read on resale
+upside without speculating about further skill growth.
+"""
+
+_AGE_SCORE_IDEAL = (19.0, 21.0)
+
+
+def _age_fit_score(age: float) -> float:
+    if pd.isna(age):
+        return 40.0
+    lo, hi = _AGE_SCORE_IDEAL
+    if lo <= age <= hi:
+        return 100.0
+    if age < lo:
+        return max(0.0, 100.0 - (lo - age) * 16.0)
+    return max(0.0, 100.0 - (age - hi) * 13.0)
+
+
+_BRIGHTON_TRAJ_SCORE = {"Rising": 100.0, "Peak Window": 55.0, "Past Peak": 0.0, "Unknown": 40.0}
+
+
+def compute_brighton_mechanics(df: pd.DataFrame) -> pd.DataFrame:
+    """Score every player on fit to Brighton's data-driven, buy-low/develop/resell recruitment model."""
+    df = df.copy()
+    age = pd.to_numeric(df.get("AgeYears"), errors="coerce")
+
+    age_score = age.apply(_age_fit_score)
+
+    ratio = pd.to_numeric(df.get("ValueRatio"), errors="coerce")
+    log_ratio = np.log(ratio.clip(lower=0.05))
+    value_score = (log_ratio.rank(pct=True) * 100).fillna(45.0)
+
+    quality_score = pd.to_numeric(df.get("AdjustedCompositeScore"), errors="coerce").fillna(40.0)
+    traj_score = df["TrajectoryTag"].map(_BRIGHTON_TRAJ_SCORE).fillna(40.0)
+
+    df["BrightonScore"] = (
+        0.30 * age_score + 0.30 * quality_score + 0.25 * value_score + 0.15 * traj_score
+    ).round(1)
+
+    df["BrightonEligible"] = (age.fillna(99) <= 25) & (df["TrajectoryTag"] != "Past Peak")
+
+    def label(score: float, eligible: bool) -> str:
+        if not eligible:
+            return "Not A Fit"
+        if score >= 75:
+            return "Prime Target"
+        if score >= 62:
+            return "Strong Fit"
+        if score >= 48:
+            return "Speculative"
+        return "Long Shot"
+
+    df["BrightonLabel"] = [label(s, e) for s, e in zip(df["BrightonScore"], df["BrightonEligible"])]
     return df
 
 
@@ -671,6 +767,10 @@ def build_recruitment_universe(
     if verbose:
         print(f"Scoring physical/quick-league fit vs {BENCHMARK_LEAGUE_FILE} First League…")
     scored = compute_physical_fit(scored)
+
+    if verbose:
+        print("Scoring Brighton mechanics (buy low, develop, resell)…")
+    scored = compute_brighton_mechanics(scored)
 
     if verbose:
         print("Building club power rankings…")
