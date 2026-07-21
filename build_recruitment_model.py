@@ -75,7 +75,7 @@ MASTER_COLS = [
     "PositionGroup", "Full Position", "AgeYears", "Contract", "_minutes",
     "_mkt_val", "ModelValueEUR", "ValueGapEUR", "ValueRatio", "ValueTier",
     "TrajectoryTag", "PhysicalLeagueFitScore", "PhysicalLeagueFitLabel",
-    "CompositeRecruitmentScore",
+    "AdjustedCompositeScore", "CompositeRecruitmentScore",
 ] + list(STAT_MAP.values())
 
 DISPLAY_RENAME = {
@@ -85,7 +85,7 @@ DISPLAY_RENAME = {
     "ValueGapEUR": "Value Gap (€)", "ValueRatio": "Value Ratio",
     "ValueTier": "Value Tier", "TrajectoryTag": "Trajectory",
     "PhysicalLeagueFitScore": "Physical Fit", "PhysicalLeagueFitLabel": "Physical Fit Label",
-    "CompositeRecruitmentScore": "Composite Score",
+    "AdjustedCompositeScore": "Composite Score", "CompositeRecruitmentScore": "League-Relative Score",
 } | {v: k for k, v in STAT_MAP.items()}
 
 
@@ -112,6 +112,7 @@ def build_master(players: pd.DataFrame) -> pd.DataFrame:
     out["AgeYears"] = pd.to_numeric(out["AgeYears"], errors="coerce")
     out["_minutes"] = out["_minutes"].fillna(0).astype(int)
     out["CompositeRecruitmentScore"] = out["CompositeRecruitmentScore"].round(1)
+    out["AdjustedCompositeScore"] = out["AdjustedCompositeScore"].round(1)
     for c in STAT_MAP.values():
         out[c] = pd.to_numeric(out[c], errors="coerce").round(2)
 
@@ -262,6 +263,15 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
         row = ws.max_row
         if line.isupper() or line.startswith("─"):
             ws[f"B{row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "TWO PERFORMANCE SCORES"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "League-Relative Score", "Percentile vs the player's own league/position peers only — best read as 'how dominant is he in his current league'"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+    ws.append([None, "Composite Score", "League-Relative Score scaled down by league strength — cross-league comparable, "
+               "used for Model Value, sorting and Youth Prospects, so a standout in a weak league isn't confused with a standout in a strong one"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
 
     ws.append([None])
     ws.append([None, "LEAGUE TIERS"])

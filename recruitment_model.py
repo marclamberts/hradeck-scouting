@@ -329,7 +329,11 @@ Model Value is NOT a copy or rescale of a player's own Transfermarkt market
 value. It is the output of a single regression fit once across the entire
 player pool:
 
-    ln(Market Value + 1)  ~  Composite performance score (percentile)
+    ln(Market Value + 1)  ~  Composite performance score (percentile within the
+                              player's own league, then scaled down for how
+                              weak/strong that league is — so a striker
+                              running riot in a weak division doesn't get
+                              mistaken for one doing it in a strong one)
                             + Age + Age²
                             + ln(Minutes played)
                             + League Strength (pyramid-position based, 0-100)
@@ -379,7 +383,8 @@ def compute_value_model(df: pd.DataFrame, ridge_lambda: float = 5.0) -> pd.DataF
     """Fit the metrics -> EUR regression and attach ModelValueEUR / ValueRatio / ValueTier."""
     df = df.copy()
 
-    comp = pd.to_numeric(df.get("CompositeRecruitmentScore"), errors="coerce").fillna(50.0)
+    comp = pd.to_numeric(df.get("AdjustedCompositeScore"), errors="coerce").fillna(50.0)
+    comp_z = pd.Series(norm.ppf(((comp.rank(pct=True) * 0.998) + 0.001).clip(0.001, 0.999)), index=comp.index)
     age = pd.to_numeric(df.get("AgeYears"), errors="coerce").fillna(25.0)
     minutes = pd.to_numeric(df.get("_minutes"), errors="coerce").fillna(0.0)
     strength = pd.to_numeric(df.get("LeagueStrength"), errors="coerce").fillna(50.0)
@@ -394,6 +399,7 @@ def compute_value_model(df: pd.DataFrame, ridge_lambda: float = 5.0) -> pd.DataF
 
     feat = pd.DataFrame({
         "comp": comp,
+        "comp_z": comp_z,
         "age": age,
         "age2": age ** 2,
         "ln_minutes": np.log1p(minutes),
@@ -631,8 +637,24 @@ def build_recruitment_universe(
         print(f"  → {len(raw)} player-rows loaded")
 
     if verbose:
-        print("Computing composite performance scores…")
-    scored = compute_wyscout_scores(raw)
+        print("Computing composite performance scores (within own league, to avoid weak-league stat inflation)…")
+    scored = pd.concat(
+        [compute_wyscout_scores(g) for _, g in raw.groupby("League")],
+        ignore_index=True,
+    )
+    # CompositeRecruitmentScore above is a percentile *within the player's own
+    # league* — fair (compares him to his actual peers) but not cross-league
+    # comparable: a striker running riot in a weak league would otherwise look
+    # identical to one doing it in a strong one. AdjustedCompositeScore scales
+    # that league-relative percentile by how strong the league itself is, the
+    # same way club power scores are tier-adjusted, so it's safe to compare
+    # and sort across the whole universe (used for the valuation model and
+    # for cross-league boards). Club/league rankings keep using the
+    # unadjusted, within-league CompositeRecruitmentScore and apply their own
+    # tier adjustment at the club level, so the two adjustments don't stack.
+    scored["AdjustedCompositeScore"] = (
+        scored["CompositeRecruitmentScore"] * (0.5 + 0.5 * scored["LeagueStrength"] / 100.0)
+    ).round(1)
 
     if verbose:
         print("Computing peak-age trajectory…")
