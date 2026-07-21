@@ -358,7 +358,10 @@ def build_undervalued_board(master: pd.DataFrame, not_past_peak_only: bool) -> p
 
 
 def build_physical_fit_board(master: pd.DataFrame, top_n: int = 300) -> pd.DataFrame:
-    df = master.sort_values("Physical Fit", ascending=False).head(top_n)
+    # Outfield only — duel/aerial rate stats for goalkeepers are low-sample
+    # and don't speak to "thrives in a quick, physical league" the way they
+    # do for outfield players.
+    df = master[master["Pos"] != "GK"].sort_values("Physical Fit", ascending=False).head(top_n)
     return df.reset_index(drop=True)
 
 
