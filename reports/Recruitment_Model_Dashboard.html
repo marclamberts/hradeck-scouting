@@ -337,6 +337,11 @@
   .cmdk-row .cr-name { font-weight: 600; font-size: 13.5px; color: var(--ink-900); }
   .cmdk-row .cr-sub { font-size: 11.5px; color: var(--ink-400); }
   .cmdk-row .cr-score { font-size: 15px; font-weight: 700; color: var(--good); flex: none; }
+  .cmdk-add {
+    flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink-400); font-size: 15px; line-height: 1; cursor: pointer;
+  }
+  .cmdk-add:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .cmdk-empty { padding: 24px 16px; text-align: center; color: var(--ink-400); font-size: 13px; }
 
   /* ── Player Card modal ─────────────────────────────────────────────── */
@@ -356,6 +361,13 @@
     border-radius: 50%; cursor: pointer; font-size: 15px; flex: none; line-height: 1;
   }
   .pcard-close:hover { background: rgba(255,255,255,.2); }
+  .pc-compare-btn {
+    background: var(--accent); color: var(--accent-ink); border: none; border-radius: 7px;
+    padding: 7px 13px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  }
+  .pc-compare-btn:hover { filter: brightness(1.08); }
+  .pc-compare-btn.added { background: var(--surface-2); color: var(--ink-400); cursor: default; }
+  .pc-compare-btn.added:hover { filter: none; }
   .pcard-body { padding: 20px 24px 24px; overflow-y: auto; }
   .pcard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   @media (max-width: 640px) { .pcard-grid { grid-template-columns: 1fr; } }
@@ -366,6 +378,43 @@
   .pcard-stat .ps-value { font-family: var(--font-mono); font-weight: 700; font-size: 18px; margin-top: 2px; }
   .pcard-stat .ps-sub { font-size: 11px; color: var(--ink-400); margin-top: 1px; }
   .pcard-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+  /* ── Compare Players ───────────────────────────────────────────────── */
+  .compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; align-items: start; }
+  .compare-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 18px 16px; box-shadow: var(--shadow); position: relative;
+  }
+  .compare-card .cc-close {
+    position: absolute; top: 12px; right: 12px; background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--ink-400); width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1;
+  }
+  .compare-card .cc-close:hover { color: var(--critical); border-color: var(--critical); }
+  .compare-card h3 { font-size: 16px; padding-right: 26px; }
+  .compare-card .cc-sub { font-size: 11.5px; color: var(--ink-400); margin: 3px 0 10px; }
+  .compare-card .cc-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+  .compare-big { font-family: var(--font-mono); font-weight: 800; font-size: 32px; line-height: 1; color: var(--ink-900); }
+  .compare-big .cb-label { display: block; font-family: var(--font-ui); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-400); font-weight: 700; margin-bottom: 4px; }
+  .compare-big .cb-rank { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 700; margin-top: 3px; }
+  .compare-bars { margin: 14px 0 6px; display: flex; flex-direction: column; gap: 8px; }
+  .compare-bar-row { display: flex; align-items: center; gap: 8px; }
+  .compare-bar-row .cbr-label { width: 66px; flex: none; color: var(--ink-400); text-transform: uppercase; font-size: 9.5px; letter-spacing: .04em; font-weight: 700; }
+  .compare-bar-row .cbr-track { flex: 1; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .compare-bar-row .cbr-fill { height: 100%; background: var(--accent); }
+  .compare-bar-row .cbr-val { width: 32px; flex: none; text-align: right; font-family: var(--font-mono); font-weight: 700; font-size: 12px; }
+  .compare-radar { margin: 4px -6px 0; }
+  .compare-foot { margin-top: 8px; font-size: 11.5px; color: var(--ink-400); }
+  .compare-add {
+    border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 20px 18px;
+    display: flex; flex-direction: column; min-height: 220px;
+  }
+  .compare-add h3 { font-size: 14.5px; margin-bottom: 3px; }
+  .compare-add p { font-size: 12px; color: var(--ink-400); margin: 0 0 12px; }
+  .compare-add-results { margin-top: 10px; overflow-y: auto; max-height: 300px; }
+  .compare-add-row { padding: 8px 9px; border-radius: 7px; cursor: pointer; }
+  .compare-add-row:hover { background: var(--surface-2); }
+  .compare-add-row .cr-name { font-weight: 600; font-size: 13px; color: var(--ink-900); }
+  .compare-empty { color: var(--ink-400); font-size: 13px; padding: 20px 4px; }
 
   /* ── Squad Needs heatmap ───────────────────────────────────────────── */
   .heatmap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 22px; }
@@ -433,6 +482,7 @@
       <li class="nav-group">
         <div class="nav-group-label">Overview</div>
         <button data-panel="overview" class="active">Overview</button>
+        <button data-panel="compare">Compare Players</button>
       </li>
       <li class="nav-group">
         <div class="nav-group-label">Market Intelligence</div>
@@ -523,6 +573,16 @@
           <span class="chip chip-good">UNDERVALUED</span>. Full derivation in <a href="#" data-goto="methodology">Methodology &rarr;</a>
         </p>
       </div>
+    </section>
+
+    <!-- COMPARE PLAYERS ====================================================== -->
+    <section class="panel" id="panel-compare">
+      <div class="panel-head">
+        <div class="eyebrow">Side by side</div>
+        <h2>Compare Players</h2>
+        <p class="desc">Add up to 4 players — from the search below, the <b>+ Compare</b> button on any Player Card, or straight from the command palette (&#8984;K) — for a direct read on quality, fit, and value.</p>
+      </div>
+      <div class="compare-grid" id="compareGrid"></div>
     </section>
 
     <!-- LEAGUES ============================================================= -->
@@ -949,7 +1009,10 @@
         <h2 id="pcName"></h2>
         <div class="pc-sub" id="pcSub"></div>
       </div>
-      <button class="pcard-close" id="pcardClose">&times;</button>
+      <div style="display:flex;align-items:center;gap:8px;flex:none;">
+        <button class="pc-compare-btn" id="pcCompareBtn">+ Compare</button>
+        <button class="pcard-close" id="pcardClose">&times;</button>
+      </div>
     </div>
     <div class="pcard-body">
       <div class="pcard-grid">
@@ -1236,8 +1299,10 @@
     drawWedgeChart(container, PLAYER_AXES, values, { height: 320, margin: 56 });
   }
 
+  var currentCardRow = null;
   function openPlayerCard(row) {
     if (!row) return;
+    currentCardRow = row;
     document.getElementById("pcName").textContent = row.player || "Unknown player";
     var subParts = [row.club, row.league, row.pos, row.age ? "age " + row.age : null].filter(Boolean);
     document.getElementById("pcSub").textContent = subParts.join(" · ");
@@ -1272,6 +1337,7 @@
     }).join("");
 
     drawPlayerRadar(document.getElementById("pcRadar"), row);
+    syncCompareBtn();
     document.getElementById("pcardScrim").classList.add("show");
   }
   function closePlayerCard() { document.getElementById("pcardScrim").classList.remove("show"); }
@@ -1280,6 +1346,10 @@
     var link = e.target.closest(".player-link");
     if (link) { openPlayerCard(ROW_STORE[+link.dataset.idx]); return; }
     if (e.target.id === "pcardScrim" || e.target.closest("#pcardClose")) closePlayerCard();
+  });
+  document.getElementById("pcCompareBtn").addEventListener("click", function () {
+    if (currentCardRow) addToCompare(currentCardRow);
+    syncCompareBtn();
   });
 
   /* ══════════════════════════════ COMMAND PALETTE ═══════════════════ */
@@ -1302,11 +1372,15 @@
         var scoreTag = r.composite != null ? '<div class="cr-score tabular">' + fmtNum(r.composite, 1) + "</div>" : "";
         return '<div class="cmdk-row' + (i === 0 ? " sel" : "") + '" data-i="' + i + '">' +
           '<div><div class="cr-name">' + esc(r.player) + '</div><div class="cr-sub">' + esc(r.club) + " · " + esc(r.league) + (r.pos ? " · " + esc(r.pos) : "") + "</div></div>" +
-          scoreTag +
+          '<div style="display:flex;align-items:center;gap:10px;">' + scoreTag +
+          '<button class="cmdk-add" data-i="' + i + '" title="Add to comparison">+</button></div>' +
           "</div>";
       }).join("");
       results.querySelectorAll(".cmdk-row").forEach(function (el) {
         el.addEventListener("click", function () { pick(+el.dataset.i); });
+      });
+      results.querySelectorAll(".cmdk-add").forEach(function (el) {
+        el.addEventListener("click", function (e) { e.stopPropagation(); addToCompare(current[+el.dataset.i]); });
       });
     }
     function pick(i) {
@@ -1381,10 +1455,12 @@
   }
 
   var redrawStyleRadar = function () {};
+  var redrawCompareShelf = function () {};
 
   function renderAllCharts() {
     var s = DATA.summary;
     redrawStyleRadar();
+    redrawCompareShelf();
 
     var vtOrder = ["ELITE VALUE", "HIGH VALUE", "VALUE", "FAIR VALUE", "OVERPRICED", "NO MARKET COMP"];
     barList(document.getElementById("chartValueTier"), vtOrder.map(function (k) {
@@ -2196,8 +2272,108 @@
     document.getElementById("peakTermGrid").innerHTML = peakMeta.map(function (t) { return "<dt>" + t[0] + "</dt><dd>Peak window " + t[1] + "</dd>"; }).join("");
   })();
 
+  /* ══════════════════════════════ COMPARE PLAYERS ═══════════════════════ */
+  var COMPARE_MAX = 4;
+  var compareList = [];
+
+  function isComparing(row) {
+    return compareList.some(function (r) { return r.player === row.player && r.club === row.club; });
+  }
+  function syncCompareBtn() {
+    var btn = document.getElementById("pcCompareBtn");
+    if (!btn) return;
+    var already = currentCardRow && isComparing(currentCardRow);
+    btn.classList.toggle("added", !!already);
+    btn.textContent = already ? "✓ Added" : (compareList.length >= COMPARE_MAX ? "Compare full" : "+ Compare");
+  }
+  function addToCompare(row) {
+    if (isComparing(row) || compareList.length >= COMPARE_MAX) return;
+    compareList.push(row);
+    renderCompareShelf();
+    syncCompareBtn();
+  }
+  function removeFromCompare(i) { compareList.splice(i, 1); renderCompareShelf(); syncCompareBtn(); }
+
+  function compareBarRow(label, v) {
+    var frac = v == null ? 0 : Math.max(0, Math.min(100, v)) / 100;
+    return '<div class="compare-bar-row"><span class="cbr-label">' + esc(label) + '</span>' +
+      '<div class="cbr-track"><div class="cbr-fill" style="width:' + (frac * 100) + '%;"></div></div>' +
+      '<span class="cbr-val tabular">' + (v == null ? "—" : fmtNum(v, 0)) + "</span></div>";
+  }
+  function compareCardHtml(row, i) {
+    var chips = [];
+    if (row.valueTier) chips.push(valueChip(row.valueTier));
+    if (row.trajectory) chips.push(trajChip(row.trajectory));
+    if (row.roleArchetype) chips.push(chip(row.roleArchetype, "neutral"));
+    var subParts = [row.club, row.league, row.pos, row.age ? "age " + row.age : null].filter(Boolean);
+    var rankLine = row.rankOverall != null && row.rankOverallOf ? rankTag(row.rankOverall, row.rankOverallOf) + " overall" : "";
+    return '<div class="compare-card">' +
+      '<button class="cc-close" data-i="' + i + '" title="Remove">&times;</button>' +
+      "<h3>" + esc(row.player) + "</h3>" +
+      '<div class="cc-sub">' + esc(subParts.join(" · ")) + "</div>" +
+      '<div class="cc-chips">' + chips.join("") + "</div>" +
+      '<div class="compare-big"><span class="cb-label">Composite Score</span>' +
+      (row.composite != null ? fmtNum(row.composite, 1) : "—") +
+      (rankLine ? '<span class="cb-rank">' + rankLine + "</span>" : "") + "</div>" +
+      '<div class="compare-bars">' +
+      compareBarRow("Role Fit", row.roleFit) +
+      compareBarRow("Phys Fit", row.physFit) +
+      compareBarRow("Brighton", row.brightonScore) +
+      "</div>" +
+      '<div class="compare-radar" data-radar="' + i + '"></div>' +
+      '<div class="compare-foot">Model ' + fmtEUR(row.modelVal) + " · Ratio " + fmtRatio(row.ratio) + "</div>" +
+      "</div>";
+  }
+  function compareAddSlotHtml() {
+    return '<div class="compare-add">' +
+      "<h3>Add a player</h3><p>Search to add another player.</p>" +
+      '<div class="search-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>' +
+      '<input id="compareSearchInput" placeholder="Search any player…" autocomplete="off"></div>' +
+      '<div class="compare-add-results" id="compareAddResults"></div>' +
+      "</div>";
+  }
+  function renderCompareShelf() {
+    var grid = document.getElementById("compareGrid");
+    if (!grid) return;
+    if (!compareList.length) {
+      grid.innerHTML = '<div class="compare-empty">No players added yet — search below, or use the <b>+ Compare</b> button on any Player Card.</div>' + compareAddSlotHtml();
+    } else {
+      var html = compareList.map(function (r, i) { return compareCardHtml(r, i); }).join("");
+      if (compareList.length < COMPARE_MAX) html += compareAddSlotHtml();
+      grid.innerHTML = html;
+    }
+    compareList.forEach(function (r, i) {
+      var el = grid.querySelector('.compare-radar[data-radar="' + i + '"]');
+      if (el) drawWedgeChart(el, PLAYER_AXES, PLAYER_AXES.map(function (ax) { return ax.get(r); }), { height: 230, margin: 42 });
+    });
+    grid.querySelectorAll(".cc-close").forEach(function (b) {
+      b.addEventListener("click", function () { removeFromCompare(+b.dataset.i); });
+    });
+    var input = document.getElementById("compareSearchInput");
+    if (input) {
+      input.addEventListener("input", function () {
+        var q = input.value.trim().toLowerCase();
+        var results = document.getElementById("compareAddResults");
+        if (!q) { results.innerHTML = ""; return; }
+        var matches = (DATA.playerIndex || []).filter(function (r) {
+          return (r.player || "").toLowerCase().indexOf(q) !== -1 || (r.club || "").toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 20);
+        results.innerHTML = matches.length
+          ? matches.map(function (r, i) {
+            return '<div class="compare-add-row" data-i="' + i + '"><div class="cr-name">' + esc(r.player) + '</div><div class="cell-sub">' + esc(r.club) + " · " + esc(r.league || "") + "</div></div>";
+          }).join("")
+          : '<div class="cmdk-empty">No matches</div>';
+        results.querySelectorAll(".compare-add-row").forEach(function (el) {
+          el.addEventListener("click", function () { addToCompare(matches[+el.dataset.i]); input.value = ""; results.innerHTML = ""; });
+        });
+      });
+    }
+  }
+  redrawCompareShelf = renderCompareShelf;
+  renderCompareShelf();
+
   renderAllCharts();
-  window.addEventListener("resize", function () { drawScatter(); drawBrightonScatter(); redrawStyleRadar(); });
+  window.addEventListener("resize", function () { drawScatter(); drawBrightonScatter(); redrawStyleRadar(); redrawCompareShelf(); });
 })();
 
 </script>
