@@ -40,6 +40,7 @@ from wyscout_model import (
     WYSCOUT_POSITION_MAP,
     compute_wyscout_scores,
 )
+from scouting_model import AnomalyEngine, SimilarityEngine, SetPieceAnalyzer
 
 ROOT = Path(__file__).parent
 WYSCOUT_DIR = ROOT / "Wyscout Files"
@@ -712,6 +713,331 @@ def build_league_rankings(club_rankings: pd.DataFrame, league_index: pd.DataFram
     return base
 
 
+# ── 6. Role archetypes — statistical playing-style sub-types ───────────────
+
+ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
+    "GK": {
+        "Sweeper Keeper": {"Exits per 90": 2.5, "Accurate passes, %": 1.5, "Accurate long passes, %": 1.0, "Aerial duels per 90": 1.0},
+        "Shot-Stopper": {"Save rate, %": 3.0, "Prevented goals per 90": 2.5},
+    },
+    "CB": {
+        "Ball-Playing CB": {"Accurate passes, %": 2.0, "Progressive passes per 90": 2.5, "Passes to final third per 90": 1.5, "Long passes per 90": 1.0},
+        "Aggressive Stopper": {"Defensive duels per 90": 2.0, "Defensive duels won, %": 2.5, "Interceptions per 90": 2.0, "Aerial duels won, %": 1.5, "Sliding tackles per 90": 1.0},
+    },
+    "FB": {
+        "Attacking FB": {"Crosses per 90": 2.0, "xA per 90": 2.0, "Progressive runs per 90": 2.0, "Accurate crosses, %": 1.5, "Assists per 90": 1.0},
+        "Defensive FB": {"Defensive duels won, %": 2.5, "Interceptions per 90": 2.0, "Aerial duels won, %": 1.5, "Successful defensive actions per 90": 1.5},
+    },
+    "DM": {
+        "Deep Playmaker": {"Passes per 90": 2.0, "Accurate passes, %": 2.0, "Progressive passes per 90": 2.5, "Passes to final third per 90": 1.5},
+        "Ball-Winner": {"Defensive duels won, %": 2.5, "Interceptions per 90": 2.5, "PAdj Interceptions": 2.0, "Aerial duels won, %": 1.0},
+    },
+    "CM": {
+        "Progressor": {"Progressive passes per 90": 2.5, "Progressive runs per 90": 2.0, "Accurate passes, %": 1.5},
+        "Creator": {"Key passes per 90": 2.5, "xA per 90": 2.5, "Smart passes per 90": 1.5, "Through passes per 90": 1.0},
+        "Box-to-Box": {"Successful defensive actions per 90": 1.5, "Goals per 90": 1.5, "Progressive runs per 90": 1.5, "Duels per 90": 1.5},
+    },
+    "AM": {
+        "Creative 10": {"Key passes per 90": 2.5, "xA per 90": 2.5, "Through passes per 90": 1.5, "Smart passes per 90": 1.5},
+        "Second Striker": {"Goals per 90": 2.5, "xG per 90": 2.0, "Touches in box per 90": 2.0, "Shots per 90": 1.0},
+    },
+    "W": {
+        "Direct Dribbler": {"Dribbles per 90": 2.5, "Successful dribbles, %": 1.5, "Progressive runs per 90": 2.0, "Accelerations per 90": 1.5},
+        "Creative Winger": {"xA per 90": 2.5, "Key passes per 90": 2.0, "Crosses per 90": 1.5, "Accurate crosses, %": 1.0},
+    },
+    "ST": {
+        "Poacher": {"Goals per 90": 3.0, "xG per 90": 2.0, "Touches in box per 90": 2.0, "Goal conversion, %": 1.5},
+        "Target Man": {"Aerial duels won, %": 2.5, "Head goals per 90": 2.0, "Received long passes per 90": 1.5},
+        "Complete Forward": {"Goals per 90": 1.5, "xA per 90": 1.5, "Dribbles per 90": 1.0, "Progressive runs per 90": 1.0, "Aerial duels won, %": 1.0},
+    },
+}
+
+
+def compute_role_archetypes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Classify every player into a statistical playing-style archetype within
+    their position group (e.g. Ball-Playing CB vs Aggressive Stopper) — the
+    specific, recruitable profile a data-driven scouting department targets,
+    rather than a bare position label.
+    """
+    df = df.copy()
+    df["RoleArchetype"] = "Unclassified"
+    df["RoleArchetypeScore"] = np.nan
+
+    for pos, archetypes in ROLE_ARCHETYPES.items():
+        mask = df["PositionGroup"] == pos
+        if mask.sum() == 0:
+            continue
+        grp = df.loc[mask]
+        scores: dict[str, pd.Series] = {}
+        for name, weights in archetypes.items():
+            total = pd.Series(0.0, index=grp.index)
+            total_w = 0.0
+            for metric, w in weights.items():
+                if metric not in grp.columns:
+                    continue
+                vals = pd.to_numeric(grp[metric], errors="coerce")
+                mu = vals.mean()
+                sig = vals.std() or 1e-9
+                total = total + w * (vals.fillna(mu) - mu) / sig
+                total_w += w
+            scores[name] = total / (total_w or 1.0)
+
+        score_df = pd.DataFrame(scores)
+        best_name = score_df.idxmax(axis=1)
+        best_z = score_df.max(axis=1)
+        df.loc[mask, "RoleArchetype"] = best_name
+        df.loc[mask, "RoleArchetypeScore"] = (norm.cdf(best_z.values) * 100).round(1)
+
+    return df
+
+
+# ── 7. Squad needs analysis ─────────────────────────────────────────────────
+
+HRADEC_CLUB = "Hradec Králové"
+HRADEC_LEAGUE = "Czech"
+
+
+def compute_squad_needs(
+    df: pd.DataFrame,
+    club: str = HRADEC_CLUB,
+    league: str = HRADEC_LEAGUE,
+    top_n_targets: int = 10,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Benchmark a club's actual current senior squad, position by position,
+    against the full cross-league player pool (AdjustedCompositeScore is
+    already cross-league comparable). Positions where the club's own best
+    player ranks low get flagged as priority needs, each paired with
+    recommended upgrade targets pulled from the wider database.
+
+    Returns (needs_summary, priority_targets) — one row per position, and
+    one row per recommended target respectively.
+    """
+    squad = df[(df["Club"] == club) & (df["League"] == league) & (df["TeamType"] == "Senior")]
+    pool = df[df["TeamType"] == "Senior"]
+    if squad.empty or pool.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    summary_rows = []
+    target_rows = []
+
+    for pos in _POSITION_ORDER:
+        pos_pool = pool[pool["PositionGroup"] == pos]
+        if pos_pool.empty:
+            continue
+        pos_squad = squad[squad["PositionGroup"] == pos].sort_values("AdjustedCompositeScore", ascending=False)
+
+        if pos_squad.empty:
+            starter_name, starter_age, starter_score, starter_pct = "— none registered —", None, 0.0, 0.0
+        else:
+            starter = pos_squad.iloc[0]
+            starter_name = starter["Player"]
+            starter_age = starter.get("AgeYears")
+            starter_score = float(starter["AdjustedCompositeScore"])
+            starter_pct = float((pos_pool["AdjustedCompositeScore"] < starter_score).mean() * 100)
+
+        if starter_pct >= 70:
+            priority = "Low"
+        elif starter_pct >= 45:
+            priority = "Medium"
+        else:
+            priority = "High"
+
+        summary_rows.append({
+            "PositionGroup": pos,
+            "CurrentStarter": starter_name,
+            "StarterAge": starter_age,
+            "StarterScore": round(starter_score, 1),
+            "StarterPercentile": round(starter_pct, 1),
+            "SquadDepth": int(len(pos_squad)),
+            "Priority": priority,
+        })
+
+        targets = pos_pool[
+            (pos_pool["Club"] != club)
+            & (pos_pool["AdjustedCompositeScore"] > starter_score)
+            & (pos_pool["TrajectoryTag"] != "Past Peak")
+        ].sort_values("ValueRatio", ascending=False, na_position="last").head(top_n_targets)
+
+        for rank, (_, r) in enumerate(targets.iterrows(), 1):
+            target_rows.append({
+                "PositionGroup": pos,
+                "Priority": priority,
+                "Rank": rank,
+                "Player": r.get("Player"),
+                "Club": r.get("Club"),
+                "League": r.get("League"),
+                "AgeYears": r.get("AgeYears"),
+                "TrajectoryTag": r.get("TrajectoryTag"),
+                "_mkt_val": r.get("_mkt_val"),
+                "ModelValueEUR": r.get("ModelValueEUR"),
+                "ValueRatio": r.get("ValueRatio"),
+                "AdjustedCompositeScore": r.get("AdjustedCompositeScore"),
+            })
+
+    summary = pd.DataFrame(summary_rows)
+    prio_order = {"High": 0, "Medium": 1, "Low": 2}
+    summary["_o"] = summary["Priority"].map(prio_order)
+    summary = summary.sort_values("_o").drop(columns="_o").reset_index(drop=True)
+
+    targets_df = pd.DataFrame(target_rows)
+    if not targets_df.empty:
+        targets_df["_o"] = targets_df["Priority"].map(prio_order)
+        targets_df = targets_df.sort_values(["_o", "PositionGroup", "Rank"]).drop(columns="_o").reset_index(drop=True)
+
+    return summary, targets_df
+
+
+# ── 8. Similarity search — replacements for the current squad ──────────────
+
+SIMILARITY_FEATURES: dict[str, list[str]] = {
+    "GK": ["Save rate, %", "Prevented goals per 90", "Exits per 90", "Accurate passes, %", "Accurate long passes, %", "Aerial duels per 90"],
+    "CB": ["Successful defensive actions per 90", "Defensive duels won, %", "Aerial duels won, %", "Interceptions per 90", "Accurate passes, %", "Progressive passes per 90"],
+    "FB": ["Crosses per 90", "Accurate crosses, %", "xA per 90", "Progressive runs per 90", "Defensive duels won, %", "Aerial duels won, %"],
+    "DM": ["Successful defensive actions per 90", "Defensive duels won, %", "Interceptions per 90", "Passes per 90", "Accurate passes, %", "Progressive passes per 90"],
+    "CM": ["Passes per 90", "Progressive passes per 90", "Key passes per 90", "xA per 90", "Progressive runs per 90", "Successful defensive actions per 90", "Goals per 90"],
+    "AM": ["Key passes per 90", "xA per 90", "Goals per 90", "xG per 90", "Dribbles per 90", "Touches in box per 90"],
+    "W": ["Dribbles per 90", "Successful dribbles, %", "xA per 90", "Key passes per 90", "Progressive runs per 90", "Goals per 90"],
+    "ST": ["Goals per 90", "xG per 90", "Touches in box per 90", "Aerial duels won, %", "xA per 90", "Dribbles per 90"],
+}
+
+
+def compute_squad_similar_players(
+    df: pd.DataFrame,
+    club: str = HRADEC_CLUB,
+    league: str = HRADEC_LEAGUE,
+    n: int = 8,
+) -> pd.DataFrame:
+    """For every current senior squad player, find the most statistically similar players in the full universe — potential replacements, backups, or like-for-like upgrades."""
+    squad = df[(df["Club"] == club) & (df["League"] == league) & (df["TeamType"] == "Senior")]
+    if squad.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for pos, feats in SIMILARITY_FEATURES.items():
+        pos_squad = squad[squad["PositionGroup"] == pos]
+        if pos_squad.empty:
+            continue
+        pool = df[(df["PositionGroup"] == pos) & (df["TeamType"] == "Senior")]
+        engine = SimilarityEngine([f for f in feats if f in df.columns])
+        for _, target_row in pos_squad.iterrows():
+            sims = engine.find_similar(pool, target_row, method="cosine", n=n + 1, same_position=False)
+            if sims.empty:
+                continue
+            sims = sims[sims["Club"] != club].head(n)
+            for rank, (_, r) in enumerate(sims.iterrows(), 1):
+                rows.append({
+                    "OurPlayer": target_row["Player"],
+                    "PositionGroup": pos,
+                    "Rank": rank,
+                    "Player": r.get("Player"),
+                    "Club": r.get("Club"),
+                    "League": r.get("League"),
+                    "AgeYears": r.get("AgeYears"),
+                    "Similarity": round(float(r["_similarity"]), 3),
+                    "TrajectoryTag": r.get("TrajectoryTag"),
+                    "_mkt_val": r.get("_mkt_val"),
+                    "ModelValueEUR": r.get("ModelValueEUR"),
+                    "ValueRatio": r.get("ValueRatio"),
+                })
+    return pd.DataFrame(rows)
+
+
+# ── 9. Club style profiles ──────────────────────────────────────────────────
+
+STYLE_SUBSCORES = ["ScoringThreatScore", "CreativeProgressionScore", "DefensiveDisruptionScore", "PressingScore", "AerialScore"]
+STYLE_LABELS = {
+    "ScoringThreatScore": "Attacking", "CreativeProgressionScore": "Creation",
+    "DefensiveDisruptionScore": "Defending", "PressingScore": "Pressing", "AerialScore": "Aerial",
+}
+
+
+def compute_club_style_profiles(club_rankings: pd.DataFrame) -> pd.DataFrame:
+    """Percentile-rank each club's subscores across the whole rated pool — puts every club's tactical identity on the same 0-100 scale for radar comparison."""
+    df = club_rankings.copy()
+    if df.empty:
+        return df
+    for col in STYLE_SUBSCORES:
+        if col in df.columns:
+            df[f"{col}Pctl"] = (pd.to_numeric(df[col], errors="coerce").rank(pct=True) * 100).round(1)
+    return df
+
+
+def style_similar_clubs(
+    style_df: pd.DataFrame, reference_club: str = HRADEC_CLUB, reference_league: str = HRADEC_LEAGUE, n: int = 10,
+) -> pd.DataFrame:
+    """Which clubs play most similarly to the reference club, by style-profile cosine similarity."""
+    cols = [f"{c}Pctl" for c in STYLE_SUBSCORES if f"{c}Pctl" in style_df.columns]
+    ref = style_df[(style_df["Team"] == reference_club) & (style_df["League"] == reference_league)]
+    if ref.empty or not cols:
+        return pd.DataFrame()
+    ref_vec = ref.iloc[0][cols].values.astype(float)
+    mat = style_df[cols].values.astype(float)
+    ref_norm = np.linalg.norm(ref_vec) or 1e-9
+    mat_norm = np.linalg.norm(mat, axis=1)
+    mat_norm = np.where(mat_norm == 0, 1e-9, mat_norm)
+    sims = (mat @ ref_vec) / (mat_norm * ref_norm)
+    out = style_df.copy()
+    out["StyleSimilarity"] = sims.round(3)
+    out = out[(out["Team"] != reference_club) | (out["League"] != reference_league)]
+    return out.sort_values("StyleSimilarity", ascending=False).head(n)
+
+
+# ── 10. Set-piece specialists ────────────────────────────────────────────────
+
+def compute_set_piece_specialists(df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
+    """Reuse the set-piece engine to surface corner takers, dead-ball specialists, aerial threats, etc. across the whole universe."""
+    analyzer = SetPieceAnalyzer(threshold=1.5)
+    enriched = analyzer.fit_transform(df)
+    boards = analyzer.top_players_by_role(enriched, top_n=top_n)
+    rows = []
+    for role, board in boards.items():
+        for _, r in board.iterrows():
+            rows.append({
+                "Role": role,
+                "Player": r.get("Player"),
+                "Team": r.get("Team"),
+                "Position": r.get("Position"),
+                "Age": r.get("Age"),
+                "RoleScore": round(float(r.get(f"_sp_role_{role}", 0) or 0), 2),
+                "Composite": round(float(r.get("_sp_composite", 0) or 0), 2),
+            })
+    return pd.DataFrame(rows)
+
+
+# ── 11. Hidden gems — pure statistical anomalies ────────────────────────────
+
+ANOMALY_METRICS = [
+    "Goals per 90", "xG per 90", "Assists per 90", "xA per 90",
+    "Progressive passes per 90", "Progressive runs per 90", "Dribbles per 90",
+    "Key passes per 90", "Successful defensive actions per 90",
+    "Interceptions per 90", "Aerial duels won, %", "Duels won, %",
+]
+
+
+def compute_hidden_gems(df: pd.DataFrame, top_n: int = 200) -> pd.DataFrame:
+    """
+    Pure statistical outlier detection, independent of market value — a
+    different lens to the Undervalued board: players whose underlying
+    output is exceptional relative to position peers regardless of what
+    anyone currently pays for them.
+    """
+    pool = df[df["PositionGroup"] != "GK"].copy()
+    engine = AnomalyEngine(threshold=1.8, method="z-score", groupby="PositionGroup")
+    scored = engine.fit_transform(pool, ANOMALY_METRICS)
+    gems = engine.filter_anomalies(scored, top_n=top_n)
+    keep = [
+        "Player", "Club", "League", "PositionGroup", "AgeYears", "TrajectoryTag",
+        "_mkt_val", "ModelValueEUR", "ValueTier", "_anomaly_type", "_anomaly_score", "_peak_z", "_anomaly_breadth",
+    ]
+    keep = [c for c in keep if c in gems.columns]
+    return gems[keep].rename(columns={
+        "_anomaly_type": "AnomalyType", "_anomaly_score": "AnomalyScore",
+        "_peak_z": "PeakZ", "_anomaly_breadth": "Breadth",
+    }).reset_index(drop=True)
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 def build_recruitment_universe(
@@ -773,6 +1099,10 @@ def build_recruitment_universe(
     scored = compute_brighton_mechanics(scored)
 
     if verbose:
+        print("Classifying role archetypes…")
+    scored = compute_role_archetypes(scored)
+
+    if verbose:
         print("Building club power rankings…")
     club_senior = build_club_rankings(scored, "Senior")
     club_youth = build_club_rankings(scored, "Youth")
@@ -782,6 +1112,27 @@ def build_recruitment_universe(
     league_senior = build_league_rankings(club_senior, league_index, "Senior")
     league_youth = build_league_rankings(club_youth, league_index, "Youth")
 
+    if verbose:
+        print(f"Analysing {HRADEC_CLUB} squad needs…")
+    squad_needs, squad_targets = compute_squad_needs(scored)
+
+    if verbose:
+        print("Finding statistical comparables for the current squad…")
+    squad_similar = compute_squad_similar_players(scored)
+
+    if verbose:
+        print("Building club style profiles…")
+    club_style_senior = compute_club_style_profiles(club_senior)
+    style_similar = style_similar_clubs(club_style_senior)
+
+    if verbose:
+        print("Scoring set-piece specialists…")
+    set_piece = compute_set_piece_specialists(scored)
+
+    if verbose:
+        print("Detecting hidden gems (statistical anomalies)…")
+    hidden_gems = compute_hidden_gems(scored)
+
     return {
         "players": scored,
         "league_index": league_index,
@@ -789,4 +1140,11 @@ def build_recruitment_universe(
         "club_rankings_youth": club_youth,
         "league_rankings_senior": league_senior,
         "league_rankings_youth": league_youth,
+        "squad_needs_summary": squad_needs,
+        "squad_priority_targets": squad_targets,
+        "squad_similar_players": squad_similar,
+        "club_style_senior": club_style_senior,
+        "style_similar_to_hradec": style_similar,
+        "set_piece_specialists": set_piece,
+        "hidden_gems": hidden_gems,
     }

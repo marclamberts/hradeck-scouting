@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +60,7 @@ BRIGHTON_COLORS = {
     "Long Shot": C["noval"], "Not A Fit": C["noval"],
 }
 TIER_COLORS = {1: C["tier1"], 2: C["tier2"], 3: C["tier3"], 4: C["tier4"], 5: C["tier5"], 6: C["tier6"]}
+PRIORITY_COLORS = {"High": C["over"], "Medium": C["moderate"], "Low": C["good"]}
 
 POS_LABELS = {
     "GK": "GOALKEEPER", "CB": "CENTRE-BACK", "FB": "FULL-BACK", "DM": "DEFENSIVE MID",
@@ -80,6 +82,7 @@ MASTER_COLS = [
     "_mkt_val", "ModelValueEUR", "ValueGapEUR", "ValueRatio", "ValueTier",
     "ProjectedPeakValueEUR", "DevelopmentUpsideEUR", "BrightonScore", "BrightonLabel",
     "TrajectoryTag", "PhysicalLeagueFitScore", "PhysicalLeagueFitLabel",
+    "RoleArchetype", "RoleArchetypeScore",
     "AdjustedCompositeScore", "CompositeRecruitmentScore",
 ] + list(STAT_MAP.values())
 
@@ -93,6 +96,7 @@ DISPLAY_RENAME = {
     "AdjustedCompositeScore": "Composite Score", "CompositeRecruitmentScore": "League-Relative Score",
     "ProjectedPeakValueEUR": "Peak Val (€)", "DevelopmentUpsideEUR": "Dev. Upside (€)",
     "BrightonScore": "Brighton Score", "BrightonLabel": "Brighton Fit",
+    "RoleArchetype": "Role Archetype", "RoleArchetypeScore": "Role Fit",
 } | {v: k for k, v in STAT_MAP.items()}
 
 
@@ -123,6 +127,7 @@ def build_master(players: pd.DataFrame) -> pd.DataFrame:
     out["ProjectedPeakValueEUR"] = out["ProjectedPeakValueEUR"].fillna(0).astype(int)
     out["DevelopmentUpsideEUR"] = out["DevelopmentUpsideEUR"].fillna(0).astype(int)
     out["BrightonScore"] = out["BrightonScore"].round(1)
+    out["RoleArchetypeScore"] = pd.to_numeric(out["RoleArchetypeScore"], errors="coerce").round(1)
     for c in STAT_MAP.values():
         out[c] = pd.to_numeric(out[c], errors="coerce").round(2)
 
@@ -252,6 +257,12 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
         ("All Undervalued", "Every ELITE/HIGH/VALUE player regardless of age trajectory"),
         ("Physical League Fits", "Best fits for a quick, physical league, calibrated against the Czech First League"),
         ("Position Boards", "Top undervalued, not-past-peak targets per position"),
+        ("Role Archetypes", "Statistical playing-style sub-types within each position (Ball-Playing CB, Deep Playmaker, Poacher, …)"),
+        ("Squad Needs", "FC Hradec Králové's actual squad benchmarked position-by-position vs the full universe, with priority signing targets"),
+        ("Similar to Our Squad", "Statistical comparables for every current squad player — replacements, backups, upgrades"),
+        ("Club Style Profiles", "Every club's tactical identity (attacking/creation/defending/pressing/aerial) percentile-ranked for radar comparison"),
+        ("Set-Piece Specialists", "Corner takers, dead-ball specialists, crossers, aerial threats, box presence, set-piece blockers"),
+        ("Hidden Gems", "Pure statistical outliers independent of market value — a different lens to the Undervalued board"),
         ("Youth Prospects", "Best performers age ≤ 20 in youth leagues/teams — evaluated on output, not market value"),
         ("Brighton Mechanics", "Buy-low/develop/resell targets — modelled on Brighton & Hove Albion's recruitment approach"),
         ("Full Database", "Every player loaded, all columns, for manual filtering"),
@@ -335,6 +346,53 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
         if line.isupper() or line.startswith("─"):
             ws[f"B{row}"].font = Font(bold=True)
 
+    ws.append([None])
+    ws.append([None, "ROLE ARCHETYPES"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "Each position is split into 2-3 statistical playing styles (e.g. CB → Ball-Playing CB / "
+               "Aggressive Stopper) via weighted z-score profiles over the relevant per-90 metrics — a specific, recruitable "
+               "target rather than a bare position label, the way a data-driven scouting department actually briefs a scout."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "SQUAD NEEDS & SIMILAR TO OUR SQUAD"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Squad Needs", f"{rm.HRADEC_CLUB}'s actual current senior squad (real Wyscout data, not a guess) benchmarked "
+               "position-by-position: each position's best player's Composite Score is percentile-ranked against the full "
+               "cross-league pool at that position. Below the 45th percentile = High priority; below 70th = Medium. Every "
+               "priority position gets a target list of undervalued, not-past-peak players who outscore the current starter."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+    ws.append([None, "Similar to Our Squad", "For every current squad player, a cosine-similarity search (same engine used for "
+               "comparable-player analysis) over position-relevant per-90 metrics finds the closest statistical matches in the "
+               "full universe — useful for succession planning or finding a cut-price like-for-like."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "CLUB STYLE PROFILES"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "Each club's Attacking/Creation/Defending/Pressing/Aerial subscores are percentile-ranked across "
+               "every rated senior club, producing a 0-100 tactical-identity profile comparable club-to-club (radar-chart ready). "
+               f"Style Similarity finds the clubs whose profile most closely matches {rm.HRADEC_CLUB}'s by cosine similarity — useful "
+               "for judging whether an incoming player's style will transfer, or which clubs to study for tactical ideas."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "SET-PIECE SPECIALISTS"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "Corner/free-kick delivery, aerial threat, and shot/box-presence metrics are z-scored and blended "
+               "into six set-piece roles (Corner Taker, Dead Ball Specialist, Crossing Threat, Aerial Threat, Box Presence, Set "
+               "Piece Blocker) to surface dead-ball value that a generic recruitment score would miss."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "HIDDEN GEMS"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "Independent of Model Value entirely: every player's per-90 output is z-scored against their own "
+               "position peers, and anyone with a standout z-score (≥1.8) on breadth and peak gets classified (Hidden Gem, "
+               "Specialist Elite, Multi-dimensional, …) and ranked by anomaly score — catching statistical standouts the "
+               "valuation model's market-value calibration might still underrate."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 26
     ws.column_dimensions["C"].width = 95
@@ -397,6 +455,62 @@ def build_brighton_board(master: pd.DataFrame, top_n: int = 400) -> pd.DataFrame
     return df.reset_index(drop=True)
 
 
+def write_grouped_sheet(
+    ws, title: str, subtitle: str, groups: list[tuple[str, pd.DataFrame]],
+    cols: list[str], color_cols: dict[str, dict[str, str]] | None = None, ncols: int = 12,
+) -> None:
+    """Generic 'section header + mini-table, repeated' sheet layout (Position Boards style)."""
+    ws.sheet_view.showGridLines = False
+    ws.append([title])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+    ws["A1"].font = Font(bold=True, color=C["white"], size=13)
+    ws["A1"].fill = _fill(C["navy"])
+    ws.row_dimensions[1].height = 22
+    ws.append([subtitle])
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+    ws["A2"].font = Font(italic=True, color=C["gold"], size=9)
+    ws["A2"].fill = _fill(C["navy"])
+
+    color_cols = color_cols or {}
+    for group_title, grp in groups:
+        if grp.empty:
+            continue
+        ws.append([f"  {group_title}"])
+        ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=ncols)
+        r = ws.max_row
+        ws[f"A{r}"].font = Font(bold=True, color=C["white"], size=10)
+        ws[f"A{r}"].fill = _fill(C["navy"])
+        ws.row_dimensions[r].height = 18
+
+        use_cols = [c for c in cols if c in grp.columns]
+        ws.append(use_cols)
+        hdr = ws.max_row
+        for cell in ws[hdr]:
+            cell.font = Font(bold=True, color=C["white"], size=9)
+            cell.fill = _fill(C["header"])
+            cell.alignment = Alignment(horizontal="center", wrap_text=True)
+
+        for i, (_, row) in enumerate(grp[use_cols].iterrows()):
+            ws.append(list(row))
+            dr = ws.max_row
+            bg = C["light"] if i % 2 == 0 else C["white"]
+            for cell in ws[dr]:
+                cell.font = Font(size=9)
+                cell.fill = _fill(bg)
+                cell.alignment = Alignment(horizontal="center")
+            for col_name, cmap in color_cols.items():
+                if col_name not in use_cols:
+                    continue
+                cell = ws.cell(dr, use_cols.index(col_name) + 1)
+                hexc = cmap.get(str(cell.value or ""))
+                if hexc:
+                    cell.fill = _fill(hexc)
+                    cell.font = Font(bold=True, color=C["white"], size=9)
+        ws.append([None])
+
+    _autofit(ws)
+
+
 def write_position_boards(ws, master: pd.DataFrame, top_n: int = 15) -> None:
     ws.title = "Position Boards"
     ws.sheet_view.showGridLines = False
@@ -452,9 +566,227 @@ def write_position_boards(ws, master: pd.DataFrame, top_n: int = 15) -> None:
     _autofit(ws)
 
 
+# ── Role Archetypes sheet ────────────────────────────────────────────────────
+
+def prepare_role_archetype_groups(master: pd.DataFrame, top_n: int = 15) -> list[tuple[str, pd.DataFrame]]:
+    cols = ["Player", "Club", "League", "Age", "Role Fit", "Trajectory",
+            "Value Tier", "Model Val (€)", "Composite Score"]
+    groups = []
+    for pos in POS_ORDER:
+        archetypes = list(rm.ROLE_ARCHETYPES.get(pos, {}).keys())
+        for arch in archetypes:
+            grp = master[(master["Pos"] == pos) & (master["Role Archetype"] == arch)]
+            grp = grp.sort_values("Role Fit", ascending=False).head(top_n)
+            groups.append((f"{pos} — {arch.upper()}", grp[[c for c in cols if c in grp.columns]]))
+    return groups
+
+
+# ── Squad Needs sheet ────────────────────────────────────────────────────────
+
+def _fmt_squad_targets(targets: pd.DataFrame) -> pd.DataFrame:
+    if targets.empty:
+        return targets
+    out = targets.copy()
+    out["_mkt_val"] = out["_mkt_val"].fillna(0).astype(int)
+    out["ModelValueEUR"] = out["ModelValueEUR"].fillna(0).astype(int)
+    out["ValueRatio"] = out["ValueRatio"].round(2)
+    out["AdjustedCompositeScore"] = out["AdjustedCompositeScore"].round(1)
+    out = out.rename(columns={
+        "AgeYears": "Age", "TrajectoryTag": "Trajectory", "_mkt_val": "Mkt Val (€)",
+        "ModelValueEUR": "Model Val (€)", "ValueRatio": "Value Ratio",
+        "AdjustedCompositeScore": "Composite Score",
+    })
+    return out
+
+
+def build_squad_needs_sheet(ws, needs_summary: pd.DataFrame, targets: pd.DataFrame, club: str) -> None:
+    ws.sheet_view.showGridLines = False
+    ncols = 10
+    ws.append([f"SQUAD NEEDS — {club.upper()}"])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+    ws["A1"].font = Font(bold=True, color=C["white"], size=13)
+    ws["A1"].fill = _fill(C["navy"])
+    ws.row_dimensions[1].height = 22
+    ws.append(["Every position benchmarked against the full cross-league pool via the current starter's Composite Score percentile"])
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+    ws["A2"].font = Font(italic=True, color=C["gold"], size=9)
+    ws["A2"].fill = _fill(C["navy"])
+    ws.append([None])
+
+    summary = needs_summary.rename(columns={
+        "PositionGroup": "Pos", "CurrentStarter": "Current Starter", "StarterAge": "Age",
+        "StarterScore": "Starter Score", "StarterPercentile": "Starter Percentile (vs all leagues)",
+        "SquadDepth": "Squad Depth",
+    })
+    cols = ["Pos", "Current Starter", "Age", "Starter Score", "Starter Percentile (vs all leagues)", "Squad Depth", "Priority"]
+    ws.append(cols)
+    hdr = ws.max_row
+    for cell in ws[hdr]:
+        cell.font = Font(bold=True, color=C["white"], size=9)
+        cell.fill = _fill(C["header"])
+        cell.alignment = Alignment(horizontal="center", wrap_text=True)
+    for i, (_, row) in enumerate(summary[cols].iterrows()):
+        ws.append(list(row))
+        dr = ws.max_row
+        bg = C["light"] if i % 2 == 0 else C["white"]
+        for cell in ws[dr]:
+            cell.font = Font(size=9)
+            cell.fill = _fill(bg)
+            cell.alignment = Alignment(horizontal="center")
+        pc = ws.cell(dr, cols.index("Priority") + 1)
+        hexc = PRIORITY_COLORS.get(str(pc.value or ""))
+        if hexc:
+            pc.fill = _fill(hexc)
+            pc.font = Font(bold=True, color=C["white"], size=9)
+    ws.append([None])
+    ws.append([None])
+
+    ws.append(["  PRIORITY SIGNING TARGETS BY POSITION"])
+    ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=ncols)
+    r = ws.max_row
+    ws[f"A{r}"].font = Font(bold=True, color=C["white"], size=11)
+    ws[f"A{r}"].fill = _fill(C["navy"])
+    ws.append([None])
+
+    target_cols = ["Rank", "Player", "Club", "League", "Age", "Trajectory", "Mkt Val (€)", "Model Val (€)", "Value Ratio", "Composite Score"]
+    fmt_targets = _fmt_squad_targets(targets)
+    prio_order = {"High": 0, "Medium": 1, "Low": 2}
+    for _, srow in summary.sort_values("Priority", key=lambda s: s.map(prio_order)).iterrows():
+        pos = srow.get("Pos") or srow.get("PositionGroup")
+        grp = fmt_targets[fmt_targets["PositionGroup"] == pos] if not fmt_targets.empty else pd.DataFrame()
+        if grp.empty:
+            continue
+        label = f"{pos} — {POS_LABELS.get(pos, pos)}  ({srow['Priority'].upper()} PRIORITY  ·  current starter {srow['Current Starter']}, {srow['Starter Percentile (vs all leagues)']}th percentile)"
+        ws.append([f"  {label}"])
+        ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=ncols)
+        r = ws.max_row
+        ws[f"A{r}"].font = Font(bold=True, color=C["white"], size=10)
+        ws[f"A{r}"].fill = _fill(PRIORITY_COLORS.get(srow["Priority"], C["navy"]))
+        ws.row_dimensions[r].height = 18
+
+        ws.append(target_cols)
+        hdr = ws.max_row
+        for cell in ws[hdr]:
+            cell.font = Font(bold=True, color=C["white"], size=9)
+            cell.fill = _fill(C["header"])
+            cell.alignment = Alignment(horizontal="center", wrap_text=True)
+        for i, (_, row) in enumerate(grp[target_cols].iterrows()):
+            ws.append(list(row))
+            dr = ws.max_row
+            bg = C["light"] if i % 2 == 0 else C["white"]
+            for cell in ws[dr]:
+                cell.font = Font(size=9)
+                cell.fill = _fill(bg)
+                cell.alignment = Alignment(horizontal="center")
+        ws.append([None])
+
+    _autofit(ws)
+
+
+# ── Similar to Our Squad sheet ───────────────────────────────────────────────
+
+def prepare_similar_squad_groups(similar: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
+    if similar.empty:
+        return []
+    out = similar.copy()
+    out["_mkt_val"] = out["_mkt_val"].fillna(0).astype(int)
+    out["ModelValueEUR"] = out["ModelValueEUR"].fillna(0).astype(int)
+    out["ValueRatio"] = out["ValueRatio"].round(2)
+    out = out.rename(columns={
+        "AgeYears": "Age", "TrajectoryTag": "Trajectory", "_mkt_val": "Mkt Val (€)",
+        "ModelValueEUR": "Model Val (€)", "ValueRatio": "Value Ratio",
+    })
+    cols = ["Rank", "Player", "Club", "League", "Age", "Similarity", "Trajectory", "Mkt Val (€)", "Model Val (€)", "Value Ratio"]
+    groups = []
+    for (our_player, pos), grp in out.groupby(["OurPlayer", "PositionGroup"], sort=False):
+        groups.append((f"{our_player} ({pos})", grp[[c for c in cols if c in grp.columns]]))
+    return groups
+
+
+# ── Set-Piece Specialists sheet ──────────────────────────────────────────────
+
+def prepare_set_piece_groups(set_piece: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
+    if set_piece.empty:
+        return []
+    cols = ["Player", "Team", "Position", "Age", "RoleScore", "Composite"]
+    groups = []
+    for role, grp in set_piece.groupby("Role", sort=False):
+        grp = grp.sort_values("RoleScore", ascending=False)
+        groups.append((role.upper(), grp[[c for c in cols if c in grp.columns]]))
+    return groups
+
+
+# ── Club Style Profiles sheet ────────────────────────────────────────────────
+
+def build_club_style_sheet(ws, style_df: pd.DataFrame, similar_df: pd.DataFrame, club: str) -> None:
+    ws.sheet_view.showGridLines = False
+    style_cols = {
+        "PowerRank": "Rank", "Team": "Team", "League": "League", "TierLabel": "Tier",
+        "ScoringThreatScorePctl": "Attacking %ile", "CreativeProgressionScorePctl": "Creation %ile",
+        "DefensiveDisruptionScorePctl": "Defending %ile", "PressingScorePctl": "Pressing %ile",
+        "AerialScorePctl": "Aerial %ile", "TierAdjustedScore": "Power Score",
+    }
+    display = style_df[[c for c in style_cols if c in style_df.columns]].rename(columns=style_cols)
+    write_data_sheet(
+        ws,
+        "CLUB STYLE PROFILES",
+        "Every subscore percentile-ranked across all rated senior clubs — plug straight into a radar chart for tactical identity",
+        display,
+    )
+
+    if similar_df.empty:
+        return
+    ws.append([None])
+    ws.append([f"  CLUBS THAT PLAY MOST SIMILARLY TO {club.upper()}"])
+    ncols = len(style_cols)
+    ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=ncols)
+    r = ws.max_row
+    ws[f"A{r}"].font = Font(bold=True, color=C["white"], size=11)
+    ws[f"A{r}"].fill = _fill(C["navy"])
+    ws.row_dimensions[r].height = 20
+
+    sim_cols = {"Team": "Team", "League": "League", "TierLabel": "Tier", "StyleSimilarity": "Style Similarity"}
+    sim_display = similar_df[[c for c in sim_cols if c in similar_df.columns]].rename(columns=sim_cols)
+    ws.append(list(sim_display.columns))
+    hdr = ws.max_row
+    for cell in ws[hdr]:
+        cell.font = Font(bold=True, color=C["white"], size=9)
+        cell.fill = _fill(C["header"])
+        cell.alignment = Alignment(horizontal="center")
+    for i, (_, row) in enumerate(sim_display.iterrows()):
+        ws.append(list(row))
+        dr = ws.max_row
+        bg = C["light"] if i % 2 == 0 else C["white"]
+        for cell in ws[dr]:
+            cell.font = Font(size=9)
+            cell.fill = _fill(bg)
+            cell.alignment = Alignment(horizontal="center")
+    _autofit(ws)
+
+
+# ── Hidden Gems sheet ────────────────────────────────────────────────────────
+
+def prepare_hidden_gems(gems: pd.DataFrame) -> pd.DataFrame:
+    if gems.empty:
+        return gems
+    out = gems.copy()
+    out["_mkt_val"] = out["_mkt_val"].fillna(0).astype(int)
+    out["ModelValueEUR"] = out["ModelValueEUR"].fillna(0).astype(int)
+    out["AnomalyScore"] = out["AnomalyScore"].round(2)
+    out["PeakZ"] = out["PeakZ"].round(2)
+    out = out.rename(columns={
+        "PositionGroup": "Pos", "AgeYears": "Age", "TrajectoryTag": "Trajectory",
+        "_mkt_val": "Mkt Val (€)", "ModelValueEUR": "Model Val (€)", "ValueTier": "Value Tier",
+    })
+    return out
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def run(min_minutes_senior: int, min_minutes_youth: int, leagues: list[str] | None, output: Path) -> None:
+def run(
+    min_minutes_senior: int, min_minutes_youth: int, leagues: list[str] | None, output: Path,
+    cache_output: Path | None = None,
+) -> None:
     print(f"\n{'='*60}\n  FC Hradec Králové — Recruitment Model Builder\n{'='*60}\n")
 
     universe = rm.build_recruitment_universe(
@@ -533,6 +865,57 @@ def run(min_minutes_senior: int, min_minutes_youth: int, leagues: list[str] | No
     print("Writing Position Boards…")
     write_position_boards(wb.create_sheet("Position Boards"), master)
 
+    print("Writing Role Archetypes…")
+    write_grouped_sheet(
+        wb.create_sheet("Role Archetypes"),
+        "ROLE ARCHETYPES — Statistical Playing-Style Sub-Types",
+        "Specific, recruitable profiles within each position (e.g. Ball-Playing CB vs Aggressive Stopper)  ·  Sorted by Role Fit",
+        prepare_role_archetype_groups(master),
+        cols=["Player", "Club", "League", "Age", "Role Fit", "Trajectory", "Value Tier", "Model Val (€)", "Composite Score"],
+        color_cols={"Value Tier": VALUE_TIER_COLORS, "Trajectory": TRAJECTORY_COLORS},
+    )
+
+    print(f"Writing Squad Needs — {rm.HRADEC_CLUB}…")
+    build_squad_needs_sheet(
+        wb.create_sheet("Squad Needs"),
+        universe["squad_needs_summary"], universe["squad_priority_targets"], rm.HRADEC_CLUB,
+    )
+
+    print("Writing Similar to Our Squad…")
+    write_grouped_sheet(
+        wb.create_sheet("Similar to Our Squad"),
+        f"SIMILAR TO OUR SQUAD — {rm.HRADEC_CLUB}",
+        "Statistical comparables for every current senior squad player, across the full universe  ·  potential replacements, backups, or like-for-like upgrades",
+        prepare_similar_squad_groups(universe["squad_similar_players"]),
+        cols=["Rank", "Player", "Club", "League", "Age", "Similarity", "Trajectory", "Mkt Val (€)", "Model Val (€)", "Value Ratio"],
+        color_cols={"Trajectory": TRAJECTORY_COLORS},
+    )
+
+    print("Writing Club Style Profiles…")
+    build_club_style_sheet(
+        wb.create_sheet("Club Style Profiles"),
+        universe["club_style_senior"], universe["style_similar_to_hradec"], rm.HRADEC_CLUB,
+    )
+
+    print("Writing Set-Piece Specialists…")
+    write_grouped_sheet(
+        wb.create_sheet("Set-Piece Specialists"),
+        "SET-PIECE SPECIALISTS",
+        "Corner takers, dead-ball specialists, crossers, aerial threats, box presence and set-piece blockers, across the full universe",
+        prepare_set_piece_groups(universe["set_piece_specialists"]),
+        cols=["Player", "Team", "Position", "Age", "RoleScore", "Composite"],
+    )
+
+    print("Writing Hidden Gems…")
+    gems = prepare_hidden_gems(universe["hidden_gems"])
+    write_data_sheet(
+        wb.create_sheet("Hidden Gems"),
+        f"HIDDEN GEMS — Statistical Anomalies — {len(gems)} PLAYERS",
+        "Pure statistical outliers vs position peers, independent of market value — a different lens to the Undervalued board  ·  Sorted by Anomaly Score",
+        gems,
+        color_cols={"Value Tier": VALUE_TIER_COLORS, "Trajectory": TRAJECTORY_COLORS},
+    )
+
     print("Writing Youth Prospects…")
     youth = build_youth_prospects(master)
     write_data_sheet(
@@ -567,12 +950,28 @@ def run(min_minutes_senior: int, min_minutes_youth: int, leagues: list[str] | No
     size_mb = output.stat().st_size / 1_048_576
     print(f"\nDone. {size_mb:.1f} MB → {output.resolve()}")
 
+    if cache_output:
+        print(f"Writing dashboard cache → {cache_output}")
+        cache_output.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_output, "wb") as f:
+            pickle.dump({
+                "master": master,
+                "squad_needs_summary": universe["squad_needs_summary"],
+                "squad_priority_targets": universe["squad_priority_targets"],
+                "squad_similar_players": universe["squad_similar_players"],
+                "club_style_senior": universe["club_style_senior"],
+                "style_similar_to_hradec": universe["style_similar_to_hradec"],
+                "set_piece_specialists": universe["set_piece_specialists"],
+                "hidden_gems": prepare_hidden_gems(universe["hidden_gems"]),
+            }, f)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the FCHK Recruitment Model workbook from Wyscout data")
     parser.add_argument("--min-minutes-senior", type=int, default=rm.DEFAULT_MIN_MINUTES_SENIOR)
     parser.add_argument("--min-minutes-youth", type=int, default=rm.DEFAULT_MIN_MINUTES_YOUTH)
     parser.add_argument("--leagues", nargs="+", default=None, help="Subset of league file stems. Omit to load ALL.")
+    parser.add_argument("--cache-output", type=Path, default=None, help="Optional: pickle raw analysis dataframes here for the dashboard export script.")
     parser.add_argument("--output", type=Path, default=ROOT / "data" / "FCHK_Recruitment_Model.xlsx")
     args = parser.parse_args()
-    run(args.min_minutes_senior, args.min_minutes_youth, args.leagues, args.output)
+    run(args.min_minutes_senior, args.min_minutes_youth, args.leagues, args.output, args.cache_output)
