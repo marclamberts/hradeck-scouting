@@ -763,6 +763,7 @@ def compute_role_archetypes(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["RoleArchetype"] = "Unclassified"
     df["RoleArchetypeScore"] = np.nan
+    df["RoleProfileBreakdown"] = [[] for _ in range(len(df))]
 
     for pos, archetypes in ROLE_ARCHETYPES.items():
         mask = df["PositionGroup"] == pos
@@ -770,9 +771,15 @@ def compute_role_archetypes(df: pd.DataFrame) -> pd.DataFrame:
             continue
         grp = df.loc[mask]
         scores: dict[str, pd.Series] = {}
+        # Per-metric percentile-within-position-group, kept alongside the
+        # z-score used for classification, so a player's archetype fit can be
+        # explained metric-by-metric later (Model 9's "player vs role profile"
+        # radar) instead of only exposing the single aggregate score.
+        pctls: dict[str, pd.DataFrame] = {}
         for name, weights in archetypes.items():
             total = pd.Series(0.0, index=grp.index)
             total_w = 0.0
+            metric_pctl = {}
             for metric, w in weights.items():
                 if metric not in grp.columns:
                     continue
@@ -781,13 +788,28 @@ def compute_role_archetypes(df: pd.DataFrame) -> pd.DataFrame:
                 sig = vals.std() or 1e-9
                 total = total + w * (vals.fillna(mu) - mu) / sig
                 total_w += w
+                metric_pctl[metric] = vals.rank(pct=True, na_option="keep") * 100
             scores[name] = total / (total_w or 1.0)
+            pctls[name] = pd.DataFrame(metric_pctl, index=grp.index) if metric_pctl else pd.DataFrame(index=grp.index)
 
         score_df = pd.DataFrame(scores)
         best_name = score_df.idxmax(axis=1)
         best_z = score_df.max(axis=1)
         df.loc[mask, "RoleArchetype"] = best_name
         df.loc[mask, "RoleArchetypeScore"] = (norm.cdf(best_z.values) * 100).round(1)
+
+        breakdown = []
+        for idx in grp.index:
+            arch = best_name.loc[idx]
+            row_pctls = pctls[arch]
+            items = []
+            for metric, w in archetypes[arch].items():
+                if metric not in row_pctls.columns:
+                    continue
+                v = row_pctls.at[idx, metric]
+                items.append({"metric": metric, "weight": w, "pctl": None if pd.isna(v) else round(float(v), 1)})
+            breakdown.append(items)
+        df.loc[mask, "RoleProfileBreakdown"] = pd.Series(breakdown, index=grp.index)
 
     return df
 
@@ -1261,6 +1283,65 @@ def build_squad_impact_board(
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
+# ── 9b. Model calibration (feedback loop) ────────────────────────────────────
+
+SIGNINGS_LOG_PATH = ROOT / "data" / "signings_log.csv"
+SIGNINGS_LOG_COLUMNS = [
+    "Player", "PositionGroup", "Archetype", "SignedDate", "ModelValueAtSigning",
+    "RatingAtSigning", "MarketValueAtSigning", "SourceClub", "SourceLeague", "Notes",
+]
+CALIBRATION_BANDS = {"Outperformed": 5.0, "Underperformed": -5.0}
+
+
+def compute_model_calibration(df: pd.DataFrame, log_path: Path = SIGNINGS_LOG_PATH) -> pd.DataFrame:
+    """
+    The feedback loop the WAM brief calls for: once a shortlisted target is
+    actually signed, log the row it was recommended on (data/signings_log.csv)
+    and every later rebuild joins that logged rating/value against the same
+    player's *current* numbers — predicted vs actual, the only honest test of
+    whether Models 4/5/7 are actually finding good players.
+
+    Deliberately not auto-populated: nothing in this pipeline currently
+    records "we signed player X" on its own (that would need a live transfer
+    feed), so this stays a template the recruitment team appends to by hand
+    after each window. Returns an empty (but correctly-shaped) frame until
+    the log has rows in it, so the calling code never has to special-case
+    "no signings yet" beyond checking `.empty`.
+    """
+    if not log_path.exists():
+        return pd.DataFrame(columns=SIGNINGS_LOG_COLUMNS + ["CurrentClub", "CurrentRating", "CurrentModelValueEUR", "RatingDelta", "ValueDeltaEUR", "Calibration"])
+
+    log = pd.read_csv(log_path)
+    if log.empty:
+        return pd.DataFrame(columns=SIGNINGS_LOG_COLUMNS + ["CurrentClub", "CurrentRating", "CurrentModelValueEUR", "RatingDelta", "ValueDeltaEUR", "Calibration"])
+
+    rows = []
+    for _, sign in log.iterrows():
+        matches = df[(df["Player"] == sign["Player"]) & (df["PositionGroup"] == sign["PositionGroup"])]
+        if matches.empty:
+            continue
+        current = matches.iloc[0]
+        rating_at_signing = float(sign.get("RatingAtSigning") or 0)
+        value_at_signing = float(sign.get("ModelValueAtSigning") or 0)
+        rating_delta = round(float(current["AdjustedCompositeScore"]) - rating_at_signing, 1)
+        value_delta = int(round(float(current["ModelValueEUR"]) - value_at_signing))
+        calibration = "On Track"
+        if rating_delta >= CALIBRATION_BANDS["Outperformed"]:
+            calibration = "Outperformed"
+        elif rating_delta <= CALIBRATION_BANDS["Underperformed"]:
+            calibration = "Underperformed"
+        rows.append({
+            **{c: sign.get(c) for c in SIGNINGS_LOG_COLUMNS},
+            "CurrentClub": current["Club"],
+            "CurrentRating": round(float(current["AdjustedCompositeScore"]), 1),
+            "CurrentModelValueEUR": int(round(float(current["ModelValueEUR"]))),
+            "RatingDelta": rating_delta,
+            "ValueDeltaEUR": value_delta,
+            "Calibration": calibration,
+        })
+    return pd.DataFrame(rows)
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 def build_recruitment_universe(
@@ -1376,6 +1457,10 @@ def build_recruitment_universe(
         print("Simulating squad impact for priority targets (Monte Carlo)…")
     squad_impact = build_squad_impact_board(scored, squad_targets, squad_needs)
 
+    if verbose:
+        print("Checking model calibration against logged signings…")
+    model_calibration = compute_model_calibration(scored)
+
     return {
         "players": scored,
         "league_index": league_index,
@@ -1391,4 +1476,5 @@ def build_recruitment_universe(
         "set_piece_specialists": set_piece,
         "hidden_gems": hidden_gems,
         "squad_impact": squad_impact,
+        "model_calibration": model_calibration,
     }

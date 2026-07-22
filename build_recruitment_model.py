@@ -288,6 +288,7 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
         ("Brighton Mechanics", "Buy-low/develop/resell targets — modelled on Brighton & Hove Albion's recruitment approach"),
         ("Shortlist Presets", "One scoring engine reweighted per recruitment need: Like-for-Like, Emergency Depth, Resale Play, Balanced"),
         ("Squad Impact Simulation", "Monte Carlo projection of squad-composite impact for the #1 target at every priority position"),
+        ("Model Calibration", "Feedback loop: logged signings' predicted rating/value vs. their actual current numbers — empty until data/signings_log.csv has rows"),
         ("Full Database", "Every player loaded, all columns, for manual filtering"),
     ]
     ws.append([None, "Sheet", "Contents"])
@@ -450,6 +451,27 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
                "this model) projects the #1 recommended target's own composite subscores 3 seasons forward, then that "
                "projected range is folded into the squad's minutes-weighted position composite alongside the current squad "
                "— giving a P10/P50/P90 marginal-impact range per season instead of a single verdict."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "PLAYER VS ROLE PROFILE"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "Every classified player also carries a per-metric breakdown: for each metric that defines "
+               "their assigned archetype (e.g. a Poacher's Goals/90, xG/90, Touches in Box/90, Goal Conversion%), the "
+               "player's own percentile within their position peer group, paired with that metric's weight in the "
+               "archetype formula. Explains *why* a player was classified a certain way instead of leaving the archetype "
+               "score as a single black-box number — shown on the dashboard's Player Card."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "MODEL CALIBRATION (FEEDBACK LOOP)"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "The one part of WAM that can't be built from Wyscout data alone: it needs a record of what "
+               "the club actually did. Log a real signing in data/signings_log.csv (Player, PositionGroup, Archetype, "
+               "SignedDate, ModelValueAtSigning, RatingAtSigning, MarketValueAtSigning, SourceClub, SourceLeague, Notes) "
+               "and every rebuild after that joins the player's current AdjustedCompositeScore/ModelValueEUR back against "
+               "what was logged at signing — RatingDelta and ValueDeltaEUR, tagged Outperformed/On Track/Underperformed. "
+               "Empty until the first real signing is logged; that's the log waiting for a transfer window, not a bug."])
     ws[f"B{ws.max_row}"].font = Font(bold=True)
 
     ws.column_dimensions["A"].width = 3
@@ -840,6 +862,18 @@ def prepare_hidden_gems(gems: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def prepare_role_profiles(players: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compact Player/Club/Archetype/metric-breakdown table for the dashboard's
+    player-vs-role-profile radar (Model 9) — dropped from the Excel export
+    (a list-of-dicts column has no clean cell representation) but carried
+    through the dashboard_cache.pkl pickle for the JSON export step.
+    """
+    has_breakdown = players["RoleProfileBreakdown"].apply(lambda v: isinstance(v, list) and len(v) > 0)
+    keep = players.loc[has_breakdown, ["Player", "Club", "League", "PositionGroup", "RoleArchetype", "RoleProfileBreakdown"]]
+    return keep.reset_index(drop=True)
+
+
 # ── Shortlist Presets sheet ──────────────────────────────────────────────────
 
 def prepare_shortlist_groups(master: pd.DataFrame, top_n: int = 25) -> list[tuple[str, pd.DataFrame]]:
@@ -1032,6 +1066,19 @@ def run(
             ncols=6,
         )
 
+    print("Writing Model Calibration…")
+    calibration = universe["model_calibration"]
+    write_data_sheet(
+        wb.create_sheet("Model Calibration"),
+        "MODEL CALIBRATION — Predicted vs. Actual",
+        "The feedback loop: log a signing in data/signings_log.csv (Player, PositionGroup, Archetype, SignedDate, "
+        "ModelValueAtSigning, RatingAtSigning, MarketValueAtSigning, SourceClub, SourceLeague, Notes) and every "
+        "rebuild after that compares the logged rating/value against that player's current numbers. Empty until "
+        "the first real signing is logged — this is infrastructure waiting on a transfer window, not a bug.",
+        calibration,
+        color_cols={"Calibration": {"Outperformed": C["good"], "On Track": C["moderate"], "Underperformed": C["over"]}},
+    )
+
     print("Writing Full Database…")
     write_data_sheet(
         wb.create_sheet("Full Database"),
@@ -1060,6 +1107,8 @@ def run(
                 "set_piece_specialists": universe["set_piece_specialists"],
                 "hidden_gems": prepare_hidden_gems(universe["hidden_gems"]),
                 "squad_impact": universe["squad_impact"],
+                "role_profiles": prepare_role_profiles(universe["players"]),
+                "model_calibration": universe["model_calibration"],
             }, f)
 
 
