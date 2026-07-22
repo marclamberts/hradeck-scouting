@@ -76,15 +76,20 @@ STAT_MAP = {
     "Aerial %": "Aerial duels won, %", "Save %": "Save rate, %",
 }
 
+SHORTLIST_PRESET_COLS = [f"Shortlist_{n.replace(' ', '').replace('-', '')}" for n in
+                         ["Like-for-Like", "Emergency Depth", "Resale Play", "Balanced"]]
+
 MASTER_COLS = [
     "Player", "Club", "TeamType", "League", "Country", "Tier", "TierLabel",
     "PositionGroup", "Full Position", "AgeYears", "Contract", "_minutes",
     "_mkt_val", "ModelValueEUR", "ValueGapEUR", "ValueRatio", "ValueTier",
+    "YearsToExpiry", "ContractDiscount", "EffectiveValueEUR",
     "ProjectedPeakValueEUR", "DevelopmentUpsideEUR", "BrightonScore", "BrightonLabel",
     "TrajectoryTag", "PhysicalLeagueFitScore", "PhysicalLeagueFitLabel",
-    "RoleArchetype", "RoleArchetypeScore",
+    "RoleArchetype", "RoleArchetypeScore", "RatingLow", "RatingHigh", "RatingBand",
+    "RealisticSource", "WithinBudget", "InRecruitmentScope",
     "AdjustedCompositeScore", "CompositeRecruitmentScore",
-] + list(STAT_MAP.values())
+] + SHORTLIST_PRESET_COLS + list(STAT_MAP.values())
 
 DISPLAY_RENAME = {
     "TierLabel": "Tier Label",
@@ -97,6 +102,11 @@ DISPLAY_RENAME = {
     "ProjectedPeakValueEUR": "Peak Val (€)", "DevelopmentUpsideEUR": "Dev. Upside (€)",
     "BrightonScore": "Brighton Score", "BrightonLabel": "Brighton Fit",
     "RoleArchetype": "Role Archetype", "RoleArchetypeScore": "Role Fit",
+    "RatingLow": "Rating Low", "RatingHigh": "Rating High", "RatingBand": "Rating Band (±)",
+    "YearsToExpiry": "Yrs to Expiry", "ContractDiscount": "Contract Discount", "EffectiveValueEUR": "Effective Val (€)",
+    "RealisticSource": "Realistic Source", "WithinBudget": "Within Budget", "InRecruitmentScope": "In Scope",
+    "Shortlist_LikeforLike": "SL: Like-for-Like", "Shortlist_EmergencyDepth": "SL: Emergency Depth",
+    "Shortlist_ResalePlay": "SL: Resale Play", "Shortlist_Balanced": "SL: Balanced",
 } | {v: k for k, v in STAT_MAP.items()}
 
 
@@ -128,6 +138,17 @@ def build_master(players: pd.DataFrame) -> pd.DataFrame:
     out["DevelopmentUpsideEUR"] = out["DevelopmentUpsideEUR"].fillna(0).astype(int)
     out["BrightonScore"] = out["BrightonScore"].round(1)
     out["RoleArchetypeScore"] = pd.to_numeric(out["RoleArchetypeScore"], errors="coerce").round(1)
+    out["RatingLow"] = pd.to_numeric(out["RatingLow"], errors="coerce").round(1)
+    out["RatingHigh"] = pd.to_numeric(out["RatingHigh"], errors="coerce").round(1)
+    out["RatingBand"] = pd.to_numeric(out["RatingBand"], errors="coerce").round(1)
+    out["YearsToExpiry"] = pd.to_numeric(out["YearsToExpiry"], errors="coerce").round(2)
+    out["ContractDiscount"] = pd.to_numeric(out["ContractDiscount"], errors="coerce").round(2)
+    out["EffectiveValueEUR"] = pd.to_numeric(out["EffectiveValueEUR"], errors="coerce").fillna(0).astype(int)
+    out["RealisticSource"] = out["RealisticSource"].astype("boolean").fillna(False)
+    out["WithinBudget"] = out["WithinBudget"].astype("boolean").fillna(False)
+    out["InRecruitmentScope"] = out["InRecruitmentScope"].astype("boolean").fillna(False)
+    for c in SHORTLIST_PRESET_COLS:
+        out[c] = pd.to_numeric(out[c], errors="coerce").round(1)
     for c in STAT_MAP.values():
         out[c] = pd.to_numeric(out[c], errors="coerce").round(2)
 
@@ -265,6 +286,8 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
         ("Hidden Gems", "Pure statistical outliers independent of market value — a different lens to the Undervalued board"),
         ("Youth Prospects", "Best performers age ≤ 20 in youth leagues/teams — evaluated on output, not market value"),
         ("Brighton Mechanics", "Buy-low/develop/resell targets — modelled on Brighton & Hove Albion's recruitment approach"),
+        ("Shortlist Presets", "One scoring engine reweighted per recruitment need: Like-for-Like, Emergency Depth, Resale Play, Balanced"),
+        ("Squad Impact Simulation", "Monte Carlo projection of squad-composite impact for the #1 target at every priority position"),
         ("Full Database", "Every player loaded, all columns, for manual filtering"),
     ]
     ws.append([None, "Sheet", "Contents"])
@@ -391,6 +414,42 @@ def build_readme(ws, universe: dict, min_minutes_senior: int, min_minutes_youth:
                "position peers, and anyone with a standout z-score (≥1.8) on breadth and peak gets classified (Hidden Gem, "
                "Specialist Elite, Multi-dimensional, …) and ranked by anomaly score — catching statistical standouts the "
                "valuation model's market-value calibration might still underrate."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "RATING CONFIDENCE, CONTRACT DISCOUNT & RECRUITMENT SCOPE"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Rating Low / High", "Every rating is a point estimate from a single season of aggregated data, which can't "
+               "verify within-season consistency the way event data can. The band widens as minutes played fall below a "
+               f"{int(rm.REFERENCE_MINUTES)}-minute reference and tightens above it — a 500-minute sample gets a visibly wider "
+               "range than a full season, instead of the same false precision."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+    ws.append([None, "Effective Value (€)", "Model Value discounted for contract length: full value from 3+ years remaining, "
+               "floors at 35% inside the final 6 months. An expiring contract lowers the fee a selling club can command even "
+               "when the underlying rating says otherwise."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+    ws.append([None, "Realistic Source / Within Budget / In Scope", f"Tier 1-2 players are shown everywhere in this workbook "
+               f"but flagged, not hidden — 'Realistic Source' marks Tier 3-6 only, 'Within Budget' marks Effective Value ≤ "
+               f"€{rm.BUDGET_CEILING_EUR:,.0f} (adjust in recruitment_model.py), and 'In Scope' requires both. Shortlist "
+               "Presets only draws from in-scope players."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "SHORTLIST PRESETS"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "One shared scoring function — Composite Score (quality) + Role Fit + Undervaluation percentile "
+               "+ Trajectory — reweighted per recruitment need instead of four separate hardcoded formulas: Like-for-Like "
+               "weights quality/fit heavily, Emergency Depth weights value/availability, Resale Play weights trajectory, "
+               "Balanced splits evenly."])
+    ws[f"B{ws.max_row}"].font = Font(bold=True)
+
+    ws.append([None])
+    ws.append([None, "SQUAD IMPACT SIMULATION"])
+    ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
+    ws.append([None, "Method", "monte_carlo.py's age-curve Monte Carlo engine (previously a standalone tool, not wired into "
+               "this model) projects the #1 recommended target's own composite subscores 3 seasons forward, then that "
+               "projected range is folded into the squad's minutes-weighted position composite alongside the current squad "
+               "— giving a P10/P50/P90 marginal-impact range per season instead of a single verdict."])
     ws[f"B{ws.max_row}"].font = Font(bold=True)
 
     ws.column_dimensions["A"].width = 3
@@ -781,6 +840,19 @@ def prepare_hidden_gems(gems: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# ── Shortlist Presets sheet ──────────────────────────────────────────────────
+
+def prepare_shortlist_groups(master: pd.DataFrame, top_n: int = 25) -> list[tuple[str, pd.DataFrame]]:
+    pool = master[(master["In Scope"]) & (master["Trajectory"] != "Past Peak")]
+    groups = []
+    for preset_col, label in zip(SHORTLIST_PRESET_COLS, rm.SHORTLIST_PRESETS.keys()):
+        display_col = DISPLAY_RENAME.get(preset_col, preset_col)
+        grp = pool.sort_values(display_col, ascending=False).head(top_n).copy()
+        grp["PresetScore"] = grp[display_col]
+        groups.append((label.upper(), grp))
+    return groups
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def run(
@@ -936,6 +1008,30 @@ def run(
         color_cols={"Brighton Fit": BRIGHTON_COLORS, "Value Tier": VALUE_TIER_COLORS, "Trajectory": TRAJECTORY_COLORS},
     )
 
+    print("Writing Shortlist Presets…")
+    shortlist_groups = prepare_shortlist_groups(master)
+    write_grouped_sheet(
+        wb.create_sheet("Shortlist Presets"),
+        "SHORTLIST PRESETS — One scoring engine, reweighted per recruitment need",
+        "Realistic-source, in-budget, not-past-peak players only  ·  Quality / Role Fit / Undervaluation / Trajectory reweighted per preset",
+        shortlist_groups,
+        cols=["Player", "Club", "League", "Pos", "Age", "Trajectory", "Value Tier", "Mkt Val (€)", "Effective Val (€)", "PresetScore"],
+        color_cols={"Value Tier": VALUE_TIER_COLORS, "Trajectory": TRAJECTORY_COLORS},
+    )
+
+    print("Writing Squad Impact Simulation…")
+    impact = universe["squad_impact"]
+    if not impact.empty:
+        write_grouped_sheet(
+            wb.create_sheet("Squad Impact Simulation"),
+            "SQUAD IMPACT SIMULATION — Monte Carlo",
+            "The #1 recommended target at every High/Medium priority position, projected 3 seasons forward with monte_carlo.py's age-curve engine  ·  squad composite with signing vs today, P10/P50/P90",
+            [(f"{pos} — {tgt}", grp.drop(columns=["PositionGroup", "Target"]))
+             for (pos, tgt), grp in impact.groupby(["PositionGroup", "Target"], sort=False)],
+            cols=["Season", "P10", "P50", "P90", "MarginalImpactP50"],
+            ncols=6,
+        )
+
     print("Writing Full Database…")
     write_data_sheet(
         wb.create_sheet("Full Database"),
@@ -963,6 +1059,7 @@ def run(
                 "style_similar_to_hradec": universe["style_similar_to_hradec"],
                 "set_piece_specialists": universe["set_piece_specialists"],
                 "hidden_gems": prepare_hidden_gems(universe["hidden_gems"]),
+                "squad_impact": universe["squad_impact"],
             }, f)
 
 

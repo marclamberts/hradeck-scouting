@@ -1038,6 +1038,229 @@ def compute_hidden_gems(df: pd.DataFrame, top_n: int = 200) -> pd.DataFrame:
     }).reset_index(drop=True)
 
 
+# ── 12. Rating confidence bands ─────────────────────────────────────────────
+
+REFERENCE_MINUTES = 1500.0
+BASE_RATING_BAND = 12.0
+
+
+def compute_rating_confidence(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Every rating so far is a point estimate. Aggregated season data can't
+    verify within-season consistency the way event data can, so a low-minute
+    sample deserves a visibly wider band, not the same false precision as a
+    full season. Band shrinks toward BASE_RATING_BAND as minutes exceed
+    REFERENCE_MINUTES, and widens for thin samples — same shape as
+    monte_carlo._confidence_sigma (shrinks with minutes, i.e. more data →
+    tighter band), just applied to the rating itself rather than a forward
+    projection.
+    """
+    df = df.copy()
+    minutes = pd.to_numeric(df.get("_minutes"), errors="coerce").fillna(0)
+    factor = np.sqrt(REFERENCE_MINUTES / minutes.replace(0, np.nan)).clip(0.6, 2.2).fillna(2.2)
+    band = (BASE_RATING_BAND * factor).round(1)
+
+    df["RatingBand"] = band
+    comp = pd.to_numeric(df.get("AdjustedCompositeScore"), errors="coerce")
+    df["RatingLow"] = (comp - band).clip(lower=0).round(1)
+    df["RatingHigh"] = (comp + band).clip(upper=100).round(1)
+
+    role_fit = pd.to_numeric(df.get("RoleArchetypeScore"), errors="coerce")
+    df["RoleFitLow"] = (role_fit - band).clip(lower=0).round(1)
+    df["RoleFitHigh"] = (role_fit + band).clip(upper=100).round(1)
+    return df
+
+
+# ── 13. Contract-length value discount ──────────────────────────────────────
+
+def compute_effective_value(df: pd.DataFrame, as_of: str | None = None) -> pd.DataFrame:
+    """
+    An expiring contract should lower the fee a selling club can command,
+    even if Model Value says otherwise — EffectiveValueEUR captures that.
+    Full value from 3+ years left; floors at 35% inside the last 6 months
+    (free-transfer territory), linear in between.
+    """
+    df = df.copy()
+    today = pd.Timestamp(as_of) if as_of else pd.Timestamp.now().normalize()
+    expiry = pd.to_datetime(df.get("Contract expires"), errors="coerce")
+    years_left = (expiry - today).dt.days / 365.25
+
+    def discount(y: float) -> float:
+        if pd.isna(y):
+            return 1.0
+        if y <= 0.5:
+            return 0.35
+        if y >= 3.0:
+            return 1.0
+        return 0.35 + (y - 0.5) / 2.5 * 0.65
+
+    df["YearsToExpiry"] = years_left.round(2)
+    df["ContractDiscount"] = years_left.apply(discount).round(2)
+    df["EffectiveValueEUR"] = (df["ModelValueEUR"] * df["ContractDiscount"]).round(-3)
+    return df
+
+
+# ── 14. Realistic-league / budget scope ─────────────────────────────────────
+
+# Tiers Hradec Králové (a Czech top-flight mid-table club) could plausibly
+# source from at realistic fees. Tier 1/2 players are shown everywhere else
+# in the model but flagged "Aspirational" here rather than hidden — the
+# point is an honest scope marker, not deleting data.
+REALISTIC_TIERS = {3, 4, 5, 6}
+BUDGET_CEILING_EUR = 1_000_000  # adjust to the club's actual working fee ceiling
+
+
+def compute_recruitment_scope(df: pd.DataFrame, budget_ceiling: float = BUDGET_CEILING_EUR) -> pd.DataFrame:
+    df = df.copy()
+    df["RealisticSource"] = df["Tier"].isin(REALISTIC_TIERS)
+    value_col = df["EffectiveValueEUR"] if "EffectiveValueEUR" in df.columns else df["ModelValueEUR"]
+    df["WithinBudget"] = value_col.fillna(0) <= budget_ceiling
+    df["InRecruitmentScope"] = df["RealisticSource"] & df["WithinBudget"]
+    return df
+
+
+# ── 15. Configurable shortlist scoring ──────────────────────────────────────
+
+SHORTLIST_PRESETS: dict[str, dict[str, float]] = {
+    "Like-for-Like":    {"quality": 0.35, "fit": 0.30, "value": 0.20, "trajectory": 0.15},
+    "Emergency Depth":  {"quality": 0.15, "fit": 0.15, "value": 0.45, "trajectory": 0.25},
+    "Resale Play":      {"quality": 0.25, "fit": 0.15, "value": 0.25, "trajectory": 0.35},
+    "Balanced":         {"quality": 0.30, "fit": 0.25, "value": 0.25, "trajectory": 0.20},
+}
+
+
+def compute_shortlist_score(df: pd.DataFrame, weights: dict[str, float]) -> pd.Series:
+    """
+    One scoring function behind every shortlist, re-weighted per recruitment
+    need instead of each board hardcoding its own formula. quality = cross-
+    league Composite Score, fit = role-archetype fit, value = undervaluation
+    percentile, trajectory = Rising/Peak/Past-Peak.
+    """
+    quality = pd.to_numeric(df.get("AdjustedCompositeScore"), errors="coerce").fillna(40.0)
+    fit = pd.to_numeric(df.get("RoleArchetypeScore"), errors="coerce").fillna(40.0)
+    ratio = pd.to_numeric(df.get("ValueRatio"), errors="coerce")
+    value_score = (np.log(ratio.clip(lower=0.05)).rank(pct=True) * 100).fillna(45.0)
+    traj_score = df.get("TrajectoryTag", pd.Series(index=df.index, dtype=object)).map(
+        {"Rising": 100.0, "Peak Window": 60.0, "Past Peak": 0.0, "Unknown": 40.0}
+    ).fillna(40.0)
+
+    total_w = sum(weights.values()) or 1.0
+    score = (
+        weights.get("quality", 0) * quality
+        + weights.get("fit", 0) * fit
+        + weights.get("value", 0) * value_score
+        + weights.get("trajectory", 0) * traj_score
+    ) / total_w
+    return score.round(1)
+
+
+def compute_all_shortlist_presets(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for name, weights in SHORTLIST_PRESETS.items():
+        df[f"Shortlist_{name.replace(' ', '').replace('-', '')}"] = compute_shortlist_score(df, weights)
+    return df
+
+
+# ── 16. Squad impact simulation ─────────────────────────────────────────────
+
+def simulate_squad_impact(
+    df: pd.DataFrame,
+    target_row: pd.Series,
+    position: str,
+    club: str = HRADEC_CLUB,
+    league: str = HRADEC_LEAGUE,
+    n_simulations: int = 300,
+    n_seasons: int = 3,
+    assumed_minutes: float = 1800.0,
+) -> pd.DataFrame | None:
+    """
+    Projects a target's own metrics forward with monte_carlo's age-curve
+    Monte Carlo engine, then asks: what does that do to the squad's minutes-
+    weighted composite at this position, compared to today, across the
+    simulated range? Output is a percentile band per season, not a single
+    "this will work" verdict — exactly Model 8 from the WAM spec.
+    """
+    from monte_carlo import PlayerProjection
+
+    squad = df[(df["Club"] == club) & (df["League"] == league) & (df["TeamType"] == "Senior") & (df["PositionGroup"] == position)]
+    current_minutes = squad["_minutes"].sum()
+    current_weighted = (squad["AdjustedCompositeScore"] * squad["_minutes"]).sum()
+    current_composite = (current_weighted / current_minutes) if current_minutes > 0 else 0.0
+
+    # monte_carlo's age/regression curves assume percentile-scale (~0-100,
+    # centred near 50) inputs, not raw per-90 counting stats — feed it the
+    # same composite subscores used for club-rating aggregation, not
+    # SIMILARITY_FEATURES (those are raw per-90s and would blow up the
+    # log(value/50) regression-pull term).
+    feats = [f for f in _SUBSCORE_COLS if f != "CompositeRecruitmentScore" and f in target_row.index]
+    metric_vals = {
+        m: float(target_row[m]) for m in feats
+        if pd.notna(target_row.get(m)) and float(target_row.get(m) or 0) > 0
+    }
+    target_composite_now = float(target_row.get("AdjustedCompositeScore", 0) or 0)
+    age = pd.to_numeric(pd.Series([target_row.get("AgeYears")]), errors="coerce").iloc[0]
+    minutes = float(target_row.get("_minutes", 900) or 900)
+
+    if not metric_vals or pd.isna(age):
+        return None
+
+    proj = PlayerProjection(
+        player_name=str(target_row.get("Player", "")), team=str(target_row.get("Club", "")),
+        position=position, current_age=float(age), metrics=metric_vals,
+        minutes=minutes, n_seasons=n_seasons, n_simulations=n_simulations,
+    )
+    proj.run()
+    if proj.composite_trajectories is None:
+        return None
+
+    total_minutes = current_minutes + assumed_minutes
+    rows = [{
+        "Season": "Now", "P10": round(current_composite, 1), "P50": round(current_composite, 1), "P90": round(current_composite, 1),
+        "MarginalImpactP50": 0.0,
+    }]
+    for t in range(n_seasons):
+        col = proj.composite_trajectories[:, t]  # relative index, 100 = today's level
+        p10 = target_composite_now * np.percentile(col, 10) / 100.0
+        p50 = target_composite_now * np.percentile(col, 50) / 100.0
+        p90 = target_composite_now * np.percentile(col, 90) / 100.0
+        combined10 = (current_weighted + p10 * assumed_minutes) / total_minutes if total_minutes > 0 else p10
+        combined50 = (current_weighted + p50 * assumed_minutes) / total_minutes if total_minutes > 0 else p50
+        combined90 = (current_weighted + p90 * assumed_minutes) / total_minutes if total_minutes > 0 else p90
+        rows.append({
+            "Season": f"Season {t + 1}",
+            "P10": round(combined10, 1), "P50": round(combined50, 1), "P90": round(combined90, 1),
+            "MarginalImpactP50": round(combined50 - current_composite, 2),
+        })
+    return pd.DataFrame(rows)
+
+
+def build_squad_impact_board(
+    df: pd.DataFrame, squad_targets: pd.DataFrame, squad_needs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Run the squad-impact simulation for the #1 recommended target at every High/Medium priority position."""
+    if squad_targets.empty or squad_needs.empty:
+        return pd.DataFrame()
+
+    priority_positions = squad_needs[squad_needs["Priority"].isin(["High", "Medium"])]["PositionGroup"].tolist()
+    rows = []
+    for pos in priority_positions:
+        top_targets = squad_targets[squad_targets["PositionGroup"] == pos].sort_values("Rank")
+        if top_targets.empty:
+            continue
+        target_name = top_targets.iloc[0]["Player"]
+        target_row_matches = df[(df["Player"] == target_name) & (df["PositionGroup"] == pos)]
+        if target_row_matches.empty:
+            continue
+        target_row = target_row_matches.iloc[0]
+        sim = simulate_squad_impact(df, target_row, pos)
+        if sim is None:
+            continue
+        sim.insert(0, "Target", target_name)
+        sim.insert(0, "PositionGroup", pos)
+        rows.append(sim)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 def build_recruitment_universe(
@@ -1103,6 +1326,22 @@ def build_recruitment_universe(
     scored = compute_role_archetypes(scored)
 
     if verbose:
+        print("Computing rating confidence bands…")
+    scored = compute_rating_confidence(scored)
+
+    if verbose:
+        print("Computing contract-length value discount…")
+    scored = compute_effective_value(scored)
+
+    if verbose:
+        print("Scoping realistic sources & budget fit…")
+    scored = compute_recruitment_scope(scored)
+
+    if verbose:
+        print("Scoring configurable shortlist presets…")
+    scored = compute_all_shortlist_presets(scored)
+
+    if verbose:
         print("Building club power rankings…")
     club_senior = build_club_rankings(scored, "Senior")
     club_youth = build_club_rankings(scored, "Youth")
@@ -1133,6 +1372,10 @@ def build_recruitment_universe(
         print("Detecting hidden gems (statistical anomalies)…")
     hidden_gems = compute_hidden_gems(scored)
 
+    if verbose:
+        print("Simulating squad impact for priority targets (Monte Carlo)…")
+    squad_impact = build_squad_impact_board(scored, squad_targets, squad_needs)
+
     return {
         "players": scored,
         "league_index": league_index,
@@ -1147,4 +1390,5 @@ def build_recruitment_universe(
         "style_similar_to_hradec": style_similar,
         "set_piece_specialists": set_piece,
         "hidden_gems": hidden_gems,
+        "squad_impact": squad_impact,
     }
