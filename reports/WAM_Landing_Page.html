@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waltzing Analytics Model — FC Hradec Králové</title>
+<style>
+  :root {
+    --ground: #0A0C0E; --surface: #131619; --surface-2: #1A1E23; --surface-3: #20252B;
+    --border: #262B31; --ink-900: #F1F3F5; --ink-600: #9AA3AD; --ink-400: #6B7480;
+    --accent: #1DB876; --accent-ink: #06170D; --navy: #0E1114; --navy-ink: #F1F3F5;
+    --good: #1DB876; --good-soft: #10281F; --neutral: #5B8DEF; --neutral-soft: #12203A;
+    --critical: #E5484D; --critical-soft: #2C1517; --muted-chip: #6B7480; --muted-chip-soft: #1A1E23;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px -12px rgba(0,0,0,.55);
+    --radius: 12px;
+    --font-ui: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground: #F3F4F6; --surface: #FFFFFF; --surface-2: #ECEEF1; --surface-3: #E2E5E9;
+      --border: #DBDFE4; --ink-900: #12161B; --ink-600: #4B5561; --ink-400: #7C8794;
+      --accent: #0E9F63; --accent-ink: #FFFFFF; --navy: #12161B; --navy-ink: #F3F4F6;
+      --good: #0E9F63; --good-soft: #E3F7EE; --neutral: #3866D4; --neutral-soft: #E8EEFC;
+      --critical: #D8393E; --critical-soft: #FBEAEA; --muted-chip: #7C8794; --muted-chip-soft: #ECEEF1;
+      --shadow: 0 1px 2px rgba(18,22,27,.05), 0 8px 24px -12px rgba(18,22,27,.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--ground); color: var(--ink-900); font-family: var(--font-ui);
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .tabular { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+  h1, h2, h3 { font-weight: 800; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ── Top bar ─────────────────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(10,12,14,.82); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  @media (prefers-color-scheme: light) { .topbar { background: rgba(243,244,246,.86); } }
+  .topbar .wrap { display: flex; align-items: center; gap: 14px; padding-top: 14px; padding-bottom: 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .crest {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 800; font-size: 12px; flex: none;
+  }
+  .brand-text { font-size: 13.5px; font-weight: 800; }
+  .brand-text span { display: block; font-weight: 500; font-size: 10.5px; color: var(--ink-400); text-transform: uppercase; letter-spacing: .06em; }
+  .topbar-nav { margin-left: auto; display: flex; align-items: center; gap: 22px; }
+  .topbar-nav a { font-size: 12.5px; font-weight: 700; color: var(--ink-600); text-transform: uppercase; letter-spacing: .04em; }
+  .topbar-nav a:hover { color: var(--ink-900); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; border-radius: 8px; padding: 9px 16px;
+    font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid transparent; white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: var(--surface); color: var(--ink-900); border-color: var(--border); }
+  .btn-ghost:hover { border-color: var(--ink-400); }
+
+  /* ── Hero ────────────────────────────────────────────────────────────── */
+  .hero { padding: 84px 0 56px; border-bottom: 1px solid var(--border); }
+  .eyebrow { font-size: 11.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); font-weight: 800; margin-bottom: 14px; }
+  .hero h1 { font-size: 44px; max-width: 18ch; line-height: 1.12; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p.lead { font-size: 16.5px; color: var(--ink-600); max-width: 62ch; margin: 20px 0 30px; }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hero-ctas .btn { padding: 12px 20px; font-size: 13.5px; }
+
+  .stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 48px; }
+  .stat-cell { background: var(--surface); padding: 18px 20px; }
+  .stat-cell .sc-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-400); font-weight: 700; }
+  .stat-cell .sc-value { font-family: var(--font-mono); font-weight: 800; font-size: 25px; margin-top: 5px; color: var(--ink-900); }
+
+  /* ── Flow diagram ────────────────────────────────────────────────────── */
+  .flow { padding: 56px 0 8px; }
+  .flow-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .flow-row { grid-template-columns: 1fr; } }
+  .flow-step {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; position: relative;
+  }
+  .flow-step .fs-num { font-family: var(--font-mono); font-weight: 800; font-size: 12px; color: var(--accent); }
+  .flow-step h3 { font-size: 15.5px; margin-top: 6px; }
+  .flow-step p { font-size: 12.5px; color: var(--ink-400); margin: 6px 0 0; }
+  .flow-arrow { text-align: center; color: var(--ink-400); font-size: 20px; padding: 6px 0; }
+  @media (max-width: 860px) { .flow-arrow { transform: rotate(90deg); } }
+
+  /* ── Movements ───────────────────────────────────────────────────────── */
+  .movement { padding: 64px 0; border-top: 1px solid var(--border); }
+  .movement-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; flex-wrap: wrap; }
+  .movement-head .m-roman { font-family: var(--font-mono); font-weight: 800; font-size: 15px; color: var(--accent); }
+  .movement-head h2 { font-size: 27px; }
+  .movement-desc { font-size: 14px; color: var(--ink-600); max-width: 74ch; margin: 8px 0 32px; }
+
+  .model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 980px) { .model-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 680px) { .model-grid { grid-template-columns: 1fr; } }
+
+  .model-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 22px 20px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .model-card .mc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .model-card .mc-num { font-family: var(--font-mono); font-weight: 800; font-size: 22px; color: var(--surface-3); -webkit-text-stroke: 1px var(--border); }
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px;
+    font-size: 10px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; flex: none;
+  }
+  .status-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .status-built { background: var(--good-soft); color: var(--good); }
+  .status-partial { background: var(--neutral-soft); color: var(--neutral); }
+  .model-card h3 { font-size: 16.5px; margin-top: 10px; }
+  .model-card .mc-purpose { font-size: 13px; color: var(--ink-600); margin: 6px 0 14px; line-height: 1.55; }
+  .mc-facts { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mc-facts li { font-size: 12px; color: var(--ink-600); padding-left: 15px; position: relative; }
+  .mc-facts li::before { content: "→"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+  .mc-facts code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--ink-900); }
+  .mc-link {
+    margin-top: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700;
+    color: var(--accent); padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  .mc-link:hover { text-decoration: underline; }
+
+  /* ── Gap honesty section ─────────────────────────────────────────────── */
+  .gaps { padding: 56px 0 72px; border-top: 1px solid var(--border); }
+  .gaps h2 { font-size: 24px; }
+  .gaps p.lead { font-size: 14px; color: var(--ink-600); max-width: 74ch; margin: 10px 0 26px; }
+  .gap-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .gap-table th {
+    text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-400);
+    font-weight: 700; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+  }
+  .gap-table td { padding: 11px 14px; font-size: 12.5px; color: var(--ink-900); border-bottom: 1px solid var(--border); }
+  .gap-table tr:last-child td { border-bottom: none; }
+  .gap-table td.muted { color: var(--ink-400); }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 30px 0 40px; font-size: 12px; color: var(--ink-400);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+  footer a { color: var(--ink-600); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <div class="crest">FK</div>
+      <div class="brand-text">Waltzing Analytics<span>FC Hradec Králové</span></div>
+    </div>
+    <div class="topbar-nav">
+      <a href="#movement-1">Foundation</a>
+      <a href="#movement-2">Analysis</a>
+      <a href="#movement-3">Decision</a>
+      <a href="Recruitment_Model_Dashboard.html" class="btn btn-primary">Open the Dashboard →</a>
+    </div>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Waltzing Analytics Model · WAM</div>
+    <h1>Nine models. Three movements. <em>One recruitment decision.</em></h1>
+    <p class="lead">
+      A complete data-driven recruitment-and-analysis system for FC Hradec Králové, built entirely from Wyscout
+      aggregated performance exports across 165 leagues — no Transfermarkt lookups, no event data, no shortcuts.
+      Every player is scored, priced, fit-tested, and shortlisted through the same nine-model pipeline, from raw
+      per-90 stats to a Monte Carlo read on what a signing actually does to the squad.
+    </p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="Recruitment_Model_Dashboard.html">Open the Dashboard →</a>
+      <a class="btn btn-ghost" href="../data/FCHK_Recruitment_Model.xlsx">Download the Workbook (.xlsx)</a>
+      <a class="btn btn-ghost" href="#gaps">See what's built vs. open →</a>
+    </div>
+
+    <div class="stat-strip">
+      <div class="stat-cell"><div class="sc-label">Players Scored</div><div class="sc-value tabular">45,906</div></div>
+      <div class="stat-cell"><div class="sc-label">Leagues Loaded</div><div class="sc-value tabular">165</div></div>
+      <div class="stat-cell"><div class="sc-label">Clubs Rated</div><div class="sc-value tabular">2,758</div></div>
+      <div class="stat-cell"><div class="sc-label">Countries</div><div class="sc-value tabular">93</div></div>
+      <div class="stat-cell"><div class="sc-label">Models Built</div><div class="sc-value tabular">7 / 9</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="flow">
+  <div class="wrap">
+    <div class="flow-row">
+      <div class="flow-step">
+        <div class="fs-num">MOVEMENT I</div>
+        <h3>Foundation</h3>
+        <p>Who we are, what data we trust, who's actually in scope — Models 1-3.</p>
+      </div>
+      <div class="flow-step">
+        <div class="fs-num">MOVEMENT II</div>
+        <h3>Analysis</h3>
+        <p>Turn raw metrics into a rating, a price, and a fit read — Models 4-6.</p>
+      </div>
+      <div class="flow-step">
+        <div class="fs-num">MOVEMENT III</div>
+        <h3>Decision</h3>
+        <p>Shortlist it, simulate the impact, show the work, check it later — Models 7-9.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MOVEMENT I — FOUNDATION ================================================= -->
+<section class="movement" id="movement-1">
+  <div class="wrap">
+    <div class="movement-head">
+      <span class="m-roman">MOVEMENT I</span>
+      <h2>Foundation</h2>
+    </div>
+    <p class="movement-desc">Before a single player can be rated, the system needs to know what "good" looks like for this specific club, trust the data it's fed, and define who's realistically in scope to sign.</p>
+
+    <div class="model-grid">
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">01</span><span class="status-chip status-partial">Partial</span></div>
+        <h3>Playing Identity Model</h3>
+        <p class="mc-purpose">The anchor everything else measures against: target role profiles per position, plus Hradec Králové's own tactical identity, quantified.</p>
+        <ul class="mc-facts">
+          <li>23 statistical role archetypes across 8 positions (<code>ROLE_ARCHETYPES</code>)</li>
+          <li>Club Style Profiles — 5-axis tactical fingerprint, any club comparable</li>
+          <li>Open: target formations and tactical principles aren't yet a standalone editable config</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#archetypes">View Role Archetypes →</a>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">02</span><span class="status-chip status-built">Built</span></div>
+        <h3>Data Pipeline Model</h3>
+        <p class="mc-purpose">Ingest all 165 Wyscout league files, normalize to per-90 percentiles within the right peer group, and adjust for league strength so a weak-league standout isn't mistaken for a genuine one.</p>
+        <ul class="mc-facts">
+          <li>Within-league percentile, then league-strength adjusted (<code>AdjustedCompositeScore</code>)</li>
+          <li>Minutes-based rating confidence bands — a 500-minute sample is flagged, not trusted like a 2,500-minute one</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#leagues">View League Power Rankings →</a>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">03</span><span class="status-chip status-built">Built</span></div>
+        <h3>Player Universe Model</h3>
+        <p class="mc-purpose">Define who's actually in scope: realistic source leagues Hradec could plausibly buy from, senior vs. youth/reserve team-type, and a live budget ceiling.</p>
+        <ul class="mc-facts">
+          <li>Every player flagged <code>RealisticSource</code> / <code>WithinBudget</code> / <code>InRecruitmentScope</code> — flagged, never hidden</li>
+          <li>Team-type classification (first team vs. reserve/academy) from squad naming patterns</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#clubs">View Club Power Rankings →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MOVEMENT II — ANALYSIS =================================================== -->
+<section class="movement" id="movement-2">
+  <div class="wrap">
+    <div class="movement-head">
+      <span class="m-roman">MOVEMENT II</span>
+      <h2>Analysis</h2>
+    </div>
+    <p class="movement-desc">Every player in scope gets turned into three honest reads: how good are they (with a confidence range, not a false-precision point number), what should they cost, and would they actually work in Czech football.</p>
+
+    <div class="model-grid">
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">04</span><span class="status-chip status-built">Built</span></div>
+        <h3>Performance Rating Model</h3>
+        <p class="mc-purpose">A weighted composite score per role — expressed as a distribution with an uncertainty band, not a single point estimate a scout might over-trust.</p>
+        <ul class="mc-facts">
+          <li><code>RatingLow</code> / <code>RatingHigh</code> band, widening for low-minute samples</li>
+          <li>Cross-league comparable via <code>AdjustedCompositeScore</code></li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#positions">View Position Boards →</a>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">05</span><span class="status-chip status-built">Built</span></div>
+        <h3>Value &amp; Market Model</h3>
+        <p class="mc-purpose">Estimate transfer value from performance, age and league strength — never a Transfermarkt copy — with an age-curve peak-value projection and a contract-length discount.</p>
+        <ul class="mc-facts">
+          <li>Ridge regression: <code>ln(Market Value) ~ Composite + Age + Age² + ln(Minutes) + LeagueStrength + Position</code></li>
+          <li><code>EffectiveValueEUR</code> discounts for an expiring contract (floor ~35% inside the last 6 months)</li>
+          <li>Open: wage feasibility — Wyscout carries no wage data at all</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#undervalued">View Undervalued &amp; Not Past Peak →</a>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">06</span><span class="status-chip status-partial">Partial</span></div>
+        <h3>Fit &amp; Risk Model</h3>
+        <p class="mc-purpose">Tactical/physical fit for Czech football specifically, plus a risk overlay for what a human scout still needs to verify in person.</p>
+        <ul class="mc-facts">
+          <li>Every duel/aerial/tempo metric z-scored against the Czech First League's own norms</li>
+          <li>Deliberately open: injury history and wage data need a source outside Wyscout entirely — flagged, not faked</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#physical">View Physical / Quick-League Fit →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MOVEMENT III — DECISION =================================================== -->
+<section class="movement" id="movement-3">
+  <div class="wrap">
+    <div class="movement-head">
+      <span class="m-roman">MOVEMENT III</span>
+      <h2>Decision</h2>
+    </div>
+    <p class="movement-desc">The point of the previous six models: a shortlist you can actually act on, a simulated read on what a signing does to the squad, and a way to check — later, against reality — whether any of this was right.</p>
+
+    <div class="model-grid">
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">07</span><span class="status-chip status-built">Built</span></div>
+        <h3>Shortlist &amp; Scoring Model</h3>
+        <p class="mc-purpose">One scoring engine, reweighted per recruitment need, instead of four separate hardcoded formulas.</p>
+        <ul class="mc-facts">
+          <li>Four presets: Like-for-Like, Emergency Depth, Resale Play, Balanced</li>
+          <li>Realistic-source, in-budget, not-past-peak players only</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#shortlists">View Shortlist Presets →</a>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">08</span><span class="status-chip status-built">Built</span></div>
+        <h3>Squad Impact Simulation Model</h3>
+        <p class="mc-purpose">Monte Carlo squad-level projection — the #1 target's age-curve trajectory folded into the squad's actual composite, versus the status quo.</p>
+        <ul class="mc-facts">
+          <li><code>monte_carlo.py</code>'s engine (300 simulations) wired into <code>build_club_rankings</code> for the first time</li>
+          <li>P10/P50/P90 marginal-impact range, 3 seasons forward — a range, not a verdict</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#squadimpact">View Squad Impact Simulation →</a>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-top"><span class="mc-num">09</span><span class="status-chip status-built">Built</span></div>
+        <h3>Dashboard &amp; Feedback Model</h3>
+        <p class="mc-purpose">Visualization kept simple by design, plus the feedback loop: log a real signing, and every rebuild checks the model's prediction against what actually happened.</p>
+        <ul class="mc-facts">
+          <li>Player-vs-role-profile breakdown, side-by-side comparison, squad-needs heatmap, command palette</li>
+          <li><code>data/signings_log.csv</code> → predicted vs. actual rating/value, tagged Outperformed / On Track / Underperformed</li>
+        </ul>
+        <a class="mc-link" href="Recruitment_Model_Dashboard.html#calibration">View Model Calibration →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="gaps" id="gaps">
+  <div class="wrap">
+    <h2>What's still open — and why</h2>
+    <p class="lead">Every gap that could be closed from Wyscout aggregated data alone has been. What's left splits cleanly into two honest categories: a config that hasn't been factored out of code yet, and data this pipeline genuinely does not have access to.</p>
+    <table class="gap-table">
+      <thead><tr><th>Model</th><th>Open item</th><th>Why it's open</th></tr></thead>
+      <tbody>
+        <tr><td>1 — Playing Identity</td><td>Target formations, tactical principles as structured config</td><td class="muted">Engineering, not data — a straightforward follow-up</td></tr>
+        <tr><td>3 — Player Universe</td><td>Live "expiring within N years" quick-filter toggle</td><td class="muted">Contract dates are already parsed and shown; the filter itself isn't wired yet</td></tr>
+        <tr><td>5 — Value &amp; Market</td><td>Wage feasibility</td><td class="muted">Wyscout carries no wage data at all — needs an external source</td></tr>
+        <tr><td>6 — Fit &amp; Risk</td><td>Injury history, agent/contract risk, minutes-trend</td><td class="muted">No injury or wage data in Wyscout; minutes-trend needs prior-season files not in the current pipeline</td></tr>
+        <tr><td>6 — Fit &amp; Risk</td><td>Character, dressing-room fit, agent behaviour</td><td class="muted">Deliberately left scout-verified by design — not everything should be a number</td></tr>
+        <tr><td>9 — Dashboard &amp; Feedback</td><td>Populated calibration data</td><td class="muted">Infrastructure is built; it needs a real signing and a transfer window to pass</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%;">
+    <div>Built from Wyscout aggregated season exports — no event data, no Transfermarkt copying, no shortcuts.</div>
+    <div><a href="Recruitment_Model_Dashboard.html">Dashboard</a> · <a href="../WAM_ARCHITECTURE.md">Full architecture doc</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

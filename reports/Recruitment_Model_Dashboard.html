@@ -1092,6 +1092,18 @@
     a.addEventListener("click", function (e) { e.preventDefault(); goto(a.dataset.goto); });
   });
 
+  /* Deep-linking: a URL like dashboard.html#undervalued (from the WAM
+     landing page, a shared link, or the browser back/forward buttons) jumps
+     straight to that panel instead of always opening on Overview. */
+  (function initHashRouting() {
+    function fromHash() {
+      var id = (location.hash || "").replace("#", "");
+      if (id && document.getElementById("panel-" + id)) goto(id);
+    }
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+  })();
+
   /* ── Formatters ────────────────────────────────────────────────────── */
   function fmtEUR(v) {
     if (v === null || v === undefined) return "—";
