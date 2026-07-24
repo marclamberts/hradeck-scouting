@@ -31,6 +31,23 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 ROOT = Path(__file__).parent
 WYSCOUT_DIR = ROOT / "Wyscout Files"
+LEAGUES_OVERVIEW_PATH = ROOT / "data" / "Leagues Overview.xlsx"
+
+# Country names differ slightly between Wyscout filenames and Leagues Overview.xlsx
+COUNTRY_NAME_FIX = {
+    "Czech": "Czech Republic",
+    "Korea": "South Korea",
+    "Kyrgystan": "Kyrgyzstan",
+    "Moldovia": "Moldova",
+    "Saudi": "Saudi Arabia",
+    "Turkiye": "Türkiye",
+}
+
+# Tier (from Leagues Overview.xlsx, the club's own competition-level ratings) → strength multiplier.
+# Applied to *volume* per-90 output before ranking, so raw dominance in a weak league or a
+# youth fixture list doesn't outrank real output against senior top-flight opposition.
+TIER_STRENGTH = {1: 1.00, 2: 0.82, 3: 0.64, 4: 0.46, 5: 0.32, 6: 0.22}
+DEFAULT_TIER = 4  # fallback for leagues not present in Leagues Overview.xlsx (e.g. Estonia, Faroe Islands)
 
 SKIP_FILES = {"FCHK Model V3 - Loaded Leagues", "FCHK Model V3 - Model Input",
                "FCHK Model V3 - Player Scores", "FCHK Model V3 - Player Styles",
@@ -57,15 +74,18 @@ POS_MAP: dict[str, str] = {
     "GK": "GK",
 }
 
-# Per-position SQS metrics (weights)
+# Per-position SQS metrics (weights). All metrics are native Wyscout fields — no IMPECT
+# or other third-party data is blended in, so the model stays valid across all 165 leagues.
 SQS_BLUEPRINTS: dict[str, list[tuple[str, float]]] = {
     "GK": [
         ("Save rate, %", 4.0),
-        ("Prevented goals per 90", 3.0),
+        ("Prevented goals per 90", 3.5),
         ("Exits per 90", 2.0),
-        ("Aerial duels per 90", 1.5),
+        ("Aerial duels won, %", 1.5),
+        ("Aerial duels per 90", 1.0),
         ("Accurate passes, %", 1.5),
-        ("Accurate long passes, %", 1.0),
+        ("Accurate long passes, %", 1.5),
+        ("Accurate short / medium passes, %", 1.0),
     ],
     "CB": [
         ("Successful defensive actions per 90", 3.0),
@@ -73,8 +93,10 @@ SQS_BLUEPRINTS: dict[str, list[tuple[str, float]]] = {
         ("Aerial duels won, %", 2.0),
         ("Interceptions per 90", 2.0),
         ("PAdj Interceptions", 1.5),
+        ("PAdj Sliding tackles", 1.0),
         ("Shots blocked per 90", 1.0),
         ("Accurate passes, %", 1.0),
+        ("Accurate long passes, %", 1.0),
         ("Progressive passes per 90", 1.0),
     ],
     "FB": [
@@ -88,16 +110,22 @@ SQS_BLUEPRINTS: dict[str, list[tuple[str, float]]] = {
         ("Defensive duels won, %", 2.0),
         ("Aerial duels won, %", 1.0),
         ("Progressive passes per 90", 1.5),
+        ("Key passes per 90", 1.0),
+        ("PAdj Interceptions", 1.0),
+        ("Deep completed crosses per 90", 1.0),
     ],
     "DM": [
         ("Successful defensive actions per 90", 3.0),
         ("Defensive duels won, %", 2.5),
         ("Interceptions per 90", 2.5),
         ("PAdj Interceptions", 2.0),
+        ("PAdj Sliding tackles", 1.0),
         ("Aerial duels won, %", 1.5),
         ("Passes per 90", 1.5),
         ("Accurate passes, %", 1.5),
         ("Progressive passes per 90", 1.5),
+        ("Passes to final third per 90", 1.0),
+        ("Accurate long passes, %", 1.0),
     ],
     "CM": [
         ("Passes per 90", 2.0),
@@ -109,6 +137,10 @@ SQS_BLUEPRINTS: dict[str, list[tuple[str, float]]] = {
         ("Progressive runs per 90", 1.5),
         ("Successful defensive actions per 90", 1.5),
         ("Goals per 90", 1.5),
+        ("Smart passes per 90", 1.5),
+        ("Through passes per 90", 1.0),
+        ("Deep completions per 90", 1.0),
+        ("Shot assists per 90", 1.0),
     ],
     "W": [
         ("Goals per 90", 2.5),
@@ -120,6 +152,10 @@ SQS_BLUEPRINTS: dict[str, list[tuple[str, float]]] = {
         ("Progressive runs per 90", 2.0),
         ("Touches in box per 90", 2.0),
         ("Key passes per 90", 1.5),
+        ("Shot assists per 90", 1.5),
+        ("Second assists per 90", 1.0),
+        ("Accelerations per 90", 1.0),
+        ("Deep completed crosses per 90", 1.0),
     ],
     "FW": [
         ("Goals per 90", 4.0),
@@ -132,6 +168,9 @@ SQS_BLUEPRINTS: dict[str, list[tuple[str, float]]] = {
         ("Aerial duels won, %", 1.5),
         ("Dribbles per 90", 1.0),
         ("xA per 90", 1.0),
+        ("Head goals per 90", 1.0),
+        ("Shot assists per 90", 1.0),
+        ("Successful attacking actions per 90", 1.0),
     ],
 }
 
@@ -161,7 +200,68 @@ C = {
     "upgrade": "1A5276",
     "depth":   "117A65",
     "rota":    "7D6608",
+    "unpriced":"5D6D7E",
 }
+
+
+# ── League strength (from the club's own Leagues Overview.xlsx) ────────────────
+
+_SPECIAL_STEMS = {
+    "Japan II III": ("Japan", 2, False),
+}
+
+
+def parse_league_stem(stem: str) -> tuple[str, int, bool]:
+    """Return (country, division_number, is_youth) parsed from a Wyscout filename stem."""
+    import re
+    s = stem.strip()
+    if s in _SPECIAL_STEMS:
+        return _SPECIAL_STEMS[s]
+    youth = bool(re.search(r"\bU1[79]\b", s))
+    s_clean = re.sub(r"\s*-\s*Part\s+[IVX]+$", "", s).strip()
+    if youth:
+        base = re.sub(r"\s*U1[79]\s*", " ", s_clean).strip()
+        return base, 1, True
+    m = re.match(r"^(.*?)\s+(II|III|IV|V)$", s_clean)
+    if m:
+        tier = {"II": 2, "III": 3, "IV": 4, "V": 5}[m.group(2)]
+        return m.group(1).strip(), tier, False
+    m2 = re.match(r"^(.*?)\s+4$", s_clean)
+    if m2:
+        return m2.group(1).strip(), 4, False
+    return s_clean, 1, False
+
+
+def load_league_tier_map() -> dict[str, tuple[int, str]]:
+    """Build {Wyscout filename stem: (tier, tier_label)} from Leagues Overview.xlsx."""
+    tier_map: dict[str, tuple[int, str]] = {}
+    if not LEAGUES_OVERVIEW_PATH.exists():
+        print(f"  [warn] {LEAGUES_OVERVIEW_PATH} not found — all leagues default to Tier {DEFAULT_TIER}")
+        return tier_map
+
+    overview = pd.read_excel(LEAGUES_OVERVIEW_PATH)
+    lookup: dict[tuple[str, str], tuple[int, str]] = {}
+    for _, r in overview.iterrows():
+        country = str(r["Country"]).strip()
+        division = str(r["Division"]).strip()
+        lookup[(country, division)] = (int(r["Tier"]), str(r["Tier Label"]))
+
+    if not WYSCOUT_DIR.exists():
+        return tier_map
+
+    for path in WYSCOUT_DIR.glob("*.xlsx"):
+        stem = path.stem
+        country, div_num, youth = parse_league_stem(stem)
+        norm_country = COUNTRY_NAME_FIX.get(country, country)
+        if youth:
+            key = (norm_country, "U17")
+            if key not in lookup:
+                key = (norm_country, "U19")
+        else:
+            key = (norm_country, str(div_num))
+        tier_map[stem] = lookup.get(key, (DEFAULT_TIER, "Developing (unrated, default)"))
+
+    return tier_map
 
 
 # ── Data loading ───────────────────────────────────────────────────────────────
@@ -172,6 +272,9 @@ def load_leagues(leagues: list[str] | None, min_minutes: int) -> pd.DataFrame:
                        if p.stem not in SKIP_FILES)
     else:
         paths = [WYSCOUT_DIR / f"{lg}.xlsx" for lg in leagues]
+
+    print("Loading league-strength tiers from Leagues Overview.xlsx…")
+    tier_map = load_league_tier_map()
 
     frames: list[pd.DataFrame] = []
     for path in paths:
@@ -186,8 +289,12 @@ def load_leagues(leagues: list[str] | None, min_minutes: int) -> pd.DataFrame:
             continue
         df = df.copy()
         df["_League"] = lg
+        tier, tier_label = tier_map.get(lg, (DEFAULT_TIER, "Developing (unrated, default)"))
+        df["_tier"] = tier
+        df["_tier_label"] = tier_label
+        df["_league_strength"] = TIER_STRENGTH.get(tier, TIER_STRENGTH[DEFAULT_TIER])
         frames.append(df)
-        print(f"  Loaded {lg}: {len(df)} players")
+        print(f"  Loaded {lg}: {len(df)} players  (Tier {tier} — {tier_label})")
 
     if not frames:
         raise RuntimeError(f"No Wyscout files found in {WYSCOUT_DIR}")
@@ -238,11 +345,18 @@ def compute_sqs(df: pd.DataFrame) -> pd.DataFrame:
         if mask.sum() == 0:
             continue
         grp = df.loc[mask].copy()
+        strength = grp["_league_strength"] if "_league_strength" in grp.columns else 1.0
         score = pd.Series(0.0, index=grp.index)
         total_w = 0.0
         for metric, w in blueprint:
             if metric in grp.columns:
                 vals = pd.to_numeric(grp[metric], errors="coerce").fillna(0)
+                # Rate/percentage metrics (e.g. "Save rate, %") aren't discounted — a 70%
+                # pass-completion rate means the same thing regardless of league. Volume
+                # metrics (goals per 90, interceptions per 90, ...) are discounted by league
+                # strength so raw output in a weak league doesn't outrank real senior output.
+                if "%" not in metric:
+                    vals = vals * strength
                 pct = vals.rank(pct=True) * 100
                 score += w * pct
                 total_w += w
@@ -266,14 +380,28 @@ def compute_sqs(df: pd.DataFrame) -> pd.DataFrame:
 # ── Market Value ───────────────────────────────────────────────────────────────
 
 def compute_mv_rank(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Market value 0 in these Wyscout exports means "not priced in this export", not
+    "free transfer" — across the full 165-league pool, roughly half of all players carry
+    Market value = 0. Ranking that as the cheapest possible price previously let unpriced
+    players masquerade as free bargains (they topped Elite Picks and flooded the Budget
+    Planner with fake €0 signings). Percentile rank is computed only among priced players;
+    unpriced players get a neutral 50th-percentile assumption so they still sort sensibly
+    in the master list, but are tagged "_priced = False" so tier/report logic never claims
+    a confirmed value edge for them.
+    """
     mv_col = next((c for c in ["Market value", "MarketValue"] if c in df.columns), None)
     if mv_col:
         mv = pd.to_numeric(df[mv_col], errors="coerce").fillna(0)
     else:
         mv = pd.Series(0.0, index=df.index)
 
+    priced = mv > 0
     df["_mkt_val"] = mv
-    df["_mv_rank"] = mv.rank(pct=True) * 100
+    df["_priced"] = priced
+    df["_mv_rank"] = 50.0
+    if priced.sum() > 0:
+        df.loc[priced, "_mv_rank"] = mv.loc[priced].rank(pct=True) * 100
     return df
 
 
@@ -299,7 +427,9 @@ def val_ratio_str(mkt: float, model: float) -> str:
 def compute_lamberts(df: pd.DataFrame) -> pd.DataFrame:
     df["_lamberts"] = (df["_sqs_rank"] - df["_mv_rank"]).round(2)
 
-    def tier(li: float) -> str:
+    def tier(li: float, priced: bool) -> str:
+        if not priced:
+            return "UNCONFIRMED VALUE"
         if li >= 30:
             return "ELITE VALUE"
         if li >= 20:
@@ -310,7 +440,7 @@ def compute_lamberts(df: pd.DataFrame) -> pd.DataFrame:
             return "FAIR VALUE"
         return "OVERPRICED"
 
-    df["_tier"] = df["_lamberts"].apply(tier)
+    df["_tier"] = [tier(li, p) for li, p in zip(df["_lamberts"], df["_priced"])]
     return df
 
 
@@ -366,6 +496,14 @@ STAT_MAP = {
     "Key Pass/90":  "Key passes per 90",
     "Save %":       "Save rate, %",
     "Prev Goals/90":"Prevented goals per 90",
+    "Smart Pass/90":   "Smart passes per 90",
+    "Through Pass/90": "Through passes per 90",
+    "Deep Compl/90":   "Deep completions per 90",
+    "Shot Assists/90": "Shot assists per 90",
+    "PAdj Tackles":    "PAdj Sliding tackles",
+    "Long Pass %":     "Accurate long passes, %",
+    "Pass %":          "Accurate passes, %",
+    "Aerial Duel/90":  "Aerial duels per 90",
 }
 
 
@@ -397,13 +535,15 @@ def build_master(df: pd.DataFrame) -> pd.DataFrame:
             "Player":          r.get("Player", ""),
             "Team":            r.get("Team", ""),
             "League":          r.get("_League", ""),
+            "League Tier":     r.get("_tier_label", ""),
             "Pos":             r.get("_pos_group", ""),
             "Full Position":   r.get("_full_position", ""),
             "Age":             int(r.get("Age", 0)) if pd.notna(r.get("Age")) else "",
             "Contract":        contract,
             "Exp?":            exp_year,
+            "Priced":          "Y" if r.get("_priced", False) else "N",
             "Mkt Val (€)":     int(mkt) if mkt > 0 else 0,
-            "Model Val (€)":   int(mod_val),
+            "Model Val (€)":   int(mod_val) if r.get("_priced", False) else 0,
             "Val Ratio":       val_ratio_str(mkt, mod_val),
             "Tier":            r.get("_tier", ""),
             "SQS Rank":        round(float(r.get("_sqs_rank", 0) or 0), 2),
@@ -428,13 +568,15 @@ def build_master(df: pd.DataFrame) -> pd.DataFrame:
 
 
 OUTPUT_COLS = [
-    "Player", "Team", "League", "Pos", "Full Position", "Age", "Contract", "Exp?",
-    "Mkt Val (€)", "Model Val (€)", "Val Ratio", "Tier", "SQS Rank", "Lamberts Index",
+    "Player", "Team", "League", "League Tier", "Pos", "Full Position", "Age", "Contract", "Exp?",
+    "Priced", "Mkt Val (€)", "Model Val (€)", "Val Ratio", "Tier", "SQS Rank", "Lamberts Index",
     "Status", "vs Hradec", "Minutes",
     "Goals/90", "xG/90", "Assists/90", "xA/90",
     "Prog Pass/90", "Prog Run/90", "Box Touch/90",
     "Dribbles/90", "Drib Succ %", "Def Duel %", "Aerial %",
     "Interceptions", "Key Pass/90", "Save %", "Prev Goals/90",
+    "Smart Pass/90", "Through Pass/90", "Deep Compl/90", "Shot Assists/90",
+    "PAdj Tackles", "Long Pass %", "Pass %", "Aerial Duel/90",
 ]
 
 
@@ -503,6 +645,7 @@ def write_data_sheet(ws, title: str, subtitle: str, df: pd.DataFrame) -> None:
         "VALUE":       C["value"],
         "FAIR VALUE":  C["fair"],
         "OVERPRICED":  C["over"],
+        "UNCONFIRMED VALUE": C["unpriced"],
     }
     status_colors = {
         "CLEAR UPGRADE":      C["upgrade"],
@@ -625,15 +768,32 @@ def build_readme(ws, leagues: list[str], total: int, clear: int, budget: int) ->
     ws[f"B{ws.max_row}"].font = Font(bold=True, size=11, color=C["navy"])
 
     explanations = [
-        ("SQS Rank", "Squad Quality Score — position-specific percentile rank of statistical output (0–100)"),
-        ("Market Value Rank", "Transfermarkt market value percentile rank within the recruitment pool (0–100)"),
-        ("Lamberts Index (LI)", "SQS Rank − Market Value Rank. Positive = undervalued. Negative = overpriced."),
-        ("ELITE VALUE",  "LI ≥ 30 — buy signal: performs far above what the market charges"),
-        ("HIGH VALUE",   "LI ≥ 20"),
-        ("VALUE",        "LI ≥ 10"),
-        ("FAIR VALUE",   "LI 0–9 — price reflects performance"),
-        ("OVERPRICED",   "LI < 0 — market overcharges relative to output"),
-        ("Model Val",    "Market value × (SQS / 50). Fair price the model assigns based on output."),
+        ("SQS Rank", "Squad Quality Score — position-specific percentile rank of statistical output (0–100), "
+                      "computed only from Wyscout data (no IMPECT or other third-party source blended in)"),
+        ("League Tier", "Competition-level rating from Leagues Overview.xlsx (the club's own tier ratings): "
+                         "Elite / Top / Strong / Developing / Lower / Youth-Grassroots"),
+        ("League Strength Discount", "Before ranking, every volume stat (goals/90, interceptions/90, ...) is "
+                                      "multiplied by a 0.22–1.00 factor based on League Tier, so raw output in a "
+                                      "weak league or a youth fixture list can't outrank real output against senior "
+                                      "top-flight opposition. Rate stats (%) are never discounted."),
+        ("Market Value Rank", "Transfermarkt market value percentile rank, computed only among players with a "
+                               "known price (0–100)"),
+        ("Priced", "Y if this export carries a non-zero Transfermarkt value, N if unknown. Roughly half of all "
+                    "players in the full 165-league pool are unpriced — treating that as 'free' would falsely "
+                    "flag them as bargains, so unpriced players get a neutral 50th-percentile price assumption "
+                    "for sorting purposes only, and are always tagged UNCONFIRMED VALUE rather than a value tier."),
+        ("Lamberts Index (LI)", "SQS Rank − Market Value Rank. Positive = undervalued. Negative = overpriced. "
+                                 "Only meaningful for Priced = Y players."),
+        ("ELITE VALUE",  "LI ≥ 30 and Priced = Y — buy signal: performs far above what the market charges"),
+        ("HIGH VALUE",   "LI ≥ 20 and Priced = Y"),
+        ("VALUE",        "LI ≥ 10 and Priced = Y"),
+        ("FAIR VALUE",   "LI 0–9 and Priced = Y — price reflects performance"),
+        ("OVERPRICED",   "LI < 0 and Priced = Y — market overcharges relative to output"),
+        ("UNCONFIRMED VALUE", "Priced = N — statistically interesting but no market value to compare against. "
+                               "Still eligible for CLEAR UPGRADE status; excluded from Elite Picks and Budget "
+                               "Planner since there's no confirmed price."),
+        ("Model Val",    "Market value × (SQS / 50). Fair price the model assigns based on output. Blank for "
+                          "unpriced players."),
         ("vs Hradec",    "Target SQS − weakest Hradec starter at that position. Positive = clear upgrade."),
         ("CLEAR UPGRADE","vs Hradec > 0 — statistically better than current starter"),
         ("ROTATIONAL",   "−10 < vs Hradec ≤ 0 — squad cover / rotation option"),
